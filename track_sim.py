@@ -49,6 +49,8 @@ def plot_network_graph(G, title, output=None, cmap=plt.cm.jet):
     nc = nx.draw_networkx_nodes(G, pos, nodelist=nodes, node_color=colors, 
                                 node_size=100, cmap=cmap, ax=ax)
     ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
+    major_ticks = np.arange(0, 11, 1)
+    ax.set_xticks(major_ticks)
     plt.xlabel("layer in x axis")
     plt.ylabel("y coord")
     plt.title(title)
@@ -142,7 +144,7 @@ plt.tight_layout()
 plt.show()
 
 # draw the graph network
-# plot_network_graph(G, "Simulated tracks as Graph network \n with degree of nodes plotted in colour", cmap=plt.cm.hot)
+plot_network_graph(G, "Simulated tracks as Graph network \n with degree of nodes plotted in colour", cmap=plt.cm.hot)
 
 # filter graph: remove all vertices with degree above threshold
 threshold = 4
@@ -165,6 +167,8 @@ for s in subGraphs:
     ec = nx.draw_networkx_edges(s, pos, alpha=0.5)
     nc = nx.draw_networkx_nodes(s, pos, node_color=color[0], node_size=75)
 ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
+major_ticks = np.arange(0, 11, 1)
+ax.set_xticks(major_ticks)
 plt.xlabel("layer in x axis")
 plt.ylabel("y coord")
 plt.title("Nodes with degree <= 4, weakly connected subgraphs")
