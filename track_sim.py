@@ -126,7 +126,8 @@ for L1 in range(Nl) :
                 G.add_edge(*edge)
 
 
-# number of edges associated to each node
+# attach coordinates and degree to each node
+# degree - number of edges ssociated to each node
 for i in range(nNodes) :
     degree = len(G[i])
     G.nodes[i]["degree"] = degree
@@ -144,7 +145,7 @@ plt.tight_layout()
 plt.show()
 
 # draw the graph network
-plot_network_graph(G, "Simulated tracks as Graph network \n with degree of nodes plotted in colour", cmap=plt.cm.hot)
+#plot_network_graph(G, "Simulated tracks as Graph network \n with degree of nodes plotted in colour", cmap=plt.cm.hot)
 
 # filter graph: remove all vertices with degree above threshold
 threshold = 4
@@ -155,11 +156,17 @@ for n in filteredNodes:
 # plot filtered graph
 # plot_network_graph(G, "Filtered nodes degree <= 4")
 
-# extract subgraphs
+# extract subgraphs - weakly connected
 diGraph = nx.to_directed(G)
 subGraphs = [G.subgraph(c).copy() for c in nx.weakly_connected_components(diGraph)]
 
 
+# create state vector for each subgraph
+for s in subGraphs:
+    print(s)
+
+
+# plot the subgraphs
 fig, ax = plt.subplots()
 for s in subGraphs:
     color = ["#"+''.join([random.choice('0123456789ABCDEF') for j in range(6)])]
