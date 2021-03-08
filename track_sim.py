@@ -9,7 +9,6 @@ import scipy as sp
 from scipy.stats import norm
 import scipy.stats
 from numpy.linalg import inv
-import pickle
 import random
 from GNN_Measurement import GNN_Measurement
 from HitPairPredictor import HitPairPredictor
@@ -17,6 +16,7 @@ from HitPairPredictor import HitPairPredictor
 
 # global variables
 DIR = "simulation/"
+threshold = 0.7  # threshold for removing nodes with edge orientation var > threshold
 
 def compute_track_state_estimates(GraphList, S):
     # computes the following node and edge attributes: vertex degree, empirical mean & variance of edge orientation
@@ -31,9 +31,11 @@ def compute_track_state_estimates(GraphList, S):
                 m2 = (G.nodes[neighbor]["GNN_Measurement"].x, G.nodes[neighbor]["GNN_Measurement"].y)
                 grad = (m1[1] - m2[1]) / (m1[0] - m2[0])
                 gradients.append(grad)
-                edge_state_vector = np.asarray([m1[1], grad])
-                H = np.matrix([ [1, 0], [1/(m1[0] - m2[0]), 1/(m2[0] - m1[0])] ])
+                edge_state_vector = np.array([m1[1], grad])
+                H = np.array([ [1, 0], [1/(m1[0] - m2[0]), 1/(m2[0] - m1[0])] ])
                 covariance = H.dot(S).dot(H.T)
+                covariance = np.array([covariance[0,0], covariance[0,1], covariance[1,0], covariance[1,1]])
+                # print("covariance", covariance, len(covariance), type(covariance))
                 state_estimates[neighbor] = {'edge_state_vector': edge_state_vector, 'edge_covariance': covariance}
             
             G.nodes[node]['edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
@@ -172,8 +174,8 @@ def main():
     np.savetxt(DIR + 'graph_matrix.csv', A)  # save as adjacency matrix
 
     # remove all nodes with edge orientation above threshold
-    threshold = 0.5
     G = nx.Graph(G) # make a copy to unfreeze graph
+    # print(G.nodes(data=True))
     filteredNodes = [node for node, attr in G.nodes(data=True) if attr['edge_gradient_mean_var'][1] > threshold]
     for node in filteredNodes: G.remove_node(node)
     
