@@ -16,6 +16,7 @@ from HitPairPredictor import HitPairPredictor
 
 # global variables
 DIR = "simulation/"
+threshold = 0.7  # threshold for removing nodes with edge orientation var > threshold
 
 def compute_track_state_estimates(GraphList, S):
     # computes the following node and edge attributes: vertex degree, empirical mean & variance of edge orientation
@@ -173,7 +174,6 @@ def main():
     np.savetxt(DIR + 'graph_matrix.csv', A)  # save as adjacency matrix
 
     # remove all nodes with edge orientation above threshold
-    threshold = 0.5
     G = nx.Graph(G) # make a copy to unfreeze graph
     # print(G.nodes(data=True))
     filteredNodes = [node for node, attr in G.nodes(data=True) if attr['edge_gradient_mean_var'][1] > threshold]
