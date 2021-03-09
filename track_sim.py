@@ -16,7 +16,7 @@ from HitPairPredictor import HitPairPredictor
 
 # global variables
 DIR = "simulation/"
-threshold = 0.7  # threshold for removing nodes with edge orientation var > threshold
+threshold = 0.6  # threshold for removing nodes with edge orientation var > threshold
 
 def compute_track_state_estimates(GraphList, S):
     # computes the following node and edge attributes: vertex degree, empirical mean & variance of edge orientation
@@ -37,14 +37,8 @@ def compute_track_state_estimates(GraphList, S):
                 covariance = np.array([covariance[0,0], covariance[0,1], covariance[1,0], covariance[1,1]])
                 # print("covariance", covariance, len(covariance), type(covariance))
                 state_estimates[neighbor] = {'edge_state_vector': edge_state_vector, 'edge_covariance': covariance}
-            
             G.nodes[node]['edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
             G.nodes[node]['track_state_estimates'] = state_estimates
-            #compute mean state vector
-            mean_state_vector = [edge['edge_state_vector'] for edge in state_estimates.values()]
-            mean_covariance = [edge['edge_covariance'] for edge in state_estimates.values()]
-            G.nodes[node]['mean_state_vector'] = np.mean(mean_state_vector, axis=0)
-            G.nodes[node]['mean_covariance'] = np.mean(mean_covariance, axis=0)
     return GraphList
 
 
@@ -91,6 +85,15 @@ def plot_subgraphs(subGraphs, title, save=False):
     plt.axis('on')
     if save : plt.savefig(DIR + 'subgraphs.png', dpi=300)
     plt.show()
+
+    for i, s in enumerate(subGraphs):
+        _, ax = plt.subplots(figsize=(12,10))
+        pos = nx.spectral_layout(s)
+        nx.draw_networkx_nodes(s, pos)
+        nx.draw_networkx_labels(s, pos)
+        nx.draw_networkx_edges(s, pos)
+        if save : plt.savefig(DIR + 'subgraphs_visual'+ str(i) +'.png', dpi=300)
+
 
 
 def main():
@@ -183,6 +186,8 @@ def main():
     G = nx.to_directed(G)
     subGraphs = [G.subgraph(c).copy() for c in nx.weakly_connected_components(G)]
     subGraphs = compute_track_state_estimates(subGraphs, S)
+
+    # print("NUMBER of subgraphs", len(subGraphs))
     # print("first subgraph info ...")
     # for node in subGraphs[1].nodes(data=True) : print(node)
     
