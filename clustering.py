@@ -15,12 +15,26 @@ from numpy.linalg import inv
 # global variables
 DIR = "./simulation/"
 subgraph_path = "_subgraph.gpickle"
-KL_thres = 1.0
+# KL_thres = 1.0
 iters = 2
+
 
 def KLDistance(mean1, cov1, inv1, mean2, cov2, inv2):
     trace = np.trace((cov1 - cov2) * (inv2 - inv1))
     return trace + (mean1 - mean2).T.dot(inv1 + inv2).dot(mean1 - mean2)
+
+
+def merge_states(mean1, cov1, inv1, mean2, cov2, inv2):
+    sum_inv_covs = inv1 + inv2
+    merged_cov = np.linalg.inv(sum_inv_covs)
+    merged_mean = inv1.dot(mean1) + inv2.dot(mean2)
+    merged_mean = merged_cov.dot(merged_mean)
+    # print("xs:", mean1, mean1.shape, mean2, mean2.shape)
+    # print("inv1", inv1, "inv2", inv2)
+    # print("sum of inv_covs", sum_inv_covs, type(sum_inv_covs))
+    print("merged cov", merged_cov, type(merged_cov))
+    print("merged mean", merged_mean, type(merged_mean))
+    return merged_mean, merged_cov, sum_inv_covs
 
 
 # read in subgraph data
@@ -43,27 +57,70 @@ for subGraph in subGraphs:
     for node in subGraph.nodes(data=True):
         print("---------------")
         
-        # convert graph attributes to arrays
         num_edges = node[1]['degree']
+        if num_edges <= 1: continue
+        masked_edges = np.zeros(num_edges)
+
+        # convert graph attributes to arrays
         node_state_estimates = pd.DataFrame(node[1]['track_state_estimates'])
+        connected_node_nums = node_state_estimates.columns.values
         edge_svs = np.vstack(node_state_estimates.loc['edge_state_vector'].to_numpy())
         edge_covs = np.vstack(node_state_estimates.loc['edge_covariance'].to_numpy())
         edge_covs = np.reshape(edge_covs[:, :, np.newaxis], (num_edges, 2, 2))
         inv_covs = np.linalg.inv(edge_covs)
-        print("node num:", node)
+        print("node num:\n", node)
+        print("connected_node_nums\n", connected_node_nums, type(connected_node_nums))
         print("num edges:", num_edges)
 
-        if num_edges <= 1: continue
+        print("edge_sv\n", edge_svs, type(edge_svs))
+        print("edge_cov\n", edge_covs, type(edge_covs))
+        print("inv covs\n", inv_covs, type(inv_covs))
 
-        # calculate pairwise edge state vector KL distances
+        # TODO: repeat the below until convergence
+        # calculate pairwise edge state vector KL distances & keep track of node numbers
         pairwise_distances = np.zeros(shape=(num_edges, num_edges))
+        pairwise_edges = np.empty((num_edges,num_edges), dtype=object)
         for i in range(num_edges):
             for j in range(i):
                 distance = KLDistance(edge_svs[i], edge_covs[i], inv_covs[i], edge_svs[j], edge_covs[j], inv_covs[j])
                 pairwise_distances[i][j] = distance
                 pairwise_distances[j][i] = distance
+                pairwise_edges[i][j] = (connected_node_nums[i], connected_node_nums[j])
+                pairwise_edges[j][i] = (connected_node_nums[j], connected_node_nums[i])
         print("pairwise distances")
         print(pairwise_distances)
+        print("pairwise edges")
+        print(pairwise_edges)
+
+        # find the smallest distance and apply KL threshold cut
+        nonzero_dist = pairwise_distances[np.nonzero(pairwise_distances)]
+        smallest_dist = np.min(nonzero_dist)
+        # idx[0] and idx[1] indicates the indices for the edges with the smallest pairwise distance
+        idx, _ = np.where(pairwise_distances==smallest_dist)
+        mean_dist = np.mean(nonzero_dist)
+        variance_dist = np.sqrt(np.var(nonzero_dist))
+        KL_thres = mean_dist - variance_dist
+  
+        print("i", idx)
+        if smallest_dist < KL_thres:
+            # merge the states
+            merged_mean, mean_cov, merged_inv_cov = merge_states(edge_svs[idx[0]], edge_covs[idx[0]], inv_covs[idx[0]], 
+                                                                edge_svs[idx[1]], edge_covs[idx[1]], inv_covs[idx[1]])
+            # add a attribute to the nodes which have has their edges collapsed ?
+            # remove the collapsed states from the original arrays and add in the merged state
+            # keep track of which edges have been masked
+            
+            
+            print("Here!")
+            masked_edges[idx] = 1
+        
+        print("masked edges:", masked_edges)
+
+        # recalculate pairwise distances
+
+
+        # else:
+        # mask all edges, all edges are incompatible
 
         # if no outliers --> merge state vectors and covariances into a single estimate
         # if outliers --> remove them as attributes
