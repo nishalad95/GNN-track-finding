@@ -15,8 +15,9 @@ from HitPairPredictor import HitPairPredictor
 
 
 # global variables
-DIR = "simulation/"
+DIR = "./01_simulation/"
 threshold = 0.6  # threshold for removing nodes with edge orientation var > threshold
+
 
 def compute_track_state_estimates(GraphList, S):
     # computes the following node and edge attributes: vertex degree, empirical mean & variance of edge orientation
@@ -27,6 +28,7 @@ def compute_track_state_estimates(GraphList, S):
             state_estimates = {}
             G.nodes[node]['degree'] = len(G.edges(node))
             m1 = (G.nodes[node]["GNN_Measurement"].x, G.nodes[node]["GNN_Measurement"].y)
+                        
             for neighbor in nx.all_neighbors(G, node):
                 m2 = (G.nodes[neighbor]["GNN_Measurement"].x, G.nodes[neighbor]["GNN_Measurement"].y)
                 grad = (m1[1] - m2[1]) / (m1[0] - m2[0])
@@ -35,15 +37,15 @@ def compute_track_state_estimates(GraphList, S):
                 H = np.array([ [1, 0], [1/(m1[0] - m2[0]), 1/(m2[0] - m1[0])] ])
                 covariance = H.dot(S).dot(H.T)
                 covariance = np.array([covariance[0,0], covariance[0,1], covariance[1,0], covariance[1,1]])
-                # print("covariance", covariance, len(covariance), type(covariance))
                 state_estimates[neighbor] = {'edge_state_vector': edge_state_vector, 'edge_covariance': covariance}
             G.nodes[node]['edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
             G.nodes[node]['track_state_estimates'] = state_estimates
+
     return GraphList
 
 
 # plot the graph network in the layers of the ID in the xy plane
-def plot_graph_vertex_degree(G, attr, title, save=False):
+def plot_graph_vertex_degree(G, attr, title, filename, save=False):
     _, ax = plt.subplots(figsize=(12,10))
     # colour map based on attribute
     groups = set(nx.get_node_attributes(G, attr).values())
@@ -64,11 +66,11 @@ def plot_graph_vertex_degree(G, attr, title, save=False):
     plt.title(title)
     plt.axis('on')
     plt.tight_layout()
-    if save : plt.savefig(DIR + 'graph_vertex_degree.png', dpi=300)
+    if save : plt.savefig(filename, dpi=300)
     plt.show()
 
 
-def plot_subgraphs(subGraphs, title, save=False):
+def plot_subgraphs(subGraphs, title, filename, save=False):
     _, ax = plt.subplots(figsize=(12,10))
     for s in subGraphs:
         color = ["#"+''.join([random.choice('0123456789ABCDEF') for j in range(6)])]
@@ -83,16 +85,16 @@ def plot_subgraphs(subGraphs, title, save=False):
     plt.ylabel("y coord")
     plt.title(title)
     plt.axis('on')
-    if save : plt.savefig(DIR + 'subgraphs.png', dpi=300)
+    if save : plt.savefig(filename, dpi=300)
     plt.show()
 
-    for i, s in enumerate(subGraphs):
-        _, ax = plt.subplots(figsize=(12,10))
-        pos = nx.spectral_layout(s)
-        nx.draw_networkx_nodes(s, pos)
-        nx.draw_networkx_labels(s, pos)
-        nx.draw_networkx_edges(s, pos)
-        if save : plt.savefig(DIR + 'subgraphs_visual'+ str(i) +'.png', dpi=300)
+    # for i, s in enumerate(subGraphs):
+    #     _, ax = plt.subplots(figsize=(12,10))
+    #     pos = nx.spectral_layout(s)
+    #     nx.draw_networkx_nodes(s, pos)
+    #     nx.draw_networkx_labels(s, pos)
+    #     nx.draw_networkx_edges(s, pos)
+    #     if save : plt.savefig(DIR + 'subgraphs_visual'+ str(i) +'.png', dpi=300)
 
 
 
@@ -129,7 +131,8 @@ def main():
             nu = sigma0*np.random.normal(0.0,1.0) #random error
             gm = GNN_Measurement(xc[l], yc[l] + nu, tau0[i], i, n=nNodes)
             mcoll[l].append(gm)
-            G.add_node(nNodes, GNN_Measurement=gm, coord_Measurement=(xc[l], yc[l] + nu))
+            G.add_node(nNodes, GNN_Measurement=gm, 
+                               coord_Measurement=(xc[l], yc[l] + nu))
             nNodes += 1
         ax1.scatter(xc, yc)
 
@@ -170,7 +173,8 @@ def main():
     G = nx.to_directed(Graphs[0])
     # for node in G.nodes(data=True) : print(node)
     title = "Simulated tracks as Graph network with degree of nodes plotted in colour"
-    plot_graph_vertex_degree(G, 'degree', title, save=True)
+    filename = DIR + "graph_vertex_degree.png"
+    plot_graph_vertex_degree(G, 'degree', title, filename, save=True)
     print("Saving graph to serialized file")
     nx.write_gpickle(G, DIR + "graph.gpickle")   # save in serial form
     A = nx.adjacency_matrix(G).todense()
@@ -180,6 +184,7 @@ def main():
     G = nx.Graph(G) # make a copy to unfreeze graph
     # print(G.nodes(data=True))
     filteredNodes = [node for node, attr in G.nodes(data=True) if attr['edge_gradient_mean_var'][1] > threshold]
+    # filteredNodes = [node for node, attr in G.nodes(data=True) if attr['multivariate_covariance'][1][1] > 0.05]
     for node in filteredNodes: G.remove_node(node)
     
     # extract subgraphs and update track state estimates
@@ -193,12 +198,13 @@ def main():
     
     # plot and save subgraphs
     title = "Filtered Graph Edge orientation var <" + str(threshold) + ", weakly connected subgraphs"
-    plot_subgraphs(subGraphs, title, save=True)
+    filename = DIR + "subgraphs.png"
+    plot_subgraphs(subGraphs, title, filename, save=True)
     print("Saving subgraphs to serialized form....")
     for i, sub in enumerate(subGraphs):
         filename = DIR + str(i) + "_subgraph.gpickle"
         nx.write_gpickle(sub, filename)
-        A = nx.adjacency_matrix(G).todense()
+        A = nx.adjacency_matrix(sub).todense()
         np.savetxt(DIR + str(i) + "_subgraph_matrix.csv", A)
 
 
