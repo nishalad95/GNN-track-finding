@@ -1,4 +1,4 @@
-from filterpy.kalman import FixedLagSmoother, KalmanFilter
+from filterpy.kalman import KalmanFilter
 from filterpy import common
 from scipy.stats import chisquare, distributions
 import matplotlib.pyplot as plt
@@ -8,13 +8,14 @@ import numpy as np
 import os
 from collections import deque
 import argparse
+from plotting import *
 
 
-def save_network(directory, i, subGraph):
-    filename = directory + str(i) + "_subgraph.gpickle"
-    nx.write_gpickle(subGraph, filename)
-    A = nx.adjacency_matrix(subGraph).todense()
-    np.savetxt(directory + str(i) + "_subgraph_matrix.csv", A)
+# def save_network(directory, i, subGraph):
+#     filename = directory + str(i) + "_subgraph.gpickle"
+#     nx.write_gpickle(subGraph, filename)
+#     A = nx.adjacency_matrix(subGraph).todense()
+#     np.savetxt(directory + str(i) + "_subgraph_matrix.csv", A)
 
 def main():
     
@@ -142,6 +143,7 @@ def main():
         # TODO: only using [:,0] for now
         _, p = chisquare(obs_state[:,0], x_state[:,0], ddof=ddof)
 
+        # TODO: maybe use chi2 distance and variance as a threshold?
         if p >= track_acceptance:
             track_candidates[i] = 1
 
@@ -153,7 +155,7 @@ def main():
     chi2[0][0] = 0.
     result = distributions.chi2.sf(chi2, ddof_values)
 
-    # chisq distribution should be uniform!
+    # chisq histogram distribution should be uniform!
     # plt.hist(result, density=True)
     # plt.show()
 
@@ -163,18 +165,24 @@ def main():
     # plt.legend()
     # plt.show()
 
-
     print("track candidate idxs", track_candidates)
-    
+
     # save the track candidates
     idxs = np.where(track_candidates == 1)[0]
+    r_network = []
     for i, subGraph in enumerate(subGraphs):
         if i not in idxs:
             # not a candidate
             save_network(remaining_network, i, subGraph)
+            r_network.append(subGraph)
         else:
             # track candidate
             save_network(outputDir, i, subGraph)
+
+    
+    # plot remaining network to visualise graphs that still need processing
+    title = "Remaining Networks to be processed"
+    plot_save_subgraphs(r_network, remaining_network, title)
 
 
 if __name__ == "__main__":

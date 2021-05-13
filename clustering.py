@@ -41,6 +41,7 @@ def main():
     parser = argparse.ArgumentParser(description='edge outlier removal')
     parser.add_argument('-i', '--input', help='input directory of outlier removal')
     parser.add_argument('-o', '--output', help='output directory to save remaining network & track candidates')
+    parser.add_argument('-d', '--dict', help='dictionary of track state estimates to use')
     args = parser.parse_args()
 
     inputDir = args.input
@@ -48,7 +49,7 @@ def main():
     
     # variable names
     subgraph_path = "_subgraph.gpickle"
-    TRACK_STATE_ESTIMATES = "track_state_estimates"
+    TRACK_STATE_ESTIMATES = args.dict #"track_state_estimates"
     EDGE_STATE_VECTOR = "edge_state_vector"
     EDGE_COVARIANCE = "edge_covariance"
     MASKED_EDGES = "masked_edges"
@@ -64,14 +65,6 @@ def main():
         print(file)
         sub = nx.read_gpickle(file)
         subGraphs.append(sub)
-    
-    # i = 0
-    # path = inputDir + "?" + subgraph_path
-    # while os.path.isfile(path):
-    # sub = nx.read_gpickle(path)
-    # subGraphs.append(sub)
-    # # i += 1
-    # # path = inputDir + str(i) + subgraph_path
 
     # k-means clustering on edges with KL-distance
     for subGraph in subGraphs:

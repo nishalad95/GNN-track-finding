@@ -1,3 +1,4 @@
+import numpy as np
 class HitPairPredictor() :
     def __init__(self, start_x, y0_range, tau0_range) :
         self.start = start_x

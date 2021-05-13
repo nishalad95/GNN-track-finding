@@ -48,7 +48,7 @@ def plot_save_subgraphs(subGraphs, outputDir, title):
     major_ticks = np.arange(0, 12, 1)
     ax.set_xticks(major_ticks)
     plt.xlim([0, 11])
-    plt.ylim([-25, 12])
+    plt.ylim([-25, 15])
     plt.xlabel("ID layer in x axis")
     plt.ylabel("y coordinate")
     plt.title(title)
@@ -57,7 +57,12 @@ def plot_save_subgraphs(subGraphs, outputDir, title):
 
     # save to serialized form & adjacency matrix
     for i, sub in enumerate(subGraphs):
-        filename = outputDir + "/subgraphs/" + str(i) + "_subgraph.gpickle"
-        nx.write_gpickle(sub, filename)
-        A = nx.adjacency_matrix(sub).todense()
-        np.savetxt(outputDir + "/subgraphs/" + str(i) + "_subgraph_matrix.csv", A)
+        save_network(outputDir + "/subgraphs/", i, sub)
+
+
+# save network as serialized form & adjacency matrix
+def save_network(directory, i, subGraph):
+    filename = directory + str(i) + "_subgraph.gpickle"
+    nx.write_gpickle(subGraph, filename)
+    A = nx.adjacency_matrix(subGraph).todense()
+    np.savetxt(directory + str(i) + "_subgraph_matrix.csv", A)
