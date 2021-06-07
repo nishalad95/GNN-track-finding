@@ -4,6 +4,7 @@ from itertools import count
 import numpy as np
 import random
 
+
 # plot the graph network in the layers of the ID in the xy plane
 def plot_save_temperature_network(G, attr, outputDir):
     _, ax = plt.subplots(figsize=(12,10))
@@ -27,7 +28,7 @@ def plot_save_temperature_network(G, attr, outputDir):
     plt.title("Track simulation with potential hit pairs, vertex degree indicated by colour")
     plt.axis('on')
     plt.tight_layout()
-    plt.savefig(outputDir + "/temperature_network.png", dpi=300)
+    plt.savefig(outputDir + "temperature_network.png", dpi=300)
 
     # save to serialized form & adjacency matrix
     nx.write_gpickle(G, outputDir + "temperature_network.gpickle")   # save in serial form
@@ -36,7 +37,7 @@ def plot_save_temperature_network(G, attr, outputDir):
 
 
 # plot the subgraphs extracted using threshold on nodes
-def plot_save_subgraphs(subGraphs, outputDir, title):
+def plot_save_subgraphs(subGraphs, outputFile, title):
     _, ax = plt.subplots(figsize=(12,10))
     for s in subGraphs:
         color = ["#"+''.join([random.choice('0123456789ABCDEF') for j in range(6)])]
@@ -53,11 +54,11 @@ def plot_save_subgraphs(subGraphs, outputDir, title):
     plt.ylabel("y coordinate")
     plt.title(title)
     plt.axis('on')
-    plt.savefig(outputDir + "/subgraphs.png", dpi=300)
+    plt.savefig(outputFile + "subgraphs.png", dpi=300)
 
     # save to serialized form & adjacency matrix
     for i, sub in enumerate(subGraphs):
-        save_network(outputDir + "/subgraphs/", i, sub)
+        save_network(outputFile, i, sub)
 
 
 # save network as serialized form & adjacency matrix
@@ -66,3 +67,47 @@ def save_network(directory, i, subGraph):
     nx.write_gpickle(subGraph, filename)
     A = nx.adjacency_matrix(subGraph).todense()
     np.savetxt(directory + str(i) + "_subgraph_matrix.csv", A)
+
+
+# computes the following node and edge attributes: vertex degree, empirical mean & variance of edge orientation
+# track state vector and covariance, mean state vector and mean covariance, adds attributes to network
+def compute_track_state_estimates(GraphList):
+    
+    sigma0 = 0.5 #r.m.s of track position measurements
+    S = np.matrix([[sigma0**2, 0], [0, sigma0**2]]) # covariance matrix of measurements
+    
+    for G in GraphList:
+        for node in G.nodes():
+            gradients = []
+            state_estimates = {}
+            G.nodes[node]['degree'] = len(G.edges(node))
+            m1 = (G.nodes[node]["GNN_Measurement"].x, G.nodes[node]["GNN_Measurement"].y)
+                        
+            for neighbor in nx.all_neighbors(G, node):
+                m2 = (G.nodes[neighbor]["GNN_Measurement"].x, G.nodes[neighbor]["GNN_Measurement"].y)
+                grad = (m1[1] - m2[1]) / (m1[0] - m2[0])
+                gradients.append(grad)
+                edge_state_vector = np.array([m1[1], grad])
+                H = np.array([ [1, 0], [1/(m1[0] - m2[0]), 1/(m2[0] - m1[0])] ])
+                covariance = H.dot(S).dot(H.T)
+                covariance = np.array([covariance[0,0], covariance[0,1], covariance[1,0], covariance[1,1]])
+                state_estimates[neighbor] = {'edge_state_vector': edge_state_vector, 'edge_covariance': covariance}
+            G.nodes[node]['edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
+            G.nodes[node]['track_state_estimates'] = state_estimates
+
+    return GraphList
+
+
+# Identify subgraphs by rerunning CCA & updating track state estimates
+# plot the subgraphs to view the difference after clustering
+def run_cca(subGraphs, outputDir):
+ 
+    sg_outliers_removed = []
+    for s in subGraphs:
+        s = nx.to_directed(s)
+        for component in nx.weakly_connected_components(s):
+            sg_outliers_removed.append(s.subgraph(component).copy())
+    sg_outliers_removed = compute_track_state_estimates(sg_outliers_removed)
+
+    title = "Filtered Graph outlier edge removal using clustering with KL distance measure"
+    plot_save_subgraphs(sg_outliers_removed, outputDir, title)

@@ -1,44 +1,11 @@
-import os
-import sys
-import math
 import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
-from itertools import count
-import scipy as sp
-from scipy.stats import norm
-import scipy.stats
-from numpy.linalg import inv
-import random
 import argparse
+import json
 from GNN_Measurement import GNN_Measurement
 from HitPairPredictor import HitPairPredictor
-from plotting import *
-
-
-# computes the following node and edge attributes: vertex degree, empirical mean & variance of edge orientation
-# track state vector and covariance, mean state vector and mean covariance, adds attributes to network
-def compute_track_state_estimates(GraphList, S):
-    for G in GraphList:
-        for node in G.nodes():
-            gradients = []
-            state_estimates = {}
-            G.nodes[node]['degree'] = len(G.edges(node))
-            m1 = (G.nodes[node]["GNN_Measurement"].x, G.nodes[node]["GNN_Measurement"].y)
-                        
-            for neighbor in nx.all_neighbors(G, node):
-                m2 = (G.nodes[neighbor]["GNN_Measurement"].x, G.nodes[neighbor]["GNN_Measurement"].y)
-                grad = (m1[1] - m2[1]) / (m1[0] - m2[0])
-                gradients.append(grad)
-                edge_state_vector = np.array([m1[1], grad])
-                H = np.array([ [1, 0], [1/(m1[0] - m2[0]), 1/(m2[0] - m1[0])] ])
-                covariance = H.dot(S).dot(H.T)
-                covariance = np.array([covariance[0,0], covariance[0,1], covariance[1,0], covariance[1,1]])
-                state_estimates[neighbor] = {'edge_state_vector': edge_state_vector, 'edge_covariance': covariance}
-            G.nodes[node]['edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
-            G.nodes[node]['track_state_estimates'] = state_estimates
-
-    return GraphList
+from utils import *
 
 
 def main():
@@ -54,11 +21,10 @@ def main():
 
     # define variables
     sigma0 = 0.5 #r.m.s of track position measurements
-    S = np.matrix([[sigma0**2, 0], [0, sigma0**2]]) # covariance matrix of measurements
     Lc = np.array([1,2,3,4,5,6,7,8,9,10]) #detector layer coordinates along x-axis
     Nl = len(Lc) #number of layers
     start = 0
-    y0 = np.array([-3,   1, -1,   3, -2,  2.5, -1.5]) #track positions at start, initial y
+    y0 = np.array([-3,  1, -1,   3, -2,  2.5, -1.5]) #track positions at start, initial y
     yf = np.array([12, -4,  5, -14, -6, -24,   0]) #final track positions, final y
 
     # 100+ track sim
@@ -81,20 +47,31 @@ def main():
     mcoll = [] #collections of track position measurements
     for l in range(Nl) : mcoll.append([])
 
+    # keep track of num hits associated to each simulated track
+    num_hits = {}
+
     # add hits to the graph network as nodes with node measurements
     for i in range(Ntr) :
+        nhits = 0
         yc = y0[i] + tau0[i]*(Lc[:] - start)
         xc = Lc[:]
         for l in range(Nl) : 
             nu = sigma0*np.random.normal(0.0,1.0) #random error
-            gm = GNN_Measurement(xc[l], yc[l] + nu, tau0[i], i, n=nNodes)
+            gm = GNN_Measurement(xc[l], yc[l] + nu, tau0[i], sigma0, label=i, n=nNodes)
             mcoll[l].append(gm)
             G.add_node(nNodes, GNN_Measurement=gm, 
                                coord_Measurement=(xc[l], yc[l] + nu))
+            # print(G.nodes[nNodes]["GNN_Measurement"].track_label)
             nNodes += 1
+            nhits += 1
+        num_hits[i] = nhits
         ax1.scatter(xc, yc)
     ax1.set_title('Ground truth')
     ax1.grid()
+
+    # save the num of hits for simulated tracks
+    with open(outputDir + 'sim_nhits.txt', 'w') as file:
+        file.write(json.dumps(num_hits))
 
     # generate hit pair predictions
     tau = 3.5
@@ -126,7 +103,7 @@ def main():
     plt.savefig(outputDir + 'simulated_tracks_hit_pairs.png', dpi=300)
 
     # compute track state estimates
-    Graphs = compute_track_state_estimates([G], S)
+    Graphs = compute_track_state_estimates([G])
     G = nx.to_directed(Graphs[0])
 
     # plot are save temperature network
@@ -143,12 +120,12 @@ def main():
     # extract subgraphs and update track state estimates
     G = nx.to_directed(G)
     subGraphs = [G.subgraph(c).copy() for c in nx.weakly_connected_components(G)]
-    subGraphs = compute_track_state_estimates(subGraphs, S)
+    subGraphs = compute_track_state_estimates(subGraphs)
     
     # plot and save extracted subgraphs
     print("Saving subgraphs to serialized form & adjacency matrix...")
     title = "Weakly connected subgraphs extracted with variance of edge orientation <" + str(threshold)
-    plot_save_subgraphs(subGraphs, outputDir, title)
+    plot_save_subgraphs(subGraphs, outputDir + "/cca_output/", title)
 
 
 if __name__ == "__main__":

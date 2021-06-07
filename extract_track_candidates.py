@@ -8,14 +8,9 @@ import numpy as np
 import os
 from collections import deque
 import argparse
-from plotting import *
+from utils import *
 
 
-# def save_network(directory, i, subGraph):
-#     filename = directory + str(i) + "_subgraph.gpickle"
-#     nx.write_gpickle(subGraph, filename)
-#     A = nx.adjacency_matrix(subGraph).todense()
-#     np.savetxt(directory + str(i) + "_subgraph_matrix.csv", A)
 
 def main():
     
@@ -24,6 +19,7 @@ def main():
     parser.add_argument('-i', '--input', help='input directory of outlier removal')
     parser.add_argument('-c', '--candidates', help='output directory to save track candidates')
     parser.add_argument('-r', '--remain', help='output directory to save remaining network')
+    parser.add_argument('-o', '--ccaOutputDir', help='output directory to save cca output')
     parser.add_argument('-cs', '--chisq', help='chi-squared track candidate acceptance level')
     args = parser.parse_args()
 
@@ -31,6 +27,7 @@ def main():
     inputDir = args.input
     outputDir = args.candidates
     remaining_network = args.remain
+    cca_outputDir = args.ccaOutputDir
     track_acceptance = float(args.chisq)
     
     sigma0 = 0.5 #r.m.s of track position measurements
@@ -104,7 +101,7 @@ def main():
             saver.save()
 
         x_state = np.array(saver['x'])
-        y_a = x_state[:, 0] # y_a = y_b + t_b(x_a - x_b)
+        # y_a = x_state[:, 0] # y_a = y_b + t_b(x_a - x_b)
 
         # plot the smoothed tracks
         # plt.scatter(obs_xpos, y_a, alpha=0.5, label="KF")
@@ -182,8 +179,11 @@ def main():
     
     # plot remaining network to visualise graphs that still need processing
     title = "Remaining Networks to be processed"
-    plot_save_subgraphs(r_network, remaining_network, title)
+    plot_save_subgraphs(r_network, remaining_network + "remaining_network.png", title)
 
+
+    # Identify subgraphs by rerunning CCA & updating track state estimates, plot & save
+    run_cca(r_network, cca_outputDir)
 
 if __name__ == "__main__":
     main()
