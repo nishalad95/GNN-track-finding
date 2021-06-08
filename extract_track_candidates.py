@@ -162,7 +162,7 @@ def main():
     # plt.legend()
     # plt.show()
 
-    print("track candidate idxs", track_candidates)
+    # print("track candidate idxs", track_candidates)
 
     # save the track candidates
     idxs = np.where(track_candidates == 1)[0]
@@ -179,7 +179,7 @@ def main():
     
     # plot remaining network to visualise graphs that still need processing
     title = "Remaining Networks to be processed"
-    plot_save_subgraphs(r_network, remaining_network + "remaining_network.png", title)
+    plot_save_subgraphs(r_network, remaining_network, title)
 
 
     # Identify subgraphs by rerunning CCA & updating track state estimates, plot & save

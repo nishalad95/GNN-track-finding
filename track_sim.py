@@ -55,6 +55,7 @@ def main():
         nhits = 0
         yc = y0[i] + tau0[i]*(Lc[:] - start)
         xc = Lc[:]
+        node_labels = []
         for l in range(Nl) : 
             nu = sigma0*np.random.normal(0.0,1.0) #random error
             gm = GNN_Measurement(xc[l], yc[l] + nu, tau0[i], sigma0, label=i, n=nNodes)
@@ -64,13 +65,14 @@ def main():
             # print(G.nodes[nNodes]["GNN_Measurement"].track_label)
             nNodes += 1
             nhits += 1
-        num_hits[i] = nhits
+            node_labels.append(nNodes)
+        num_hits[i] = {"num_hits" : nhits, "node_labels" : node_labels}
         ax1.scatter(xc, yc)
     ax1.set_title('Ground truth')
     ax1.grid()
 
     # save the num of hits for simulated tracks
-    with open(outputDir + 'sim_nhits.txt', 'w') as file:
+    with open(outputDir + 'truth_hit_data.txt', 'w') as file:
         file.write(json.dumps(num_hits))
 
     # generate hit pair predictions

@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import argparse
 from utils import *
-from KL_calibration import calibrate
+from KL_calibration import compute_track_recon_eff
 
 # KL distance - takes into account covariances between the components 
 # If you were to use simple Euclidean distance, cov not taken into account
@@ -48,19 +48,13 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_thres):
     os.chdir(".")
     # TODO: change all occurences of 'while' to 'for' and use glob in other files when reading in subgraph data
     for file in glob.glob(inputDir + "*" + subgraph_path):
-        # print(file)
         sub = nx.read_gpickle(file)
         subGraphs.append(sub)
 
-    # k-means clustering on edges with KL-distance
+    # k-means clustering on edges using KL-distance threshold
     for subGraph in subGraphs:
-        # isDiGraph = nx.is_directed(subGraph)
-        # print(isDiGraph)
 
         for node in subGraph.nodes(data=True):
-            print("---------------")
-            print("NODE")
-            print("---------------")
             
             num_edges = node[1]['degree']
             if num_edges <= 2: continue
@@ -88,30 +82,20 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_thres):
 
             # calculate pairwise distances between edge state vectors
             pairwise_distances = calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs)
-            # print("pairwise distances\n", pairwise_distances)
 
             # find the smallest distance & keep track of masked edges
             nonzero_dist = pairwise_distances[np.nonzero(pairwise_distances)]
             smallest_dist = np.min(nonzero_dist)
             idx, _ = np.where(pairwise_distances==smallest_dist) # idx[0] & idx[1] indicates edge indices with smallest distance
-            # mean_dist = np.mean(nonzero_dist)
-            # variance_dist = np.sqrt(np.var(nonzero_dist))
-            # KL_thres = mean_dist + (2.0 * variance_dist)
             masked_edges = np.empty(shape=(0, 0), dtype=int)
 
             # perform clustering
-            # KL_thres = 5.0
-            # print("KL threshold: ", KL_thres)
             if smallest_dist < KL_thres:
                 while smallest_dist < KL_thres:
-                    # print("BEGINNING CLUSTERING")
-                    # print("indices for smallest dist", idx)
-                    # print("Merging states......")
                     # merge states
                     merged_mean, merged_cov, merged_inv_cov = merge_states(edge_svs[idx[0]], inv_covs[idx[0]], 
                                                                             edge_svs[idx[1]], inv_covs[idx[1]])
                     # update variables
-                    # print("removing elements by index")
                     edge_svs = np.delete(edge_svs, idx, axis=0)
                     edge_covs = np.delete(edge_covs, idx, axis=0)
                     inv_covs = np.delete(inv_covs, idx, axis=0)
@@ -126,16 +110,14 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_thres):
                     subGraph.nodes[node[0]][MASKED_EDGES] = masked_edges
                     connected_node_nums = np.delete(connected_node_nums, idx, axis=0)
                     connected_node_nums = np.append(connected_node_nums, -1)
-                    # print("connected_node_nums", connected_node_nums)
                     
                     # store merged state as a node attribute
                     subGraph.nodes[node[0]][MERGED_STATE] = merged_mean
                     subGraph.nodes[node[0]][MERGED_COVARIANCE] = merged_cov
                     # print("node num:\n", node)
                     
-                    # if all edges have collapsed, then end
-                    if (connected_node_nums == all_merged).all():
-                        break
+                    # if all edges have collapsed, break the loop
+                    if (connected_node_nums == all_merged).all(): break
                     
                     # recalculate pairwise distances & find smallest distance
                     pairwise_distances = calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs)
@@ -146,8 +128,6 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_thres):
                 # print("END OF CLUSTERING")
 
                 # remove any outlier edges from node attributes
-                # print("origin connect edges:", orig_connected_node_nums)
-                # print("final collapsed edges:", masked_edges)
                 outliers = np.setdiff1d(orig_connected_node_nums, masked_edges)
                 # print("outlier edges:", outliers)
                 # print("subgraph edges: \n", subGraph.edges())
@@ -157,31 +137,25 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_thres):
                         subGraph.remove_edges_from([(node[0], outlier), (outlier, node[0])]) # remove bidirectional edge
                     node[1][TRACK_STATE_ESTIMATES] = track_state_estimates  # update track state estimates
                     subGraph.nodes[node[0]]['degree'] = int(subGraph.degree(node[0]) / 2)   # update node attribute
-            else:
-                # all edges are incompatible
-                print("NO CLUSTERS FOUND")
+            # else:
+            #     # all edges are incompatible
+            #     print("NO CLUSTERS FOUND")
 
             # print("AFTER CLUSTERING VALUES")
             # print("node num:\n", node)
-
             # print("degree after:", subGraph.degree(node[0]))  
-  
-        print("----------------")
-        print("SUBGRAPH HAS BEEN PROCESSED")
 
 
-    # Identify subgraphs by rerunning CCA & updating track state estimates, plot & save
+    # Identify subgraphs by running CCA & updating track state estimates, plot & save
     run_cca(subGraphs, outputDir)
-    # title = "Filtered Graph outlier edge removal using clustering with KL distance measure"
-    # plot_save_subgraphs(subGraphs, outputDir, title)
 
-    efficiency = calibrate()
-    return efficiency
+    # calibrate the KL threshold for clustering using MC truth
+    efficiency, score = compute_track_recon_eff(outputDir)
+    return efficiency, score
     
 
 def main():
 
-    # parse command line args
     parser = argparse.ArgumentParser(description='edge outlier removal')
     parser.add_argument('-i', '--input', help='input directory of outlier removal')
     parser.add_argument('-o', '--output', help='output directory to save remaining network & track candidates')
@@ -197,8 +171,8 @@ def main():
     while efficiency < 0.6:
         for f in glob.glob(outputDir + "*"):
             os.remove(f)
-        efficiency = cluster(inputDir, outputDir, track_state_estimates, KL_thres)
-        print("EFF:", efficiency, "KL_thres", KL_thres)
+        efficiency, score = cluster(inputDir, outputDir, track_state_estimates, KL_thres)
+        print("EFF:", efficiency, "score", score, "KL_thres", KL_thres)
         KL_thres *= 0.75
 
 
