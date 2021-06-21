@@ -91,12 +91,46 @@ def compute_track_state_estimates(GraphList):
                 H = np.array([ [1, 0], [1/(m1[0] - m2[0]), 1/(m2[0] - m1[0])] ])
                 covariance = H.dot(S).dot(H.T)
                 covariance = np.array([covariance[0,0], covariance[0,1], covariance[1,0], covariance[1,1]])
-                state_estimates[neighbor] = {'edge_state_vector': edge_state_vector, 'edge_covariance': covariance}
+                key = (neighbor, node) # in_edge, track state going from neighbor to node, probability of A conditioned on its neighborhood B
+                state_estimates[key] = {'edge_state_vector': edge_state_vector, 
+                                            'edge_covariance': covariance, 
+                                            'coord_Measurement': m2}
             G.nodes[node]['edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
             G.nodes[node]['track_state_estimates'] = state_estimates
 
     return GraphList
 
+# assign prior probabilities/weights for neighbourhood of each node
+def compute_prior_probabilities(GraphList):
+    for s in GraphList:
+        nodes = s.nodes(data=True)
+        if len(nodes) == 1: continue
+        for node in nodes:
+            track_state_estimates = node[1]['track_state_estimates']
+            
+            # compute number of neighbour nodes in each layer for given neighbourhood
+            layer_node_num_dict = {}
+            for node_num, v in track_state_estimates.items():
+                layer = v['coord_Measurement'][0]
+                if layer in layer_node_num_dict.keys():
+                    layer_node_num_dict[layer].append(node_num)
+                else:
+                    layer_node_num_dict[layer] = [node_num]
+        
+            # assign prior probabilities to nodes in neighbourhood
+            for _, node_nums_list in layer_node_num_dict.items():
+                prior = 1/len(node_nums_list)
+                for n in node_nums_list:
+                    track_state_estimates[n]['prior'] = prior
+    
+    return GraphList
+
+def initialize_edge_activation(GraphList):
+    for subGraph in GraphList:
+        for e in subGraph.edges:
+            attrs = {e: {"activated": 1}}
+            nx.set_edge_attributes(subGraph, attrs)
+    return GraphList
 
 # Identify subgraphs by rerunning CCA & updating track state estimates
 # plot the subgraphs to view the difference after clustering
@@ -108,6 +142,7 @@ def run_cca(subGraphs, outputDir):
         for component in nx.weakly_connected_components(s):
             sg_outliers_removed.append(s.subgraph(component).copy())
     sg_outliers_removed = compute_track_state_estimates(sg_outliers_removed)
+    sg_outliers_removed = compute_prior_probabilities(sg_outliers_removed)
 
     title = "Filtered Graph outlier edge removal using clustering with KL distance measure"
     plot_save_subgraphs(sg_outliers_removed, outputDir, title)

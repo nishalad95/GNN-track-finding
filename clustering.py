@@ -6,6 +6,7 @@ import networkx as nx
 import argparse
 from utils import *
 from KL_calibration import compute_track_recon_eff
+import pprint
 
 # KL distance - takes into account covariances between the components 
 # If you were to use simple Euclidean distance, cov not taken into account
@@ -27,7 +28,15 @@ def calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs):
             distance = KLDistance(edge_svs[i], edge_covs[i], inv_covs[i], edge_svs[j], edge_covs[j], inv_covs[j])
             pairwise_distances[i][j] = distance
             pairwise_distances[j][i] = distance
-    return pairwise_distances
+    return np.triu(pairwise_distances)
+
+def get_smallest_dist_idx(pairwise_distances):
+    nonzero_dist = pairwise_distances[np.nonzero(pairwise_distances)]
+    smallest_dist = np.min(nonzero_dist)
+    # row[0] & column[0] indicates neighbor_node indices with smallest distance
+    row, column = np.where(pairwise_distances==smallest_dist)
+    idx = np.concatenate((row, column), axis=None)
+    return smallest_dist, idx
 
 
 def cluster(inputDir, outputDir, track_state_estimates, KL_thres):
@@ -35,115 +44,126 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_thres):
     # variable names
     subgraph_path = "_subgraph.gpickle"
     TRACK_STATE_ESTIMATES = track_state_estimates
-    EDGE_STATE_VECTOR = "edge_state_vector"
-    EDGE_COVARIANCE = "edge_covariance"
-    MASKED_EDGES = "masked_edges"
     MERGED_STATE = "merged_state"
     MERGED_COVARIANCE = "merged_cov"
-    all_merged = np.array([-1])
+    MERGED_PRIOR = "merged_prior"
 
 
     # read in subgraph data
     subGraphs = []
     os.chdir(".")
-    # TODO: change all occurences of 'while' to 'for' and use glob in other files when reading in subgraph data
     for file in glob.glob(inputDir + "*" + subgraph_path):
         sub = nx.read_gpickle(file)
         subGraphs.append(sub)
 
+    # TODO: handling of more than 1 cluster?
     # k-means clustering on edges using KL-distance threshold
     for subGraph in subGraphs:
 
         for node in subGraph.nodes(data=True):
-            
-            num_edges = node[1]['degree']
-            if num_edges <= 2: continue
-            masked_edges = np.zeros(num_edges)
+            node_num = node[0]
+            node_attr = node[1]
 
-            # convert graph attributes to arrays
-            track_state_estimates = node[1][TRACK_STATE_ESTIMATES]
-            node_state_estimates = pd.DataFrame(track_state_estimates)
-            orig_connected_node_nums = node_state_estimates.columns.values
-            connected_node_nums = node_state_estimates.columns.values
-            edge_svs = np.vstack(node_state_estimates.loc[EDGE_STATE_VECTOR].to_numpy())
-            edge_covs = np.vstack(node_state_estimates.loc[EDGE_COVARIANCE].to_numpy())
+            num_edges = node_attr['degree']
+            if num_edges <= 2: continue
+
+            # convert attributes to arrays
+            track_state_estimates = node_attr[TRACK_STATE_ESTIMATES]
+            neighbor_nodes = np.array([connection[0] for connection in track_state_estimates.keys()])
+            neighbors_to_deactivate = np.array([connection[0] for connection in track_state_estimates.keys()])
+            # edge_weights = [connection[2]['activated'] for connection in subGraph.in_edges(node_num, data=True)]  # in_edges
+            edge_svs = np.array([component['edge_state_vector'] for component in track_state_estimates.values()])
+            edge_covs = np.array([component['edge_covariance'] for component in track_state_estimates.values()])
             edge_covs = np.reshape(edge_covs[:, :, np.newaxis], (num_edges, 2, 2))
             inv_covs = np.linalg.inv(edge_covs)
-            
-            # print("ORIGINAL VALUES")
-            # print("node num:\n", node)
-            # print("degree before:", subGraph.degree([node[0]]))
+            priors = np.array([component['prior'] for component in track_state_estimates.values()])
 
-            # print("connected_node_nums\n", connected_node_nums)
-            # print("num edges:", num_edges)
+            print("DICT:")
+            pprint.pprint(track_state_estimates)
+            print("neighbor_nodes:", neighbor_nodes)
 
-            # print("ORIGINAL VALUES")
-            # print("edge_sv\n", edge_svs)
-
-            # calculate pairwise distances between edge state vectors
+            # calculate pairwise distances between edge state vectors, find smallest distance & keep track of merged states
             pairwise_distances = calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs)
-
-            # find the smallest distance & keep track of masked edges
-            nonzero_dist = pairwise_distances[np.nonzero(pairwise_distances)]
-            smallest_dist = np.min(nonzero_dist)
-            idx, _ = np.where(pairwise_distances==smallest_dist) # idx[0] & idx[1] indicates edge indices with smallest distance
-            masked_edges = np.empty(shape=(0, 0), dtype=int)
+            smallest_dist, idx = get_smallest_dist_idx(pairwise_distances) #[row_idx, column_idx]
+            print("INDEX", idx)
 
             # perform clustering
             if smallest_dist < KL_thres:
+
+                # merge states
+                merged_mean, merged_cov, merged_inv_cov = merge_states(edge_svs[idx[0]], inv_covs[idx[0]], edge_svs[idx[1]], inv_covs[idx[1]])
+                merged_prior = priors[idx[0]] + priors[idx[1]]
+
+                # update variables, keep the merged state information at the end
+                edge_svs = np.delete(edge_svs, idx, axis=0)
+                edge_covs = np.delete(edge_covs, idx, axis=0)
+                inv_covs = np.delete(inv_covs, idx, axis=0)
+                priors = np.delete(priors, idx)
+                neighbors_to_deactivate = np.delete(neighbors_to_deactivate, idx, axis=0)
+                edge_svs = np.append(edge_svs, merged_mean.reshape(-1,2), axis=0)
+                edge_covs = np.append(edge_covs, merged_cov.reshape(-1,2,2), axis=0)
+                inv_covs = np.append(inv_covs, merged_inv_cov.reshape(-1,2,2), axis=0)
+                priors = np.append(priors, merged_prior)
+                print("neighbours to deactivate:", neighbors_to_deactivate)
+                num_edges = edge_svs.shape[0]
+
+                # recalculate pairwise distances between edge state vectors, find smallest distance & keep track of merged states
+                pairwise_distances = calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs)
+                smallest_dist, idx = get_smallest_dist_idx(pairwise_distances) #[row_idx, column_idx]
+                # if the merged state wasn't found in the smallest pairwise distance - new cluster - leave for further iterations
+                if (idx[1] == len(pairwise_distances) - 1):
+                    print("2nd cluster found! Ending clusterization here...")
+                    break
+
                 while smallest_dist < KL_thres:
                     # merge states
-                    merged_mean, merged_cov, merged_inv_cov = merge_states(edge_svs[idx[0]], inv_covs[idx[0]], 
-                                                                            edge_svs[idx[1]], inv_covs[idx[1]])
-                    # update variables
+                    merged_mean, merged_cov, merged_inv_cov = merge_states(edge_svs[idx[0]], inv_covs[idx[0]], merged_mean, merged_inv_cov)
+                    merged_prior = priors[idx[0]] + merged_prior
+                    
+                    # update variables, keep the merged state at the end
                     edge_svs = np.delete(edge_svs, idx, axis=0)
                     edge_covs = np.delete(edge_covs, idx, axis=0)
                     inv_covs = np.delete(inv_covs, idx, axis=0)
+                    priors = np.delete(priors, idx)
+                    neighbors_to_deactivate = np.delete(neighbors_to_deactivate, idx[0], axis=0)
                     edge_svs = np.append(edge_svs, merged_mean.reshape(-1,2), axis=0)
                     edge_covs = np.append(edge_covs, merged_cov.reshape(-1,2,2), axis=0)
                     inv_covs = np.append(inv_covs, merged_inv_cov.reshape(-1,2,2), axis=0)
+                    priors = np.append(priors, merged_prior)
+                    print("neighbours to deactivate:", neighbors_to_deactivate)
                     num_edges = edge_svs.shape[0]
 
-                    # keep track of masked edges
-                    masked_edges = np.append(masked_edges, connected_node_nums[idx])
-                    # print("Masked edges: ", masked_edges)
-                    subGraph.nodes[node[0]][MASKED_EDGES] = masked_edges
-                    connected_node_nums = np.delete(connected_node_nums, idx, axis=0)
-                    connected_node_nums = np.append(connected_node_nums, -1)
-                    
-                    # store merged state as a node attribute
-                    subGraph.nodes[node[0]][MERGED_STATE] = merged_mean
-                    subGraph.nodes[node[0]][MERGED_COVARIANCE] = merged_cov
-                    # print("node num:\n", node)
-                    
-                    # if all edges have collapsed, break the loop
-                    if (connected_node_nums == all_merged).all(): break
-                    
+                    # if all edges have merged, break the loop
+                    if len(neighbors_to_deactivate == 0): break
+
                     # recalculate pairwise distances & find smallest distance
                     pairwise_distances = calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs)
-                    nonzero_dist = pairwise_distances[np.nonzero(pairwise_distances)]
-                    smallest_dist = np.min(nonzero_dist)
-                    idx, _ = np.where(pairwise_distances==smallest_dist)
+                    smallest_dist, idx = get_smallest_dist_idx(pairwise_distances) #[row_idx, column_idx]
+                    # if the merged state wasn't found in the smallest pairwise distance - new cluster - leave for further iterations
+                    if (idx[1] != len(pairwise_distances) - 1):
+                        print("2nd cluster found! Ending clusterization here...")
+                        break
                 
-                # print("END OF CLUSTERING")
+                print("End of edge clusterising, saving merged state as node attribute")
+                # store merged state as a node attribute
+                subGraph.nodes[node_num][MERGED_STATE] = merged_mean
+                subGraph.nodes[node_num][MERGED_COVARIANCE] = merged_cov
+                subGraph.nodes[node_num][MERGED_PRIOR] = merged_prior
 
-                # remove any outlier edges from node attributes
-                outliers = np.setdiff1d(orig_connected_node_nums, masked_edges)
-                # print("outlier edges:", outliers)
-                # print("subgraph edges: \n", subGraph.edges())
-                if len(outliers) > 0:
-                    for outlier in outliers: 
-                        track_state_estimates.pop(outlier) # remove attribute
-                        subGraph.remove_edges_from([(node[0], outlier), (outlier, node[0])]) # remove bidirectional edge
-                    node[1][TRACK_STATE_ESTIMATES] = track_state_estimates  # update track state estimates
-                    subGraph.nodes[node[0]]['degree'] = int(subGraph.degree(node[0]) / 2)   # update node attribute
-            # else:
-            #     # all edges are incompatible
-            #     print("NO CLUSTERS FOUND")
+                #TODO: deactivate neighbor nodes identified as outliers
+                if len(neighbors_to_deactivate) > 0:
+                    for n in neighbors_to_deactivate:
+                        print("Deactivating specific edges")
+                        attrs = {(n, node_num): {"activated": 0}}
+                        nx.set_edge_attributes(subGraph, attrs)
 
-            # print("AFTER CLUSTERING VALUES")
-            # print("node num:\n", node)
-            # print("degree after:", subGraph.degree(node[0]))  
+            else:
+                # all edges are incompatible
+                print("NO CLUSTERS FOUND")
+
+        # check activation/deactivation of edges
+        # print("--------------------")
+        # print("EDGE DATA:", subGraph.edges.data(), "\n")
 
 
     # Identify subgraphs by running CCA & updating track state estimates, plot & save
