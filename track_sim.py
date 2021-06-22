@@ -6,6 +6,7 @@ import json
 from GNN_Measurement import GNN_Measurement
 from HitPairPredictor import HitPairPredictor
 from utils import *
+import pprint
 
 
 def main():
@@ -119,10 +120,23 @@ def main():
     # filteredNodes = [node for node, attr in G.nodes(data=True) if attr['multivariate_covariance'][1][1] > 0.05]
     for node in filteredNodes: G.remove_node(node)
     
-    # extract subgraphs and update track state estimates
+    # CCA: extract subgraphs
     G = nx.to_directed(G)
     subGraphs = [G.subgraph(c).copy() for c in nx.weakly_connected_components(G)]
+    
+    # compute track state estimates, priors and assign initial edge weightings
     subGraphs = compute_track_state_estimates(subGraphs)
+    subGraphs = compute_prior_probabilities(subGraphs)
+    subGraphs = initialize_edge_activation(subGraphs)
+    
+    # for i, s in enumerate(subGraphs):
+    #     print("-------------------")
+    #     print("SUBGRAPH " + str(i))
+    #     for node in s.nodes(data=True):
+    #         pprint.pprint(node)
+    #     print("--------------------")
+    #     print("EDGE DATA:", s.edges.data(), "\n")
+
     
     # plot and save extracted subgraphs
     print("Saving subgraphs to serialized form & adjacency matrix...")

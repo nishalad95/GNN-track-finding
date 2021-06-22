@@ -37,14 +37,21 @@ def plot_save_temperature_network(G, attr, outputDir):
 
 
 # plot the subgraphs extracted using threshold on nodes
-def plot_save_subgraphs(subGraphs, outputFile, title):
+def plot_save_subgraphs(GraphList, outputFile, title):
     _, ax = plt.subplots(figsize=(12,10))
-    for s in subGraphs:
+    for subGraph in GraphList:
         color = ["#"+''.join([random.choice('0123456789ABCDEF') for j in range(6)])]
-        pos=nx.get_node_attributes(s,'coord_Measurement')
-        nx.draw_networkx_edges(s, pos, alpha=0.25)
-        nx.draw_networkx_nodes(s, pos, node_color=color[0], node_size=75)
-        nx.draw_networkx_labels(s, pos)
+        pos=nx.get_node_attributes(subGraph,'coord_Measurement')
+        # edge_colors = [subGraph[u][v]['color'] for u,v in subGraph.edges()]
+        edge_colors = []
+        for u, v in subGraph.edges():
+            if subGraph[u][v]['activated'] == 1:
+                edge_colors.append(color[0])
+            else:
+                edge_colors.append("#000000")
+        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.25)
+        nx.draw_networkx_nodes(subGraph, pos, node_color=color[0], node_size=75)
+        nx.draw_networkx_labels(subGraph, pos)
     ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
     major_ticks = np.arange(0, 12, 1)
     ax.set_xticks(major_ticks)
@@ -57,7 +64,7 @@ def plot_save_subgraphs(subGraphs, outputFile, title):
     plt.savefig(outputFile + "subgraphs.png", dpi=300)
 
     # save to serialized form & adjacency matrix
-    for i, sub in enumerate(subGraphs):
+    for i, sub in enumerate(GraphList):
         save_network(outputFile, i, sub)
 
 
@@ -128,21 +135,31 @@ def compute_prior_probabilities(GraphList):
 def initialize_edge_activation(GraphList):
     for subGraph in GraphList:
         for e in subGraph.edges:
-            attrs = {e: {"activated": 1}}
+            attrs = {e: {"activated": 1, "color": 'g'}}
             nx.set_edge_attributes(subGraph, attrs)
     return GraphList
 
+#TODO: activate_edge() and deactivate_edge() functions
+
+def run_cca(GraphList):
+    cca_subGraphs = []
+    for subGraph in GraphList:
+        subGraph = nx.to_directed(subGraph)
+        for component in nx.weakly_connected_components(subGraph):
+            cca_subGraphs.append(subGraph.subgraph(component).copy())
+    return cca_subGraphs
+
 # Identify subgraphs by rerunning CCA & updating track state estimates
 # plot the subgraphs to view the difference after clustering
-def run_cca(subGraphs, outputDir):
+# def run_cca(subGraphs, outputDir):
  
-    sg_outliers_removed = []
-    for s in subGraphs:
-        s = nx.to_directed(s)
-        for component in nx.weakly_connected_components(s):
-            sg_outliers_removed.append(s.subgraph(component).copy())
-    sg_outliers_removed = compute_track_state_estimates(sg_outliers_removed)
-    sg_outliers_removed = compute_prior_probabilities(sg_outliers_removed)
+#     sg_outliers_removed = []
+#     for s in subGraphs:
+#         s = nx.to_directed(s)
+#         for component in nx.weakly_connected_components(s):
+#             sg_outliers_removed.append(s.subgraph(component).copy())
+#     sg_outliers_removed = compute_track_state_estimates(sg_outliers_removed)
+#     sg_outliers_removed = compute_prior_probabilities(sg_outliers_removed)
 
-    title = "Filtered Graph outlier edge removal using clustering with KL distance measure"
-    plot_save_subgraphs(sg_outliers_removed, outputDir, title)
+#     title = "Filtered Graph outlier edge removal using clustering with KL distance measure"
+#     plot_save_subgraphs(sg_outliers_removed, outputDir, title)
