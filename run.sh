@@ -9,13 +9,13 @@ python track_sim.py -t 0.6 -o output/track_sim/
 
 
 # # iteration 1
-echo "----------------"
-echo "Iteration 1"
-echo "-------------------------------------------------------------"
-echo "Running edge outlier removal, CCA & calibration of KL cut..."
-echo "-------------------------------------------------------------"
-mkdir -p output/iteration_1/outlier_removal
-python clustering.py -i output/track_sim/cca_output/ -o output/iteration_1/outlier_removal/ -d track_state_estimates
+# echo "----------------"
+# echo "Iteration 1"
+# echo "-------------------------------------------------------------"
+# echo "Running edge outlier removal, CCA & calibration of KL cut..."
+# echo "-------------------------------------------------------------"
+# mkdir -p output/iteration_1/outlier_removal
+# python clustering.py -i output/track_sim/cca_output/ -o output/iteration_1/outlier_removal/ -d track_state_estimates
 
 # mkdir output/iteration_1/track_candidates
 # mkdir output/iteration_1/remaining_network

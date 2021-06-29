@@ -3,6 +3,7 @@ import networkx as nx
 from itertools import count
 import numpy as np
 import random
+import pprint
 
 
 # plot the graph network in the layers of the ID in the xy plane
@@ -39,18 +40,17 @@ def plot_save_temperature_network(G, attr, outputDir):
 # plot the subgraphs extracted using threshold on nodes
 def plot_save_subgraphs(GraphList, outputFile, title):
     _, ax = plt.subplots(figsize=(12,10))
-    for subGraph in GraphList:
-        color = ["#"+''.join([random.choice('0123456789ABCDEF') for j in range(6)])]
+    colors = ["#bf6f2e", "#377fcc", "#78c953", "#c06de3"]
+    for i, subGraph in enumerate(GraphList):
+        color = colors[i % len(colors)]
+        # color = ["#"+''.join([random.choice('0123456789ABCDEF') for _ in range(6)])]
         pos=nx.get_node_attributes(subGraph,'coord_Measurement')
-        # edge_colors = [subGraph[u][v]['color'] for u,v in subGraph.edges()]
         edge_colors = []
         for u, v in subGraph.edges():
-            if subGraph[u][v]['activated'] == 1:
-                edge_colors.append(color[0])
-            else:
-                edge_colors.append("#000000")
-        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.25)
-        nx.draw_networkx_nodes(subGraph, pos, node_color=color[0], node_size=75)
+            if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
+            else: edge_colors.append("#f2f2f2")
+        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
+        nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=75)
         nx.draw_networkx_labels(subGraph, pos)
     ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
     major_ticks = np.arange(0, 12, 1)
@@ -78,9 +78,9 @@ def save_network(directory, i, subGraph):
 
 # computes the following node and edge attributes: vertex degree, empirical mean & variance of edge orientation
 # track state vector and covariance, mean state vector and mean covariance, adds attributes to network
-def compute_track_state_estimates(GraphList):
+def compute_track_state_estimates(GraphList, sigma0):
     
-    sigma0 = 0.5 #r.m.s of track position measurements
+    # sigma0 = 0.5 #r.m.s of track position measurements
     S = np.matrix([[sigma0**2, 0], [0, sigma0**2]]) # covariance matrix of measurements
     
     for G in GraphList:
@@ -109,20 +109,24 @@ def compute_track_state_estimates(GraphList):
 
 # assign prior probabilities/weights for neighbourhood of each node
 def compute_prior_probabilities(GraphList):
-    for s in GraphList:
-        nodes = s.nodes(data=True)
+    for subGraph in GraphList:
+        nodes = subGraph.nodes(data=True)
         if len(nodes) == 1: continue
         for node in nodes:
             track_state_estimates = node[1]['track_state_estimates']
             
-            # compute number of neighbour nodes in each layer for given neighbourhood
+            # compute number of ACTIVE neighbour nodes in each layer for given neighbourhood
             layer_node_num_dict = {}
             for node_num, v in track_state_estimates.items():
-                layer = v['coord_Measurement'][0]
-                if layer in layer_node_num_dict.keys():
-                    layer_node_num_dict[layer].append(node_num)
-                else:
-                    layer_node_num_dict[layer] = [node_num]
+                # print("NODE NUM", node_num)
+                neighbor = node_num[0]
+                central_node = node_num[1]
+                if subGraph[neighbor][central_node]['activated'] == 1:
+                    layer = v['coord_Measurement'][0]
+                    if layer in layer_node_num_dict.keys():
+                        layer_node_num_dict[layer].append(node_num)
+                    else:
+                        layer_node_num_dict[layer] = [node_num]
         
             # assign prior probabilities to nodes in neighbourhood
             for _, node_nums_list in layer_node_num_dict.items():
@@ -130,14 +134,24 @@ def compute_prior_probabilities(GraphList):
                 for n in node_nums_list:
                     track_state_estimates[n]['prior'] = prior
     
-    return GraphList
 
 def initialize_edge_activation(GraphList):
     for subGraph in GraphList:
         for e in subGraph.edges:
-            attrs = {e: {"activated": 1, "color": 'g'}}
+            attrs = {e: {"activated": 1}}
             nx.set_edge_attributes(subGraph, attrs)
-    return GraphList
+
+
+def initialize_mixture_weights(GraphList):
+    for subGraph in GraphList:
+        nodes = subGraph.nodes(data=True)
+        if len(nodes) == 1: continue
+        for node in nodes:
+            mixture_weight = 1/node[1]['degree']
+            track_state_estimates = node[1]['track_state_estimates']
+            for _, v in track_state_estimates.items():
+                v['mixture_weight'] = mixture_weight
+
 
 #TODO: activate_edge() and deactivate_edge() functions
 
@@ -147,19 +161,5 @@ def run_cca(GraphList):
         subGraph = nx.to_directed(subGraph)
         for component in nx.weakly_connected_components(subGraph):
             cca_subGraphs.append(subGraph.subgraph(component).copy())
+    print("NUMBER OF SUBGRAPHS ", len(cca_subGraphs))
     return cca_subGraphs
-
-# Identify subgraphs by rerunning CCA & updating track state estimates
-# plot the subgraphs to view the difference after clustering
-# def run_cca(subGraphs, outputDir):
- 
-#     sg_outliers_removed = []
-#     for s in subGraphs:
-#         s = nx.to_directed(s)
-#         for component in nx.weakly_connected_components(s):
-#             sg_outliers_removed.append(s.subgraph(component).copy())
-#     sg_outliers_removed = compute_track_state_estimates(sg_outliers_removed)
-#     sg_outliers_removed = compute_prior_probabilities(sg_outliers_removed)
-
-#     title = "Filtered Graph outlier edge removal using clustering with KL distance measure"
-#     plot_save_subgraphs(sg_outliers_removed, outputDir, title)

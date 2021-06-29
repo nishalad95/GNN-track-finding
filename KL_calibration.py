@@ -57,11 +57,10 @@ def compute_track_recon_eff(outputDir):
         sim_nhits = sim_nhits_dict[str(i)]['num_hits']
         sim_nodes = sim_nhits_dict[str(i)]['node_labels']
         if sim_nhits > min_nhits:
-            # print("SIM", i)
             for r in recon_subGraphs:
                 # perform matching between recon and sim tracks
                 match = False
-                label_count = {}    # dict simulated track label: count of nodes belonging to track label
+                label_count = {}    # dict - k: simulated track label, v: count of nodes belonging to track label
                 for node in r.nodes(data=True):
                     sim_track_label = node[1]["GNN_Measurement"].track_label
 
@@ -80,7 +79,6 @@ def compute_track_recon_eff(outputDir):
                 particle = sim_track_label_list[idx]
                 
                 if (particle == i) and (ratio > 0.5):
-                    # print("MATCH")
                     match = True
                     num_succ_sim_recon += 1
                     break
@@ -90,7 +88,6 @@ def compute_track_recon_eff(outputDir):
                 num_nodes_recon_track = len(r.nodes())
                 num_nodes_sim_track = len(sim_nodes)
                 intersection = list(set(r.nodes()) & set(sim_nodes))
-                # print("INTERSECTION", intersection)
                 track_purity = len(intersection) / num_nodes_recon_track
                 particle_purity = len(intersection) / num_nodes_sim_track
                 # print("PURITIES", track_purity, particle_purity)
