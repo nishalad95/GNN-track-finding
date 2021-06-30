@@ -1,12 +1,25 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib import cm
+import numpy as np
 
-filename = "output/track_sim/sigma1.0/10000_events_training_data.csv"
+def downsample(df, max_size):
+    seed = int(np.random.uniform() * 100)
+    if len(df) > max_size:
+        frac = max_size / (len(df))
+        df = df.sample(frac=frac, replace=True, random_state=seed)
+    return df
+
+filename = "output/track_sim/sigma0.05/10000_events_training_data.csv"
 df = pd.read_csv(filename)
 
+df = downsample(df, 100000)
 correct_pairs = df.loc[df['truth'] == 1]
 incorrect_pairs = df.loc[df['truth'] == 0]
+incorrect_pairs = downsample(incorrect_pairs, len(correct_pairs))
+
+print("len correct", len(correct_pairs))
+print("len incorrect", len(incorrect_pairs))
 
 
 # Pairwise KL distance vs Empirical variance of edge orientation
@@ -17,8 +30,8 @@ plt.legend(loc="best")
 plt.ylabel("Pairwise KL distance")
 plt.xlabel("Empirical variance of edge orientation")
 plt.title("MC Truth for Pairwise Edge Connections")
-plt.xlim(0,1.2)
-plt.ylim(0,100)
+plt.xlim(0,1.6)
+plt.ylim(0,300)
 plt.show()
 
 
@@ -30,7 +43,7 @@ plt.legend(loc="best")
 plt.ylabel("Pairwise KL distance")
 plt.xlabel("Degree of Node")
 plt.title("MC Truth for Pairwise Edge Connections")
-plt.ylim(0,100)
+plt.ylim(0,300)
 plt.show()
 
 

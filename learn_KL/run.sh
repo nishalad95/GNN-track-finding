@@ -6,7 +6,7 @@ echo "Generating events for learning optimal KL threshold..."
 echo "------------------------------------------------------"
 
 NUM_EVENTS=10000                # currently each event with 10 tracks
-SIGMA0=1.0                  # r.m.s of track position measurements
+SIGMA0=0.05                  # r.m.s of track position measurements
 EDGE_VAR_THRES=0.6         # remove nodes with mean edge orientation above threshold
 OUTPUT=output/track_sim/sigma$SIGMA0/
 
