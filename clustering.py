@@ -4,9 +4,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import networkx as nx
 import argparse
-from utils import *
+from utils.utils import *
 from KL_calibration import compute_track_recon_eff
 import pprint
+import math
 
 # KL distance - takes into account covariances between the components 
 # If you were to use simple Euclidean distance, cov not taken into account
@@ -33,14 +34,33 @@ def calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs):
 def get_smallest_dist_idx(pairwise_distances):
     nonzero_dist = pairwise_distances[np.nonzero(pairwise_distances)]
     smallest_dist = np.min(nonzero_dist)
-    mean_dist = np.mean(nonzero_dist)
     # row[0] & column[0] indicates neighbor_node indices with smallest distance
     row, column = np.where(pairwise_distances==smallest_dist)
     idx = np.concatenate((row, column), axis=None)
-    return smallest_dist, idx, mean_dist
+    return smallest_dist, idx
+
+def load_lut(KL_lut):
+    mapping = {}
+    lut_file = open(KL_lut, "r")
+    for line in lut_file.readlines():
+        elements = line.split(" ")
+        feature = float(elements[0]) 
+        KL_thres = float(elements[2].split("\n")[0])
+        mapping[feature] = KL_thres
+    return mapping
+
+def accept_distance(feature, distance, mapping, use_empvar=False):
+    if use_empvar:
+        base = 0.05
+        feature = math.ceil(float(feature)/base) - 1
+    
+    if float(feature) in mapping.keys():
+        if distance <= mapping[feature]: return True
+        else: return False
+    else: return False
 
 
-def cluster(inputDir, outputDir, track_state_estimates, KL_thres):
+def cluster(inputDir, outputDir, track_state_estimates, KL_lut):
 
     # variable names
     subgraph_path = "_subgraph.gpickle"
@@ -49,6 +69,11 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_thres):
     MERGED_COVARIANCE = "merged_cov"
     MERGED_PRIOR = "merged_prior"
 
+    # load LUT
+    # degree of node: {degree: KL_dist upper bound threshold}
+    # empirical variance: {upper bound emp var bin: KL_dist upper bound threshold}
+    mapping = load_lut(KL_lut)
+    
     # read in subgraph data
     subGraphs = []
     os.chdir(".")
@@ -64,12 +89,21 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_thres):
             node_num = node[0]
             node_attr = node[1]
 
+            # KL_dist LUT variables
+            node_emp_var = node_attr['edge_gradient_mean_var'][1]
             num_edges = node_attr['degree']
+            use_empvar = False
+            if "degree" in KL_lut: 
+                feature = num_edges
+            else:
+                feature = node_emp_var
+                use_empvar = True
+
             if num_edges <= 2: continue
 
             # convert attributes to arrays
             track_state_estimates = node_attr[TRACK_STATE_ESTIMATES]
-            neighbor_nodes = np.array([connection[0] for connection in track_state_estimates.keys()])
+            # neighbor_nodes = np.array([connection[0] for connection in track_state_estimates.keys()])
             neighbors_to_deactivate = np.array([connection[0] for connection in track_state_estimates.keys()])
             # edge_weights = [connection[2]['activated'] for connection in subGraph.in_edges(node_num, data=True)]  # in_edges
             edge_svs = np.array([component['edge_state_vector'] for component in track_state_estimates.values()])
@@ -78,19 +112,14 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_thres):
             inv_covs = np.linalg.inv(edge_covs)
             priors = np.array([component['prior'] for component in track_state_estimates.values()])
 
-            # print("node edge gradient", node_attr['edge_gradient_mean_var'])
-            # print("DICT:")
-            # pprint.pprint(track_state_estimates)
-            # print("neighbor_nodes:", neighbor_nodes)
-
             # calculate pairwise distances between edge state vectors, find smallest distance & keep track of merged states
             pairwise_distances = calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs)
-            smallest_dist, idx, mean_dist = get_smallest_dist_idx(pairwise_distances) #[row_idx, column_idx]
+            smallest_dist, idx = get_smallest_dist_idx(pairwise_distances) #[row_idx, column_idx]
 
-            KL_thres = mean_dist
-            # perform clustering
-            if smallest_dist < KL_thres:
+            # perform clustering, query LUT with degree/empvar & smallest pairwise distance
+            if accept_distance(feature, smallest_dist, mapping, use_empvar):
 
+                print("MERGING STATES & CLUSTERING")
                 # merge states
                 merged_mean, merged_cov, merged_inv_cov = merge_states(edge_svs[idx[0]], inv_covs[idx[0]], edge_svs[idx[1]], inv_covs[idx[1]])
                 merged_prior = priors[idx[0]] + priors[idx[1]]
@@ -109,12 +138,12 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_thres):
 
                 # recalculate pairwise distances between edge state vectors, find smallest distance & keep track of merged states
                 pairwise_distances = calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs)
-                smallest_dist, idx, _ = get_smallest_dist_idx(pairwise_distances)
+                smallest_dist, idx = get_smallest_dist_idx(pairwise_distances)
                 # if the merged state wasn't found in the smallest pairwise distance pair - new cluster - leave for further iterations
                 if (idx[1] != len(pairwise_distances) - 1):
                     print("2nd cluster found! Ending clusterization here...")
                 else:
-                    while smallest_dist < KL_thres:
+                    while accept_distance(feature, smallest_dist, mapping, use_empvar):
                         # merge states
                         merged_mean, merged_cov, merged_inv_cov = merge_states(edge_svs[idx[0]], inv_covs[idx[0]], merged_mean, merged_inv_cov)
                         merged_prior = priors[idx[0]] + merged_prior
@@ -136,7 +165,7 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_thres):
 
                         # recalculate pairwise distances & find smallest distance
                         pairwise_distances = calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs)
-                        smallest_dist, idx, _ = get_smallest_dist_idx(pairwise_distances)
+                        smallest_dist, idx = get_smallest_dist_idx(pairwise_distances)
                         # if the merged state wasn't found in the smallest pairwise distance pair - new cluster - leave for further iterations
                         if (idx[1] != len(pairwise_distances) - 1):
                             print("HERE 2nd cluster found! Ending clusterization here...")
@@ -166,14 +195,33 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_thres):
         # for node in subGraph.nodes(data=True):
             # pprint.pprint(node)
 
-    # identify subgraphs, update network state: recompute priors (and mixture weights) based on activated edges
-    subGraphs = run_cca(subGraphs)
-    subGraphs = compute_prior_probabilities(subGraphs)
-    # TODO: mixture weights?
+
+
+    # identify subgraphs
+    # subGraphs = run_cca(subGraphs)
+    # update network state: recompute priors based on active edges
+    compute_prior_probabilities(subGraphs)
     title = "Filtered Graph outlier edge removal using clustering with KL distance measure"
     plot_save_subgraphs(subGraphs, outputDir, title)
 
-    # TODO: calibrate the KL threshold for clustering using MC truth
+
+    # at this stage -->
+    # some edges have been deactivated, prior probabilities have been updated
+    # reweighting will be done in the extrapolation phase
+
+
+    # printing node and edge attributes
+    for i, s in enumerate(subGraphs):
+        if i<=1:
+            print("-------------------")
+            print("SUBGRAPH " + str(i))
+            for node in s.nodes(data=True):
+                if node[0] <= 100:
+                    pprint.pprint(node)
+            print("--------------------")
+            print("EDGE DATA:", s.edges.data(), "\n")
+
+    # calibrate the KL threshold for clustering using MC truth
     # efficiency, score = compute_track_recon_eff(outputDir)
     # return efficiency, score
     
@@ -184,15 +232,16 @@ def main():
     parser.add_argument('-i', '--input', help='input directory of outlier removal')
     parser.add_argument('-o', '--output', help='output directory to save remaining network & track candidates')
     parser.add_argument('-d', '--dict', help='dictionary of track state estimates to use')
+    parser.add_argument('-l', '--lut', help='lut file for KL distance acceptance region')
     args = parser.parse_args()
 
     inputDir = args.input
     outputDir = args.output
     track_state_estimates = args.dict
-    KL_thres = 50
-    efficiency = 0
+    KL_lut = args.lut
+    # efficiency = 0
 
-    cluster(inputDir, outputDir, track_state_estimates, KL_thres)
+    cluster(inputDir, outputDir, track_state_estimates, KL_lut)
 
     # while efficiency < 0.6:
     #     for f in glob.glob(outputDir + "*"):

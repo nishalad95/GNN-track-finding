@@ -5,7 +5,7 @@ import argparse
 import json
 from modules.GNN_Measurement import GNN_Measurement
 from modules.HitPairPredictor import HitPairPredictor
-from utils import *
+from utils.utils import *
 import pprint
 
 
@@ -107,7 +107,7 @@ def main():
     plt.savefig(outputDir + 'simulated_tracks_hit_pairs.png', dpi=300)
 
     # compute track state estimates
-    Graphs = compute_track_state_estimates([G])
+    Graphs = compute_track_state_estimates([G], sigma0)
     G = nx.to_directed(Graphs[0])
 
     # plot are save temperature network
@@ -126,16 +126,16 @@ def main():
     subGraphs = [G.subgraph(c).copy() for c in nx.weakly_connected_components(G)]
     
     # compute track state estimates, priors and assign initial edge weightings
-    subGraphs = compute_track_state_estimates(subGraphs)
+    subGraphs = compute_track_state_estimates(subGraphs, sigma0)
     initialize_edge_activation(subGraphs)
     compute_prior_probabilities(subGraphs)
     initialize_mixture_weights(subGraphs)
     
-    for i, s in enumerate(subGraphs):
-        print("-------------------")
-        print("SUBGRAPH " + str(i))
-        for node in s.nodes(data=True):
-            pprint.pprint(node)
+    # for i, s in enumerate(subGraphs):
+    #     print("-------------------")
+    #     print("SUBGRAPH " + str(i))
+    #     for node in s.nodes(data=True):
+    #         pprint.pprint(node)
     #     print("--------------------")
     #     print("EDGE DATA:", s.edges.data(), "\n")
 

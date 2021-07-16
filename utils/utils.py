@@ -133,7 +133,7 @@ def compute_prior_probabilities(GraphList):
                 prior = 1/len(node_nums_list)
                 for n in node_nums_list:
                     track_state_estimates[n]['prior'] = prior
-    
+
 
 def initialize_edge_activation(GraphList):
     for subGraph in GraphList:
@@ -153,8 +153,38 @@ def initialize_mixture_weights(GraphList):
                 v['mixture_weight'] = mixture_weight
 
 
+def update_mixture_weights(GraphList):
+    for subGraph in GraphList:
+        nodes = subGraph.nodes(data=True)
+        edge_data = subGraph.edges.data()
+
+        # mapping {edge going into node_num: number of activated edges}
+        activated_incident_edges = {}
+        for edges in edge_data:
+            incident_node_num = edges[1]
+            if incident_node_num in activated_incident_edges.keys():
+                activated_incident_edges[incident_node_num] += edges[2]['activated']
+            else:
+                activated_incident_edges[incident_node_num] = edges[2]['activated']
+
+        if len(nodes) == 1: continue
+        for node in nodes:
+
+            node_num = node[0]
+            num_activated_edges = activated_incident_edges[node_num]
+            
+            if num_activated_edges == 0: mixture_weight = 0
+            else: mixture_weight = 1 / num_activated_edges
+
+            track_state_estimates = node[1]['track_state_estimates']
+            for _, v in track_state_estimates.items():
+                v['mixture_weight'] = mixture_weight
+
+
 #TODO: activate_edge() and deactivate_edge() functions
 
+
+# default weakly connected components CCA networkx implementation
 def run_cca(GraphList):
     cca_subGraphs = []
     for subGraph in GraphList:
