@@ -49,15 +49,20 @@ def load_lut(KL_lut):
         mapping[feature] = KL_thres
     return mapping
 
-def accept_distance(feature, distance, mapping, use_empvar=False):
-    if use_empvar:
-        base = 0.05
-        feature = math.ceil(float(feature)/base) - 1
+def get_KL_upper_threshold(empvar_feature, distance, mapping):
+    base = 0.05
+    feature = math.ceil(float(empvar_feature)/base) - 1
     
+    # if float(feature) in mapping.keys():
+    #     if distance <= mapping[feature]: return True
+    #     else: return False
+    # else: return False
+
     if float(feature) in mapping.keys():
-        if distance <= mapping[feature]: return True
-        else: return False
-    else: return False
+        KL_thres = mapping[feature]
+        if distance <= KL_thres: return KL_thres
+        else: return 0
+    return 0
 
 
 def cluster(inputDir, outputDir, track_state_estimates, KL_lut):
@@ -90,15 +95,8 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_lut):
             node_attr = node[1]
 
             # KL_dist LUT variables
-            node_emp_var = node_attr['edge_gradient_mean_var'][1]
+            empvar = node_attr['edge_gradient_mean_var'][1]
             num_edges = node_attr['degree']
-            use_empvar = False
-            if "degree" in KL_lut: 
-                feature = num_edges
-            else:
-                feature = node_emp_var
-                use_empvar = True
-
             if num_edges <= 2: continue
 
             # convert attributes to arrays
@@ -117,7 +115,8 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_lut):
             smallest_dist, idx = get_smallest_dist_idx(pairwise_distances) #[row_idx, column_idx]
 
             # perform clustering, query LUT with degree/empvar & smallest pairwise distance
-            if accept_distance(feature, smallest_dist, mapping, use_empvar):
+            KL_thres = get_KL_upper_threshold(empvar, smallest_dist, mapping)
+            if smallest_dist < KL_thres:
 
                 print("MERGING STATES & CLUSTERING")
                 # merge states
@@ -143,7 +142,7 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_lut):
                 if (idx[1] != len(pairwise_distances) - 1):
                     print("2nd cluster found! Ending clusterization here...")
                 else:
-                    while accept_distance(feature, smallest_dist, mapping, use_empvar):
+                    while smallest_dist < KL_thres:
                         # merge states
                         merged_mean, merged_cov, merged_inv_cov = merge_states(edge_svs[idx[0]], inv_covs[idx[0]], merged_mean, merged_inv_cov)
                         merged_prior = priors[idx[0]] + merged_prior

@@ -21,6 +21,15 @@ mkdir -p output/iteration_1/outlier_removal
 python clustering.py -i output/track_sim/cca_output/ -o output/iteration_1/outlier_removal/ -d track_state_estimates -l learn_KL/output/kl_dist_vs_emp_var/kl_empvar.lut
 
 
+# iteration 2
+echo "--------------"
+echo "Iteration 2"
+echo "---------------------------------------------------------------"
+echo "Running track extrapolation & reweighting of track states..."
+echo "---------------------------------------------------------------"
+mkdir -p output/iteration_2/extrapolated
+python extrapolate_merged_states.py -i output/iteration_1/outlier_removal/ -o output/iteration_2/extrapolated/
+
 
 # mkdir output/iteration_1/track_candidates
 # mkdir output/iteration_1/remaining_network
@@ -31,15 +40,6 @@ python clustering.py -i output/track_sim/cca_output/ -o output/iteration_1/outli
 # python extract_track_candidates.py -i output/iteration_1/outlier_removal/ -c output/iteration_1/track_candidates/ -o output/iteration_1/cca_output/ -r output/iteration_1/remaining_network/ -cs 0.6
 
 
-# iteration 2
-echo "--------------"
-echo "Iteration 2"
-echo "---------------------------------------------------------------"
-echo "Running track extrapolation & reweighting of track states..."
-echo "---------------------------------------------------------------"
-mkdir -p output/iteration_2/extrapolated
-python extrapolate_merged_states.py -i output/iteration_1/outlier_removal/ -o output/iteration_2/extrapolated/
-
 # # UP TO HERE
 
 # echo "---------------------------------------------------------------"
@@ -47,7 +47,6 @@ python extrapolate_merged_states.py -i output/iteration_1/outlier_removal/ -o ou
 # echo "---------------------------------------------------------------"
 # mkdir output/iteration_2/outlier_removal
 # python clustering.py -i output/iteration_2/extrapolated/ -o output/iteration_2/outlier_removal/ -d updated_track_state_estimates
-
 
 
 

@@ -173,9 +173,9 @@ def extrapolate(subGraphs, reweight_threshold, outputDir):
             print("reactivated_neighbour_edges:", reactivated_neighbour_edges)
             # remove deactivated_neighbour_edges which were calculated from low chi2 dist & low reweighting
             for neighbour in deactivated_neighbour_edges:
-                subGraph[neighbour][node[0]]["activated"] == 0
+                subGraph[neighbour][node[0]]["activated"] = 0
             for neighbour in reactivated_neighbour_edges:
-                subGraph[neighbour][node[0]]["activated"] == 1
+                subGraph[neighbour][node[0]]["activated"] = 1
 
 
     # TODO: recompute new priors based on active edges
