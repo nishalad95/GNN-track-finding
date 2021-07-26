@@ -80,7 +80,6 @@ def save_network(directory, i, subGraph):
 # track state vector and covariance, mean state vector and mean covariance, adds attributes to network
 def compute_track_state_estimates(GraphList, sigma0):
     
-    # sigma0 = 0.5 #r.m.s of track position measurements
     S = np.matrix([[sigma0**2, 0], [0, sigma0**2]]) # covariance matrix of measurements
     
     for G in GraphList:
@@ -101,19 +100,20 @@ def compute_track_state_estimates(GraphList, sigma0):
                 key = (neighbor, node) # in_edge, track state going from neighbor to node, probability of A conditioned on its neighborhood B
                 state_estimates[key] = {'edge_state_vector': edge_state_vector, 
                                             'edge_covariance': covariance, 
-                                            'coord_Measurement': m2}
+                                            'coord_Measurement': m2
+                                            }
             G.nodes[node]['edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
             G.nodes[node]['track_state_estimates'] = state_estimates
 
     return GraphList
 
 # assign prior probabilities/weights for neighbourhood of each node
-def compute_prior_probabilities(GraphList):
+def compute_prior_probabilities(GraphList, track_state_key):
     for subGraph in GraphList:
         nodes = subGraph.nodes(data=True)
         if len(nodes) == 1: continue
         for node in nodes:
-            track_state_estimates = node[1]['track_state_estimates']
+            track_state_estimates = node[1][track_state_key]
             
             # compute number of ACTIVE neighbour nodes in each layer for given neighbourhood
             layer_node_num_dict = {}
@@ -122,7 +122,7 @@ def compute_prior_probabilities(GraphList):
                 neighbor = node_num[0]
                 central_node = node_num[1]
                 if subGraph[neighbor][central_node]['activated'] == 1:
-                    layer = v['coord_Measurement'][0]
+                    layer = subGraph.nodes[neighbor]['GNN_Measurement'].x
                     if layer in layer_node_num_dict.keys():
                         layer_node_num_dict[layer].append(node_num)
                     else:

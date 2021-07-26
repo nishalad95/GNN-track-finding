@@ -21,6 +21,7 @@ def main():
     parser.add_argument('-r', '--remain', help='output directory to save remaining network')
     parser.add_argument('-o', '--ccaOutputDir', help='output directory to save cca output')
     parser.add_argument('-cs', '--chisq', help='chi-squared track candidate acceptance level')
+    parser.add_argument('-e', '--error', help="rms of track position measurements")
     args = parser.parse_args()
 
     subgraph_path = "_subgraph.gpickle"
@@ -30,7 +31,7 @@ def main():
     cca_outputDir = args.ccaOutputDir
     track_acceptance = float(args.chisq)
     
-    sigma0 = 0.5 #r.m.s of track position measurements
+    sigma0 = float(args.error) #r.m.s of track position measurements
     S = np.matrix([[sigma0**2, 0], [0, sigma0**2]]) # covariance matrix of measurements
 
     # TODO: faster to implement as sets rather than lists?

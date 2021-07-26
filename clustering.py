@@ -199,7 +199,7 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_lut):
     # identify subgraphs
     # subGraphs = run_cca(subGraphs)
     # update network state: recompute priors based on active edges
-    compute_prior_probabilities(subGraphs)
+    compute_prior_probabilities(subGraphs, 'track_state_estimates')
     title = "Filtered Graph outlier edge removal using clustering with KL distance measure"
     plot_save_subgraphs(subGraphs, outputDir, title)
 
@@ -210,15 +210,15 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_lut):
 
 
     # printing node and edge attributes
-    for i, s in enumerate(subGraphs):
-        if i<=1:
-            print("-------------------")
-            print("SUBGRAPH " + str(i))
-            for node in s.nodes(data=True):
-                if node[0] <= 100:
-                    pprint.pprint(node)
-            print("--------------------")
-            print("EDGE DATA:", s.edges.data(), "\n")
+    # for i, s in enumerate(subGraphs):
+    #     if i<=1:
+    #         print("-------------------")
+    #         print("SUBGRAPH " + str(i))
+    #         for node in s.nodes(data=True):
+    #             if node[0] <= 100:
+    #                 pprint.pprint(node)
+    #         print("--------------------")
+    #         print("EDGE DATA:", s.edges.data(), "\n")
 
     # calibrate the KL threshold for clustering using MC truth
     # efficiency, score = compute_track_recon_eff(outputDir)

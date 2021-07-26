@@ -1,11 +1,13 @@
 #!/bin/bash
 
+SIGMA0=0.5
+
 # track simulation
 echo "----------------------------"
 echo "Running track simulation..."
 echo "----------------------------"
 mkdir -p output/track_sim/cca_output
-python track_sim.py -t 0.6 -o output/track_sim/
+python track_sim.py -t 0.6 -o output/track_sim/ -e $SIGMA0
 
 
 # iteration 1
@@ -28,7 +30,7 @@ echo "---------------------------------------------------------------"
 echo "Running track extrapolation & reweighting of track states..."
 echo "---------------------------------------------------------------"
 mkdir -p output/iteration_2/extrapolated
-python extrapolate_merged_states.py -i output/iteration_1/outlier_removal/ -o output/iteration_2/extrapolated/
+python extrapolate_merged_states_test.py -i output/iteration_1/outlier_removal/ -o output/iteration_2/extrapolated/
 
 
 # mkdir output/iteration_1/track_candidates
@@ -37,7 +39,7 @@ python extrapolate_merged_states.py -i output/iteration_1/outlier_removal/ -o ou
 # echo "-------------------------------------------------------------"
 # echo "Running KF, extracting track candidates, executing CCA..."
 # echo "-------------------------------------------------------------"
-# python extract_track_candidates.py -i output/iteration_1/outlier_removal/ -c output/iteration_1/track_candidates/ -o output/iteration_1/cca_output/ -r output/iteration_1/remaining_network/ -cs 0.6
+# python extract_track_candidates.py -i output/iteration_1/outlier_removal/ -c output/iteration_1/track_candidates/ -o output/iteration_1/cca_output/ -r output/iteration_1/remaining_network/ -cs 0.6 -e $SIGMA0
 
 
 # # UP TO HERE

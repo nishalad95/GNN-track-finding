@@ -15,13 +15,14 @@ def main():
     parser = argparse.ArgumentParser(description='track hit-pair simulator')
     parser.add_argument('-t', '--threshold', help='variance of edge orientation')
     parser.add_argument('-o', '--output', help='output directory of simulation')
+    parser.add_argument('-e', '--error', help="rms of track position measurements")
     args = parser.parse_args()
     
     threshold = float(args.threshold)
     outputDir = args.output
+    
+    sigma0 = float(args.error) #r.m.s of track position measurements
 
-    # define variables
-    sigma0 = 0.5 #r.m.s of track position measurements
     Lc = np.array([1,2,3,4,5,6,7,8,9,10]) #detector layer coordinates along x-axis
     Nl = len(Lc) #number of layers
     start = 0
@@ -52,19 +53,21 @@ def main():
     num_hits = {}
 
     # add hits to the graph network as nodes with node measurements
+    print("Simulating hits & tracks with rms position measurement error: ", str(sigma0))
     for i in range(Ntr) :
         nhits = 0
         yc = y0[i] + tau0[i]*(Lc[:] - start)
         xc = Lc[:]
         node_labels = []
         for l in range(Nl) : 
-            nu = sigma0*np.random.normal(0.0,1.0) #random error
+            random = np.random.normal(0.0,1.0)
+            nu = sigma0*random #random error
             gm = GNN_Measurement(xc[l], yc[l] + nu, tau0[i], sigma0, label=i, n=nNodes)
             mcoll[l].append(gm)
             G.add_node(nNodes, GNN_Measurement=gm, 
                                coord_Measurement=(xc[l], yc[l] + nu),
                                truth_particle=i)
-            # print(G.nodes[nNodes]["GNN_Measurement"].track_label)
+            # print(G.nodes[nNodes]["GNN_Measurement"].track_label) # for cellular automata?
             nNodes += 1
             nhits += 1
             node_labels.append(nNodes)
@@ -79,7 +82,6 @@ def main():
 
     # generate hit pair predictions
     tau = 3.5
-    #tau = 100  # 100+ track sim
     hpp = HitPairPredictor(start, 7.0, tau) #max y0 and tau value
     ax2 = fig.add_subplot(1, 2, 2)
     ax2.set_xticks(major_ticks)
@@ -117,8 +119,7 @@ def main():
     # remove all nodes with mean edge orientation above threshold
     G = nx.Graph(G) # make a copy to unfreeze graph
     filteredNodes = [node for node, attr in G.nodes(data=True) if attr['edge_gradient_mean_var'][1] > threshold]
-    # TODO
-    # filteredNodes = [node for node, attr in G.nodes(data=True) if attr['multivariate_covariance'][1][1] > 0.05]
+    # TODO filteredNodes = [node for node, attr in G.nodes(data=True) if attr['multivariate_covariance'][1][1] > 0.05]
     for node in filteredNodes: G.remove_node(node)
     
     # CCA: extract subgraphs
@@ -128,7 +129,7 @@ def main():
     # compute track state estimates, priors and assign initial edge weightings
     subGraphs = compute_track_state_estimates(subGraphs, sigma0)
     initialize_edge_activation(subGraphs)
-    compute_prior_probabilities(subGraphs)
+    compute_prior_probabilities(subGraphs, 'track_state_estimates')
     initialize_mixture_weights(subGraphs)
     
     # for i, s in enumerate(subGraphs):
