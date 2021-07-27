@@ -33,6 +33,7 @@ def calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs):
 
 def get_smallest_dist_idx(pairwise_distances):
     nonzero_dist = pairwise_distances[np.nonzero(pairwise_distances)]
+    print("NONZERO DISTANCES", nonzero_dist)
     smallest_dist = np.min(nonzero_dist)
     # row[0] & column[0] indicates neighbor_node indices with smallest distance
     row, column = np.where(pairwise_distances==smallest_dist)
@@ -64,7 +65,7 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_lut):
 
     # variable names
     subgraph_path = "_subgraph.gpickle"
-    TRACK_STATE_ESTIMATES = track_state_estimates
+    TRACK_STATE_ESTIMATES = 'updated_track_states'
     MERGED_STATE = "merged_state"
     MERGED_COVARIANCE = "merged_cov"
     MERGED_PRIOR = "merged_prior"
@@ -89,13 +90,23 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_lut):
             node_num = node[0]
             node_attr = node[1]
 
+            print("\nPROCESSING NODE NUM:", node_num)
+
             # KL_dist LUT variables
             empvar = node_attr['edge_gradient_mean_var'][1]
-            num_edges = node_attr['degree']
-            if num_edges <= 2: continue
+            # num_edges = node_attr['degree']
+            
+            pprint.pprint(node_attr)
+
+            if 'updated_track_states' not in node_attr.keys(): continue
+            if len(node_attr['updated_track_states']) == 1:
+                print("Only 1 updated track state, clustering cannot be performed")
+                print("leaving for further iterations")
+                continue
 
             # convert attributes to arrays
             track_state_estimates = node_attr[TRACK_STATE_ESTIMATES]
+            num_edges = len(track_state_estimates)
             # neighbor_nodes = np.array([connection[0] for connection in track_state_estimates.keys()])
             neighbors_to_deactivate = np.array([connection[0] for connection in track_state_estimates.keys()])
             # edge_weights = [connection[2]['activated'] for connection in subGraph.in_edges(node_num, data=True)]  # in_edges
@@ -107,8 +118,8 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_lut):
 
             # calculate pairwise distances between edge state vectors, find smallest distance & keep track of merged states
             pairwise_distances = calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs)
+            print("PAIRWISE DISTANCES", pairwise_distances)
             smallest_dist, idx = get_smallest_dist_idx(pairwise_distances) #[row_idx, column_idx]
-
             # perform clustering, query LUT with degree/empvar & smallest pairwise distance
             KL_thres = get_KL_upper_threshold(empvar, smallest_dist, mapping)
             if smallest_dist < KL_thres:
@@ -130,8 +141,13 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_lut):
                 priors = np.append(priors, merged_prior)
                 num_edges = edge_svs.shape[0]
 
+                # if all edges have merged, break the loop
+                if len(neighbors_to_deactivate) == 0: break
+
                 # recalculate pairwise distances between edge state vectors, find smallest distance & keep track of merged states
                 pairwise_distances = calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs)
+                print("neighbours to deactivate:", neighbors_to_deactivate)
+                print("PAIRWISE DISTANCES 2", pairwise_distances)
                 smallest_dist, idx = get_smallest_dist_idx(pairwise_distances)
                 # if the merged state wasn't found in the smallest pairwise distance pair - new cluster - leave for further iterations
                 if (idx[1] != len(pairwise_distances) - 1):
@@ -172,7 +188,7 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_lut):
                 subGraph.nodes[node_num][MERGED_PRIOR] = merged_prior
 
                 # deactivate neighbor edges identified as outliers
-                # print("Neighbors to deactivate: ", neighbors_to_deactivate)
+                print("Neighbors to deactivate: ", neighbors_to_deactivate)
                 if len(neighbors_to_deactivate) > 0:
                     print("Deactivating outlier edges...")
                     for n in neighbors_to_deactivate:
@@ -194,7 +210,7 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_lut):
     # identify subgraphs
     # subGraphs = run_cca(subGraphs)
     # update network state: recompute priors based on active edges
-    compute_prior_probabilities(subGraphs, 'track_state_estimates')
+    compute_prior_probabilities(subGraphs, 'updated_track_states')
     title = "Filtered Graph outlier edge removal using clustering with KL distance measure"
     plot_save_subgraphs(subGraphs, outputDir, title)
     plot_subgraphs_merged_state(subGraphs, outputDir, title)

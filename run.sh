@@ -27,10 +27,21 @@ python clustering.py -i output/track_sim/cca_output/ -o output/iteration_1/outli
 echo "--------------"
 echo "Iteration 2"
 echo "---------------------------------------------------------------"
-echo "Running track extrapolation & reweighting of track states..."
+echo "Running message passing, extrapolation & validation..."
 echo "---------------------------------------------------------------"
 mkdir -p output/iteration_2/extrapolated
-python extrapolate_merged_states_test.py -i output/iteration_1/outlier_removal/ -o output/iteration_2/extrapolated/
+python extrapolate_merged_states.py -i output/iteration_1/outlier_removal/ -o output/iteration_2/extrapolated/
+
+# iteration 3
+echo "----------------"
+echo "Iteration 3"
+echo "-------------------------------------------------------------"
+echo "Running clustering/outlier masking on updated track states"
+echo "-------------------------------------------------------------"
+mkdir -p output/iteration_3/outlier_removal
+# clustering with empirical variance
+python clustering_updated_states.py -i output/iteration_2/extrapolated/ -o output/iteration_3/outlier_removal -d updated_track_states -l learn_KL/output/kl_dist_vs_emp_var/kl_empvar.lut
+
 
 
 # mkdir output/iteration_1/track_candidates
@@ -42,15 +53,11 @@ python extrapolate_merged_states_test.py -i output/iteration_1/outlier_removal/ 
 # python extract_track_candidates.py -i output/iteration_1/outlier_removal/ -c output/iteration_1/track_candidates/ -o output/iteration_1/cca_output/ -r output/iteration_1/remaining_network/ -cs 0.6 -e $SIGMA0
 
 
-# # UP TO HERE
-
 # echo "---------------------------------------------------------------"
 # echo "Running edge outlier removal, CCA & calibration of KL cut..."
 # echo "---------------------------------------------------------------"
 # mkdir output/iteration_2/outlier_removal
 # python clustering.py -i output/iteration_2/extrapolated/ -o output/iteration_2/outlier_removal/ -d updated_track_state_estimates
-
-
 
 # echo "-------------------------------------------------------------"
 # echo "Running KF, extracting track candidates, executing CCA..."

@@ -72,8 +72,52 @@ def plot_save_subgraphs(GraphList, outputFile, title):
 def save_network(directory, i, subGraph):
     filename = directory + str(i) + "_subgraph.gpickle"
     nx.write_gpickle(subGraph, filename)
-    A = nx.adjacency_matrix(subGraph).todense()
-    np.savetxt(directory + str(i) + "_subgraph_matrix.csv", A)
+    # A = nx.adjacency_matrix(subGraph).todense()
+    # np.savetxt(directory + str(i) + "_subgraph_matrix.csv", A)
+
+
+# plot the subgraphs extracted using threshold on nodes
+def plot_subgraphs_merged_state(GraphList, outputFile, title):
+    _, ax = plt.subplots(figsize=(12,10))
+    colors = ["#bf6f2e", "#377fcc", "#78c953", "#c06de3"]
+    merged_state_color = "#fce303"
+    updated_state_color = "#8f8003"
+    for i, subGraph in enumerate(GraphList):
+        
+        default_color = colors[i % len(colors)]
+        color = []
+        nodes = subGraph.nodes()
+        for node in subGraph.nodes(data=True):
+            node_attr = node[1]
+            if 'merged_state' in node_attr.keys() or 'updated_track_states' in node_attr.keys(): 
+                if ('updated_track_states' in node_attr.keys()) and ('merged_state' not in node_attr.keys()):
+                    color.append(updated_state_color)
+                else:
+                    color.append(merged_state_color)
+            else: 
+                color.append(default_color)
+
+        pos=nx.get_node_attributes(subGraph,'coord_Measurement')
+        edge_colors = []
+        for u, v in subGraph.edges():
+            if subGraph[u][v]['activated'] == 1: edge_colors.append(default_color)
+            else: edge_colors.append("#f2f2f2")
+
+        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
+        nx.draw_networkx_nodes(subGraph, pos, nodelist=nodes, node_color=color, node_size=75)
+        nx.draw_networkx_labels(subGraph, pos)
+
+    ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
+    major_ticks = np.arange(0, 12, 1)
+    ax.set_xticks(major_ticks)
+    plt.xlim([0, 11])
+    plt.ylim([-25, 15])
+    plt.xlabel("ID layer in x axis")
+    plt.ylabel("y coordinate")
+    plt.title(title)
+    plt.axis('on')
+    plt.savefig(outputFile + "subgraphs_merged_state.png", dpi=300)
+
 
 
 # computes the following node and edge attributes: vertex degree, empirical mean & variance of edge orientation
@@ -113,6 +157,10 @@ def compute_prior_probabilities(GraphList, track_state_key):
         nodes = subGraph.nodes(data=True)
         if len(nodes) == 1: continue
         for node in nodes:
+            
+            node_attr = node[1]
+            if track_state_key not in node_attr.keys(): continue
+
             track_state_estimates = node[1][track_state_key]
             
             # compute number of ACTIVE neighbour nodes in each layer for given neighbourhood
