@@ -1,11 +1,11 @@
 import os, glob
+from networkx.generators import small
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import networkx as nx
 import argparse
 from utils.utils import *
-from KL_calibration import compute_track_recon_eff
 import pprint
 import math
 
@@ -28,17 +28,29 @@ def calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs):
         for j in range(i):
             distance = KLDistance(edge_svs[i], edge_covs[i], inv_covs[i], edge_svs[j], edge_covs[j], inv_covs[j])
             pairwise_distances[i][j] = distance
-            # pairwise_distances[j][i] = distance #TODO: don't need this line?
     return pairwise_distances
 
-def get_smallest_dist_idx(pairwise_distances):
-    nonzero_dist = pairwise_distances[np.nonzero(pairwise_distances)]
-    print("NONZERO DISTANCES", nonzero_dist)
-    smallest_dist = np.min(nonzero_dist)
-    # row[0] & column[0] indicates neighbor_node indices with smallest distance
-    row, column = np.where(pairwise_distances==smallest_dist)
-    idx = np.concatenate((row, column), axis=None)
+
+def calc_dist_to_merged_state(num_edges, edge_svs, edge_covs, inv_covs, merged_mean, merged_cov, merged_inv_cov):
+    distances = []
+    for i in range(num_edges):
+        distance = KLDistance(edge_svs[i], edge_covs[i], inv_covs[i], merged_mean, merged_cov, merged_inv_cov)
+        distances.append(distance)
+    return distances
+
+
+def get_smallest_dist_idx(distances):
+    if isinstance(distances, list):
+        smallest_dist = np.min(distances)
+        idx = distances.index(smallest_dist)
+    else:
+        nonzero_dist = distances[np.nonzero(distances)]
+        smallest_dist = np.min(nonzero_dist)
+        # row[0] & column[0] indicates neighbor_node indices with smallest distance
+        row, column = np.where(distances==smallest_dist)
+        idx = np.concatenate((row, column), axis=None)
     return smallest_dist, idx
+
 
 def load_lut(KL_lut):
     mapping = {}
@@ -61,11 +73,11 @@ def get_KL_upper_threshold(empvar_feature, distance, mapping):
     return 0
 
 
-def cluster(inputDir, outputDir, track_state_estimates, KL_lut):
+def cluster(inputDir, outputDir, track_state_key, KL_lut):
 
     # variable names
     subgraph_path = "_subgraph.gpickle"
-    TRACK_STATE_KEY = 'updated_track_states'
+    TRACK_STATE_KEY = track_state_key
     EMPIRICAL_MEAN_VAR = "edge_gradient_mean_var"
     EDGE_STATE_VECTOR = "edge_state_vector"
     EDGE_COV = "edge_covariance"
@@ -74,9 +86,7 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_lut):
     MERGED_COVARIANCE = "merged_cov"
     MERGED_PRIOR = "merged_prior"
 
-    # load LUT
-    # degree of node: {degree: KL_dist upper bound threshold}
-    # empirical variance: {upper bound emp var bin: KL_dist upper bound threshold}
+    # load predefined LUT: empirical variance: {upper bound emp var bin: KL_dist upper bound threshold}
     mapping = load_lut(KL_lut)
     
     # read in subgraph data
@@ -86,8 +96,9 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_lut):
         sub = nx.read_gpickle(file)
         subGraphs.append(sub)
 
-    # TODO: handling of more than 1 cluster?
-    # k-means clustering on edges using KL-distance threshold
+    perc_correct_outliers_detected = 0
+    total_outliers = 0
+    # clustering on edges using KL-distance threshold
     for subGraph in subGraphs:
 
         edges_to_deactivate = []
@@ -95,11 +106,12 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_lut):
             node_num = node[0]
             node_attr = node[1]
 
-            print("\nPROCESSING NODE NUM:", node_num)
+            # TODO: empvar is dynamic variable - need to recalculate at this iteration!!
+            # empvar = node_attr[EMPIRICAL_MEAN_VAR][1]
+            empvar = query_empirical_mean_var(subGraph, node_num)
 
-            # KL_dist LUT variables
-            empvar = node_attr[EMPIRICAL_MEAN_VAR][1]
-            
+            if empvar == None: continue
+
             if TRACK_STATE_KEY not in node_attr.keys(): 
                 print("Node does not contain updated_track_state, leaving for further iterations")
                 continue
@@ -130,29 +142,30 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_lut):
 
             # convert attributes to arrays
             num_edges = len(updated_track_states)
-            
-            print("updated track state estimates")
-            pprint.pprint(updated_track_states)
-            print("num edges", num_edges)
-            # num_edges = query_node_degree(subGraph, node_num) # node degree is dynamical between iterations, only check active edges
-            neighbors_to_deactivate = np.array([connection for connection in updated_track_states.keys()])
-            edge_svs = np.array([component[EDGE_STATE_VECTOR] for component in updated_track_states.values()])
-            edge_covs = np.array([component[EDGE_COV] for component in updated_track_states.values()])
-            print("edge covs", edge_covs)
+
+
+
+            if num_edges <= 2: continue
+
+            # convert attributes to arrays
+            track_state_estimates = updated_track_states
+            neighbors_to_deactivate = np.array([connection for connection in track_state_estimates.keys()])
+            edge_svs = np.array([component[EDGE_STATE_VECTOR] for component in track_state_estimates.values()])
+            edge_covs = np.array([component[EDGE_COV] for component in track_state_estimates.values()])
             edge_covs = np.reshape(edge_covs[:, :, np.newaxis], (num_edges, 2, 2))
             inv_covs = np.linalg.inv(edge_covs)
-            priors = np.array([component[PRIOR] for component in updated_track_states.values()])
+            priors = np.array([component[PRIOR] for component in track_state_estimates.values()])
 
             # calculate pairwise distances between edge state vectors, find smallest distance & keep track of merged states
             pairwise_distances = calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs)
             smallest_dist, idx = get_smallest_dist_idx(pairwise_distances) #[row_idx, column_idx]
-            
+
             # perform clustering, query LUT with degree/empvar & smallest pairwise distance
             KL_thres = get_KL_upper_threshold(empvar, smallest_dist, mapping)
             if smallest_dist < KL_thres:
 
-                print("MERGING STATES & CLUSTERING")
                 # merge states
+                print("MERGING STATES & CLUSTERING")
                 merged_mean, merged_cov, merged_inv_cov = merge_states(edge_svs[idx[0]], inv_covs[idx[0]], edge_svs[idx[1]], inv_covs[idx[1]])
                 merged_prior = priors[idx[0]] + priors[idx[1]]
 
@@ -162,103 +175,98 @@ def cluster(inputDir, outputDir, track_state_estimates, KL_lut):
                 inv_covs = np.delete(inv_covs, idx, axis=0)
                 priors = np.delete(priors, idx)
                 neighbors_to_deactivate = np.delete(neighbors_to_deactivate, idx, axis=0)
-                edge_svs = np.append(edge_svs, merged_mean.reshape(-1,2), axis=0)
-                edge_covs = np.append(edge_covs, merged_cov.reshape(-1,2,2), axis=0)
-                inv_covs = np.append(inv_covs, merged_inv_cov.reshape(-1,2,2), axis=0)
-                priors = np.append(priors, merged_prior)
+                print("check neighbours to deactivate:", neighbors_to_deactivate)
                 num_edges = edge_svs.shape[0]
 
-                # if all edges have merged, break the loop
-                if len(neighbors_to_deactivate) == 0: break
-
-                # recalculate pairwise distances between edge state vectors, find smallest distance & keep track of merged states
-                pairwise_distances = calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs)
-                print("neighbours to deactivate:", neighbors_to_deactivate)
-                smallest_dist, idx = get_smallest_dist_idx(pairwise_distances)
-                # if the merged state wasn't found in the smallest pairwise distance pair - new cluster - leave for further iterations
-                if (idx[1] != len(pairwise_distances) - 1):
-                    print("2nd cluster found! Ending clusterization here...")
-                else:
-                    while smallest_dist < KL_thres:
-                        # merge states
-                        merged_mean, merged_cov, merged_inv_cov = merge_states(edge_svs[idx[0]], inv_covs[idx[0]], merged_mean, merged_inv_cov)
-                        merged_prior = priors[idx[0]] + merged_prior
-                        
-                        # update variables, keep the merged state at the end
-                        edge_svs = np.delete(edge_svs, idx, axis=0)
-                        edge_covs = np.delete(edge_covs, idx, axis=0)
-                        inv_covs = np.delete(inv_covs, idx, axis=0)
-                        priors = np.delete(priors, idx)
-                        neighbors_to_deactivate = np.delete(neighbors_to_deactivate, idx[0], axis=0)
-                        edge_svs = np.append(edge_svs, merged_mean.reshape(-1,2), axis=0)
-                        edge_covs = np.append(edge_covs, merged_cov.reshape(-1,2,2), axis=0)
-                        inv_covs = np.append(inv_covs, merged_inv_cov.reshape(-1,2,2), axis=0)
-                        priors = np.append(priors, merged_prior)
-                        num_edges = edge_svs.shape[0]
-
-                        # if all edges have merged, break the loop
-                        if len(neighbors_to_deactivate) == 0: break
-
-                        # recalculate pairwise distances & find smallest distance
-                        pairwise_distances = calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs)
-                        smallest_dist, idx = get_smallest_dist_idx(pairwise_distances)
-                        # if the merged state wasn't found in the smallest pairwise distance pair - new cluster - leave for further iterations
-                        if (idx[1] != len(pairwise_distances) - 1):
-                            print("HERE 2nd cluster found! Ending clusterization here...")
-                            break
+                # calc distances to the merged state
+                dist_to_merged_state = calc_dist_to_merged_state(num_edges, edge_svs, edge_covs, inv_covs, 
+                                                                    merged_mean, merged_cov, merged_inv_cov)
+                smallest_dist, idx = get_smallest_dist_idx(dist_to_merged_state)
                 
+                
+                # carry on merging one by one state, check for smallest distance
+                # if smallest distance is less than KL threshold, then merge
+                # recalc distances to merged state
+                while smallest_dist < KL_thres:
+                    # merge states
+                    print("merging...")
+                    merged_mean, merged_cov, merged_inv_cov = merge_states(edge_svs[idx], inv_covs[idx], merged_mean, merged_inv_cov)
+                    merged_prior = priors[idx] + merged_prior
+
+                    # update variables, keep the merged state at the end
+                    edge_svs = np.delete(edge_svs, idx, axis=0)
+                    edge_covs = np.delete(edge_covs, idx, axis=0)
+                    inv_covs = np.delete(inv_covs, idx, axis=0)
+                    priors = np.delete(priors, idx)
+                    neighbors_to_deactivate = np.delete(neighbors_to_deactivate, idx, axis=0)
+                    print("check neighbours to deactivate:", neighbors_to_deactivate)
+                    num_edges = edge_svs.shape[0]
+
+                    # if all edges have merged, break the loop
+                    if len(neighbors_to_deactivate) == 0: break
+
+                    # calc distances to the merged state
+                    dist_to_merged_state = calc_dist_to_merged_state(num_edges, edge_svs, edge_covs, inv_covs, 
+                                                                        merged_mean, merged_cov, merged_inv_cov)
+                    smallest_dist, idx = get_smallest_dist_idx(dist_to_merged_state)
+
+
                 # store merged state as a node attribute
                 print("End of edge clusterising, saving merged state as node attribute")
                 subGraph.nodes[node_num][MERGED_STATE] = merged_mean
                 subGraph.nodes[node_num][MERGED_COVARIANCE] = merged_cov
                 subGraph.nodes[node_num][MERGED_PRIOR] = merged_prior
 
-                # record which edge connections were identified as outliers
-                if len(neighbors_to_deactivate) > 0:
-                    print("Deactivating outlier edges...")
-                    for neighbour_num in neighbors_to_deactivate:
+                print("FINAL neighbours to deactivate:", neighbors_to_deactivate)
 
+                if len(neighbors_to_deactivate) > 0:
+                    for neighbour_num in neighbors_to_deactivate:
                         # in edges, from neighbour to node 
                         # don't want to receive messages from the neighbour as the
                         # track state estimate given by that neighbour made no sense
                         edges_to_deactivate.append((neighbour_num, node_num))
+
 
             else:
                 # all edges are incompatible
                 print("NO CLUSTERS FOUND")
 
         # simultaneous deactivation of outlier edge connections
-        print("Deactivating outlier edges...")
-        for edge in edges_to_deactivate:
-            neighbour_num = edge[0]
-            node_num = edge[1]
-            attrs = {(neighbour_num, node_num): {"activated": 0}}
-            nx.set_edge_attributes(subGraph, attrs)
+        print("Deactivating outlier edges...", edges_to_deactivate)
+        if len(edges_to_deactivate) > 0:
+            for edge in edges_to_deactivate:
+                neighbour_num = edge[0]
+                node_num = edge[1]
+                attrs = {(neighbour_num, node_num): {"activated": 0}}
+                nx.set_edge_attributes(subGraph, attrs)
 
-    # identify subgraphs
-    # subGraphs = run_cca(subGraphs)
-    # update network state: recompute priors based on active edges
-    
+                node_truth_particle = subGraph.nodes[node_num]['truth_particle']
+                neighbour_truth_particle = subGraph.nodes[neighbour_num]['truth_particle']
+                if node_truth_particle != neighbour_truth_particle:
+                    perc_correct_outliers_detected += 1
+            total_outliers += len(edges_to_deactivate)
+
+    print("numerator:", perc_correct_outliers_detected)
+    print("denominator:", total_outliers)
+    if total_outliers != 0:
+        perc_correct_outliers_detected = (perc_correct_outliers_detected / total_outliers) * 100
+    print("PERC:", perc_correct_outliers_detected)
+
+
     # compute priors for a node based on inward edges??
-    compute_prior_probabilities(subGraphs, 'updated_track_states')
+    compute_prior_probabilities(subGraphs, TRACK_STATE_KEY)
     title = "Filtered Graph outlier edge removal using clustering with KL distance measure"
     plot_save_subgraphs(subGraphs, outputDir, title)
     plot_subgraphs_merged_state(subGraphs, outputDir, title)
 
-    # printing node and edge attributes
     # for i, s in enumerate(subGraphs):
-    #     if i<=1:
-    #         print("-------------------")
-    #         print("SUBGRAPH " + str(i))
-    #         for node in s.nodes(data=True):
-    #             if node[0] <= 100:
-    #                 pprint.pprint(node)
-    #         print("--------------------")
-    #         print("EDGE DATA:", s.edges.data(), "\n")
+    #     print("-------------------")
+    #     print("SUBGRAPH " + str(i))
+    #     for node in s.nodes(data=True):
+    #         pprint.pprint(node)
+    #     print("--------------------")
+    #     print("EDGE DATA:", s.edges.data(), "\n")
 
-    # calibrate the KL threshold for clustering using MC truth
-    # efficiency, score = compute_track_recon_eff(outputDir)
-    # return efficiency, score
     
 
 def main():
@@ -272,18 +280,11 @@ def main():
 
     inputDir = args.input
     outputDir = args.output
-    track_state_estimates = args.dict
+    track_states_key = args.dict
     KL_lut = args.lut
-    # efficiency = 0
 
-    cluster(inputDir, outputDir, track_state_estimates, KL_lut)
+    cluster(inputDir, outputDir, track_states_key, KL_lut)
 
-    # while efficiency < 0.6:
-    #     for f in glob.glob(outputDir + "*"):
-    #         os.remove(f)
-    #     efficiency, score = cluster(inputDir, outputDir, track_state_estimates, KL_thres)
-    #     print("EFF:", efficiency, "score", score, "KL_thres", KL_thres)
-    #     KL_thres *= 0.75
 
 
 if __name__ == "__main__":

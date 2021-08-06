@@ -89,12 +89,13 @@ def plot_subgraphs_merged_state(GraphList, outputFile, title):
         nodes = subGraph.nodes()
         for node in subGraph.nodes(data=True):
             node_attr = node[1]
-            if 'merged_state' in node_attr.keys() or 'updated_track_states' in node_attr.keys(): 
-                if ('updated_track_states' in node_attr.keys()) and ('merged_state' not in node_attr.keys()):
-                    color.append(updated_state_color)
-                else:
-                    color.append(merged_state_color)
-            else: 
+            keys = node_attr.keys()
+
+            if 'merged_state' in keys:
+                color.append(merged_state_color)
+            elif 'updated_track_states' in keys:
+                color.append(updated_state_color)
+            else:
                 color.append(default_color)
 
         pos=nx.get_node_attributes(subGraph,'coord_Measurement')
@@ -141,53 +142,48 @@ def compute_track_state_estimates(GraphList, sigma0):
                 H = np.array([ [1, 0], [1/(m1[0] - m2[0]), 1/(m2[0] - m1[0])] ])
                 covariance = H.dot(S).dot(H.T)
                 covariance = np.array([covariance[0,0], covariance[0,1], covariance[1,0], covariance[1,1]])
-                key = (neighbor, node) # in_edge, track state going from neighbor to node, probability of A conditioned on its neighborhood B
+                key = neighbor # track state probability of A (node) conditioned on its neighborhood B
                 state_estimates[key] = {'edge_state_vector': edge_state_vector, 
-                                            'edge_covariance': covariance, 
-                                            'coord_Measurement': m2
-                                            }
+                                        'edge_covariance': covariance, 
+                                        'coord_Measurement': m2
+                                        }
             G.nodes[node]['edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
             G.nodes[node]['track_state_estimates'] = state_estimates
 
     return GraphList
 
+
+# used for initialization & update of priors
 # assign prior probabilities/weights for neighbourhood of each node
 def compute_prior_probabilities(GraphList, track_state_key):
     for subGraph in GraphList:
         nodes = subGraph.nodes(data=True)
         if len(nodes) == 1: continue
-        for node in nodes:
-            
+        
+        for node in nodes:    
+            node_num = node[0]
             node_attr = node[1]
             if track_state_key not in node_attr.keys(): continue
 
-            track_state_estimates = node[1][track_state_key]
+            track_state_estimates = node_attr[track_state_key]
             
             # compute number of ACTIVE neighbour nodes in each layer for given neighbourhood
-            layer_node_num_dict = {}
-            for node_num, v in track_state_estimates.items():
-                # print("NODE NUM", node_num)
-                neighbor = node_num[0]
-                central_node = node_num[1]
-                if subGraph[neighbor][central_node]['activated'] == 1:
-                    layer = subGraph.nodes[neighbor]['GNN_Measurement'].x
-                    if layer in layer_node_num_dict.keys():
-                        layer_node_num_dict[layer].append(node_num)
+            layer_neighbour_num_dict = {}
+            for neighbour_num, _ in track_state_estimates.items():
+                # if subGraph[node_num][neighbour_num]['activated'] == 1:
+                # inward edge coming into the node from the neighbour
+                if subGraph[neighbour_num][node_num]['activated'] == 1:
+                    layer = subGraph.nodes[neighbour_num]['GNN_Measurement'].x
+                    if layer in layer_neighbour_num_dict.keys():
+                        layer_neighbour_num_dict[layer].append(neighbour_num)
                     else:
-                        layer_node_num_dict[layer] = [node_num]
+                        layer_neighbour_num_dict[layer] = [neighbour_num]
         
             # assign prior probabilities to nodes in neighbourhood
-            for _, node_nums_list in layer_node_num_dict.items():
-                prior = 1/len(node_nums_list)
-                for n in node_nums_list:
-                    track_state_estimates[n]['prior'] = prior
-
-
-def initialize_edge_activation(GraphList):
-    for subGraph in GraphList:
-        for e in subGraph.edges:
-            attrs = {e: {"activated": 1}}
-            nx.set_edge_attributes(subGraph, attrs)
+            for _, neighbour_nums_list in layer_neighbour_num_dict.items():
+                prior = 1/len(neighbour_nums_list)
+                for neighbour_num in neighbour_nums_list:
+                    track_state_estimates[neighbour_num]['prior'] = prior
 
 
 def initialize_mixture_weights(GraphList):
@@ -229,7 +225,45 @@ def update_mixture_weights(GraphList):
                 v['mixture_weight'] = mixture_weight
 
 
+def initialize_edge_activation(GraphList):
+    for subGraph in GraphList:
+        for e in subGraph.edges:
+            attrs = {e: {"activated": 1}}
+            nx.set_edge_attributes(subGraph, attrs)
+
+
 #TODO: activate_edge() and deactivate_edge() functions
+
+
+def query_node_degree(subGraph, node_num):
+    out_edges = subGraph.out_edges(node_num) # one direction only, not double counted
+    node_degree = 0
+    for edge in out_edges:
+        neighbour_num = edge[1]
+        if (subGraph[node_num][neighbour_num]["activated"] == 1) : node_degree += 1
+    return node_degree
+
+def query_node_degree_in_edges(subGraph, node_num):
+    in_edges = subGraph.in_edges(node_num) # one direction only, not double counted
+    # print("IN EDGES", in_edges)
+    node_degree = 0
+    for edge in in_edges:
+        neighbour_num = edge[0]
+        if (subGraph[neighbour_num][node_num]["activated"] == 1) : node_degree += 1
+    return node_degree
+
+def query_empirical_mean_var(subGraph, node_num):
+    gradients = []
+    m1 = (subGraph.nodes[node_num]["GNN_Measurement"].x, subGraph.nodes[node_num]["GNN_Measurement"].y)
+
+    for neighbor in nx.all_neighbors(subGraph, node_num):
+        if subGraph[neighbor][node_num]['activated'] == 1:
+            m2 = (subGraph.nodes[neighbor]["GNN_Measurement"].x, subGraph.nodes[neighbor]["GNN_Measurement"].y)
+            grad = (m1[1] - m2[1]) / (m1[0] - m2[0])
+            gradients.append(grad)
+    
+    if len(gradients) > 0: return np.var(gradients)
+    else: return None
 
 
 # default weakly connected components CCA networkx implementation

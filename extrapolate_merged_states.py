@@ -13,54 +13,47 @@ import pprint
 def calculate_norm_factor_lr_layers(subGraph, node, updated_track_states):
     
     # split track state estimates into LHS & RHS
-    node_x_layer = node[1]['GNN_Measurement'].x
-    # track_state_estimates = node[1]['track_state_estimates']
+    node_num = node[0]
+    node_attr = node[1]
+    node_x_layer = node_attr['GNN_Measurement'].x
     left_nodes, right_nodes = [], []
     left_coords, right_coords = [], []
-    
-    print("EDGE DATA:", subGraph.edges.data(), "\n")
-    print("updated track state estimates:\n")
-    pprint.pprint(updated_track_states)
 
-    for edge_tuple, v in updated_track_states.items():
-        # neighbour_x_layer = v['coord_Measurement'][0]
-
-        central_node_num = edge_tuple[1]
-        neighbour_node_num = edge_tuple[0]
-
-        neighbour_x_layer = subGraph.nodes[neighbour_node_num]['GNN_Measurement'].x
-
-        # print("edge_tuple", edge_tuple)
-        # print("central_node_num,", central_node_num)
-        # print("neighbour_node_num,", neighbour_node_num)
+    for neighbour_num, _ in updated_track_states.items():
+        neighbour_x_layer = subGraph.nodes[neighbour_num]['GNN_Measurement'].x
 
         # only calculate for activated edges
-        # if subGraph[neighbour_node_num][central_node_num]['activated'] == 1:
-        if neighbour_x_layer < node_x_layer: 
-            left_nodes.append(edge_tuple)
-            left_coords.append(neighbour_x_layer)
-        else: 
-            right_nodes.append(edge_tuple)
-            right_coords.append(neighbour_x_layer)
+        # if subGraph[node_num][neighbour_num]['activated'] == 1:
+        if subGraph[neighbour_num][node_num]['activated'] == 1:
+            if neighbour_x_layer < node_x_layer: 
+                left_nodes.append(neighbour_num)
+                left_coords.append(neighbour_x_layer)
+            else: 
+                right_nodes.append(neighbour_num)
+                right_coords.append(neighbour_x_layer)
     
     # store norm factor as node attribute
     left_norm = len(list(set(left_coords)))
-    for lf_tuple in left_nodes:
-        updated_track_states[lf_tuple]['lr_layer_norm'] = 1 / left_norm
+    for left_neighbour in left_nodes:
+        # if subGraph[node_num][neighbour_num]['activated'] == 1:
+        if subGraph[neighbour_num][node_num]['activated'] == 1:
+            updated_track_states[left_neighbour]['lr_layer_norm'] = 1 / left_norm
+        else:
+            updated_track_states[left_neighbour]['lr_layer_norm'] = 1
 
     right_norm = len(list(set(right_coords)))
-    for rn_tuple in right_nodes:
-        updated_track_states[rn_tuple]['lr_layer_norm'] = 1 / right_norm
-
-    # print("NODE:\n")
-    # pprint.pprint(node)
-    # print("TRACK STATE EST\n", track_state_estimates)
+    for right_neighbour in right_nodes:
+        # if subGraph[node_num][neighbour_num]['activated'] == 1:
+        if subGraph[neighbour_num][node_num]['activated'] == 1:
+            updated_track_states[right_neighbour]['lr_layer_norm'] = 1 / right_norm
+        else:
+            updated_track_states[right_neighbour]['lr_layer_norm'] = 1
 
 
 
 def reweight(subGraphs, track_state_estimates_key):
     print("\nStarting reweighting...")
-    reweight_threshold = 0.05
+    reweight_threshold = 0.2
 
     for subGraph in subGraphs:
         if len(subGraph.nodes()) == 1: continue
@@ -77,36 +70,42 @@ def reweight(subGraphs, track_state_estimates_key):
                 
                 # compute reweight denominator
                 reweight_denom = 0
-                for edge_tuple, updated_state_dict in updated_track_states.items():
-                    reweight_denom += (updated_state_dict['previous_mixture_weight'] * updated_state_dict['likelihood'])
+                for neighbour_num, updated_state_dict in updated_track_states.items():
+                    # if subGraph[node_num][neighbour_num]['activated'] == 1:
+                    if subGraph[neighbour_num][node_num]['activated'] == 1:
+                        reweight_denom += (updated_state_dict['mixture_weight'] * updated_state_dict['likelihood'])
                 
                 # compute reweight
-                for edge_tuple, updated_state_dict in updated_track_states.items():
+                for neighbour_num, updated_state_dict in updated_track_states.items():
+                    # if subGraph[node_num][neighbour_num]['activated'] == 1:
+                    if subGraph[neighbour_num][node_num]['activated'] == 1:
+                        reweight = (updated_state_dict['mixture_weight'] * updated_state_dict['likelihood'] * updated_state_dict['prior']) / reweight_denom
+                        reweight /= updated_state_dict['lr_layer_norm']
+                        print("REWEIGHT:", reweight)
                     
-                    reweight = (updated_state_dict['previous_mixture_weight'] * updated_state_dict['likelihood'] * updated_state_dict['prior']) / reweight_denom
-                    reweight /= updated_state_dict['lr_layer_norm']
-                    print("REWEIGHT:", reweight)
+                        updated_state_dict['mixture_weight'] = reweight
                     
-                    updated_state_dict['mixture_weight'] = reweight
-                    
-                    # reactivate/deactivate
-                    if reweight < reweight_threshold:
-                        subGraph[edge_tuple[0]][edge_tuple[1]]["activated"] = 0
-                        print("deactivating edge: (", edge_tuple[0], ",", edge_tuple[1], ")")
-                    else:
-                        subGraph[edge_tuple[0]][edge_tuple[1]]["activated"] = 1
-                        print("activating edge: (", edge_tuple[0], ",", edge_tuple[1], ")")
+                        # reactivate/deactivate
+                        if reweight < reweight_threshold:
+                            # subGraph[node_num][neighbour_num]["activated"] = 0
+                            subGraph[neighbour_num][node_num]['activated'] = 0
+                            print("deactivating edge: (", node_num, ",", neighbour_num, ")")
+                        else:
+                            # subGraph[node_num][neighbour_num]["activated"] = 1
+                            subGraph[neighbour_num][node_num]['activated'] = 1
+                            print("activating edge: (", node_num, ",", neighbour_num, ")")
                 
                 # store the updated track states as node attr
-                subGraph.nodes[node_num][track_state_estimates_key] = updated_track_states
+                # subGraph.nodes[node_num][track_state_estimates_key] = updated_track_states
             
-            print("NODE:\n")
-            pprint.pprint(node)
+            # print("NODE:\n")
+            # pprint.pprint(node)
 
 
 
-def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour_attr):
+def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour_attr, chi2CutFactor):
     node_x = node_attr['GNN_Measurement'].x
+    node_y = node_attr['GNN_Measurement'].y
     neighbour_x = neighbour_attr['GNN_Measurement'].x
     neighbour_y = neighbour_attr['GNN_Measurement'].y
 
@@ -115,8 +114,8 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     merged_cov = node_attr['merged_cov']
     sigma0 = node_attr['GNN_Measurement'].sigma0
 
-    # extrapolate the merged state from the central node to the neighbour node
-    print("extrapolating merged state...")
+    # extrapolate the merged state from the central node to the neighbour node & storing at the neighbur node
+    print("extrapolating merged state for", node_num, "to", neighbour_num)
     dx = neighbour_x - node_x
     F = np.array([ [1, dx], [0, 1] ])
     extrp_state = F.dot(merged_state)
@@ -129,17 +128,18 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     S = H.dot(extrp_cov).dot(H.T) + sigma0**2       # covariance of residual (denominator of kalman gain)
     inv_S = np.linalg.inv(S)
     chi2 = residual.T.dot(inv_S).dot(residual)
-    chi2_cut = 5 * S[0][0]
-    # print("chi2:", chi2)
-    # print("chi2_cut:", chi2_cut)
+    chi2_cut = chi2CutFactor * S[0][0]
+    print("chi2:", chi2)
+    print("chi2_cut:", chi2_cut)
 
     # validate chi2 distance
     if chi2 < chi2_cut:
-        # print("chi2 OK, performing KF update...")
+        print("chi2 OK, performing KF update...")
 
         # calc beta: measurement likelihood
         norm_factor = math.pow(2 * math.pi * np.abs(inv_S), -0.5)
         likelihood = norm_factor * np.exp(-0.5 * chi2)
+        print("likelihood: ", likelihood)
 
         # initialize KF
         f = KalmanFilter(dim_x=2, dim_z=1)
@@ -154,50 +154,69 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
         f.predict()
         f.update(extrp_state[0])
         updated_state, updated_cov = f.x_post, f.P_post
-        # print("updated_state", updated_state, "updated_cov", updated_cov)
 
-        return { 'edge_state_vector': updated_state, 
+        return { 'coord_Measurement': (node_x, node_y),
+                 'edge_state_vector': updated_state, 
                  'edge_covariance': updated_cov,
                  'likelihood': likelihood,
-                 'prior': subGraph.nodes[neighbour_num]['track_state_estimates'][(node_num, neighbour_num)]['prior'], # previous prior
-                 'previous_mixture_weight': subGraph.nodes[neighbour_num]['track_state_estimates'][(node_num, neighbour_num)]['mixture_weight']
+                 'prior': subGraph.nodes[node_num]['track_state_estimates'][neighbour_num]['prior'],                   # previous prior
+                 'mixture_weight': subGraph.nodes[node_num]['track_state_estimates'][neighbour_num]['mixture_weight']  # previous weight
                 }
 
     else:
-        print("chi2 distance too large, deactivating edge connection...")
+        print("chi2 distance too large")
+        print("deactivating edge connection ( ", node_num, ", ", neighbour_num, " )")
         subGraph[node_num][neighbour_num]["activated"] = 0
         return None
 
 
 
-
-def message_passing(subGraphs):
+def message_passing(subGraphs, chi2CutFactor):
     for subGraph in subGraphs:
         if len(subGraph.nodes()) == 1: continue
 
         # distribution of 'merged state' from nodes with this attribute to its neighbours
         for node in subGraph.nodes(data=True):
-            print("")
             node_num = node[0]
             node_attr = node[1]
+            print("\nProcessing node: ", node_num)
+
             if 'merged_state' in node_attr.keys():
-                print("Performing message passing for node: ", node_num)
+                print("Performing message passing")
                 for neighbour_num in subGraph.neighbors(node_num):
-                    neighbour_attr = subGraph.nodes[neighbour_num]
-                    updated_state_dict = extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour_attr)
-                    if updated_state_dict != None:
-                        # store the updated track states
-                        if 'updated_track_states' not in neighbour_attr:
-                            subGraph.nodes[neighbour_num]['updated_track_states'] = {(node_num, neighbour_num) : updated_state_dict}
-                        else:
-                            subGraph.nodes[neighbour_num]['updated_track_states'][(node_num, neighbour_num)] = updated_state_dict
-                 
-                        # print("updated neighbour dict: \n")
-                        # pprint.pprint(subGraph.nodes[neighbour_num])
 
-            else: print("no merged state found, leaving for further iterations")
+                    # extrapolating outwards, from node to neighbour
+                    if subGraph[node_num][neighbour_num]["activated"] == 1:
+                        neighbour_attr = subGraph.nodes[neighbour_num]
+                        updated_state_dict = extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour_attr, chi2CutFactor)
+                        if updated_state_dict != None:
+                            # store the updated track states at the neighbour node
+                            if 'updated_track_states' not in neighbour_attr:
+                                subGraph.nodes[neighbour_num]['updated_track_states'] = {node_num : updated_state_dict}
+                            else:
+                                subGraph.nodes[neighbour_num]['updated_track_states'][node_num] = updated_state_dict
+                    else:
+                        print("edge", node_num, neighbour_num, "not activated, message not transmitted")
+
+            else: print("No merged state found, leaving for further iterations")
 
 
+# use single component updated state as 'merged' state
+def convert_single_updated_state(subGraphs):
+    for subGraph in subGraphs:
+        if len(subGraph.nodes()) == 1: continue
+
+        for node in subGraph.nodes(data=True):
+            node_num = node[0]
+            node_attr = node[1]
+            if 'updated_track_states' in node_attr.keys():
+                updated_track_states = node_attr['updated_track_states']
+                if len(updated_track_states) == 1:
+                    # print("Single updated state found for node:", node_num, "\nconverting to 'merged'")
+                    single_state_data = list(updated_track_states.values())[0]
+                    subGraph.nodes[node_num]['merged_state'] = single_state_data['edge_state_vector']
+                    subGraph.nodes[node_num]['merged_cov'] = single_state_data['edge_covariance']
+                    subGraph.nodes[node_num]['merged_prior'] = single_state_data['prior']
 
 
 def main():
@@ -208,9 +227,11 @@ def main():
     parser = argparse.ArgumentParser(description='edge outlier removal')
     parser.add_argument('-i', '--inputDir', help='input directory of outlier removal')
     parser.add_argument('-o', '--outputDir', help='output directory for updated states')
+    parser.add_argument('-c', '--chi2CutFactor', help='chi2 cut factor for threshold')
     args = parser.parse_args()
     inputDir = args.inputDir
     outputDir = args.outputDir
+    chi2CutFactor = float(args.chi2CutFactor)
 
     # read in subgraph data
     subGraphs = []
@@ -219,11 +240,28 @@ def main():
         sub = nx.read_gpickle(file)
         subGraphs.append(sub)
 
-    message_passing(subGraphs)
+
+    # distribute merged state to neighbours, extrapolate, validation & create new updated state(s)
+    message_passing(subGraphs, chi2CutFactor)
+    convert_single_updated_state(subGraphs)
 
     # update network state: recompute priors based on active edges
+    # first check for any small likelihoods - drop these components
+    # renormalize_likelihoods(subGraphs)
+
     compute_prior_probabilities(subGraphs, 'updated_track_states')
+    # reweight components based on active edges - mechanism for edge activation/deactivation
     reweight(subGraphs, 'updated_track_states')
+    # priors have changed due to activation/deactivation - recompute
+    compute_prior_probabilities(subGraphs, 'updated_track_states')
+
+    for i, s in enumerate(subGraphs):
+        print("-------------------")
+        print("SUBGRAPH " + str(i))
+        for node in s.nodes(data=True):
+            pprint.pprint(node)
+        print("--------------------")
+        print("EDGE DATA:", s.edges.data(), "\n")
 
     title = "Subgraphs after iteration 2: message passing, extrapolation \n& validation of merged state, formation of updated state"
     plot_save_subgraphs(subGraphs, outputDir, title)
