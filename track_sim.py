@@ -91,6 +91,7 @@ def main():
     for L1 in range(Nl) :
         for L2 in range(L1+1,Nl) :
             if L2-L1 > 2 : break #use the next 2 layers only
+            # if L2-L1 >= 2 : break #use the next layer only
             for m1 in mcoll[L1] :
                 for m2 in mcoll[L2] :
                     if m1.node == m2.node : continue
@@ -118,9 +119,35 @@ def main():
 
     # remove all nodes with mean edge orientation above threshold
     G = nx.Graph(G) # make a copy to unfreeze graph
+    # B = nx.Graph(G) # backup graph
     filteredNodes = [node for node, attr in G.nodes(data=True) if attr['edge_gradient_mean_var'][1] > threshold]
     # TODO filteredNodes = [node for node, attr in G.nodes(data=True) if attr['multivariate_covariance'][1][1] > 0.05]
+
     for node in filteredNodes: G.remove_node(node)
+
+    # temporary: check for no holes
+    # find the minimum node num for each track 
+    # if there are no holes then it should be consecutive up to x9 value
+    # if there are holes then it won't be consecutive
+    # put this node back into the graph G
+    
+    # all_node_nums = G.nodes()
+    # for i in range(Ntr):
+    #     list_node_nums = []
+    #     start = i * 10
+    #     end = start + 10
+    #     for n in all_node_nums:
+    #         if n >= start and n < end:
+    #             list_node_nums.append(n)
+        
+    #     # check if consecutive
+    #     for j in range(len(list_node_nums) - 1):
+    #         if (list_node_nums[j] - list_node_nums[j+1]) != -1 :
+    #             node_to_put_back = list_node_nums[j] + 1
+    #             G.add_node(B.nodes(node_to_put_back))
+
+
+
     
     # CCA: extract subgraphs
     G = nx.to_directed(G)

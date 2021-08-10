@@ -56,7 +56,7 @@ def plot_save_subgraphs(GraphList, outputFile, title):
     major_ticks = np.arange(0, 12, 1)
     ax.set_xticks(major_ticks)
     plt.xlim([0, 11])
-    plt.ylim([-25, 15])
+    plt.ylim([-27, 15])
     plt.xlabel("ID layer in x axis")
     plt.ylabel("y coordinate")
     plt.title(title)
@@ -112,7 +112,7 @@ def plot_subgraphs_merged_state(GraphList, outputFile, title):
     major_ticks = np.arange(0, 12, 1)
     ax.set_xticks(major_ticks)
     plt.xlim([0, 11])
-    plt.ylim([-25, 15])
+    plt.ylim([-27, 15])
     plt.xlabel("ID layer in x axis")
     plt.ylabel("y coordinate")
     plt.title(title)
@@ -170,7 +170,6 @@ def compute_prior_probabilities(GraphList, track_state_key):
             # compute number of ACTIVE neighbour nodes in each layer for given neighbourhood
             layer_neighbour_num_dict = {}
             for neighbour_num, _ in track_state_estimates.items():
-                # if subGraph[node_num][neighbour_num]['activated'] == 1:
                 # inward edge coming into the node from the neighbour
                 if subGraph[neighbour_num][node_num]['activated'] == 1:
                     layer = subGraph.nodes[neighbour_num]['GNN_Measurement'].x
@@ -197,33 +196,6 @@ def initialize_mixture_weights(GraphList):
                 v['mixture_weight'] = mixture_weight
 
 
-def update_mixture_weights(GraphList):
-    for subGraph in GraphList:
-        nodes = subGraph.nodes(data=True)
-        edge_data = subGraph.edges.data()
-
-        # mapping {edge going into node_num: number of activated edges}
-        activated_incident_edges = {}
-        for edges in edge_data:
-            incident_node_num = edges[1]
-            if incident_node_num in activated_incident_edges.keys():
-                activated_incident_edges[incident_node_num] += edges[2]['activated']
-            else:
-                activated_incident_edges[incident_node_num] = edges[2]['activated']
-
-        if len(nodes) == 1: continue
-        for node in nodes:
-
-            node_num = node[0]
-            num_activated_edges = activated_incident_edges[node_num]
-            
-            if num_activated_edges == 0: mixture_weight = 0
-            else: mixture_weight = 1 / num_activated_edges
-
-            track_state_estimates = node[1]['track_state_estimates']
-            for _, v in track_state_estimates.items():
-                v['mixture_weight'] = mixture_weight
-
 
 def initialize_edge_activation(GraphList):
     for subGraph in GraphList:
@@ -234,14 +206,6 @@ def initialize_edge_activation(GraphList):
 
 #TODO: activate_edge() and deactivate_edge() functions
 
-
-def query_node_degree(subGraph, node_num):
-    out_edges = subGraph.out_edges(node_num) # one direction only, not double counted
-    node_degree = 0
-    for edge in out_edges:
-        neighbour_num = edge[1]
-        if (subGraph[node_num][neighbour_num]["activated"] == 1) : node_degree += 1
-    return node_degree
 
 def query_node_degree_in_edges(subGraph, node_num):
     in_edges = subGraph.in_edges(node_num) # one direction only, not double counted

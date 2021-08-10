@@ -78,7 +78,6 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut):
     # variable names
     subgraph_path = "_subgraph.gpickle"
     TRACK_STATE_KEY = track_state_key
-    EMPIRICAL_MEAN_VAR = "edge_gradient_mean_var"
     EDGE_STATE_VECTOR = "edge_state_vector"
     EDGE_COV = "edge_covariance"
     PRIOR = "prior"
@@ -106,10 +105,10 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut):
             node_num = node[0]
             node_attr = node[1]
 
-            # TODO: empvar is dynamic variable - need to recalculate at this iteration!!
-            # empvar = node_attr[EMPIRICAL_MEAN_VAR][1]
-            empvar = query_empirical_mean_var(subGraph, node_num)
+            print("\nProcessing node number:", node_num)
 
+            # TODO: empvar is dynamic variable - need to recalculate at this iteration!!
+            empvar = query_empirical_mean_var(subGraph, node_num)
             if empvar == None: continue
 
             if TRACK_STATE_KEY not in node_attr.keys(): 
@@ -119,9 +118,10 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut):
             updated_track_states = node_attr[TRACK_STATE_KEY]
 
             # only consider activated edge connections
+            # because some edges might be turned off due to the reweighting in the previous clustering stage
             for neighbour_num in list(updated_track_states.keys()):
                 if subGraph[neighbour_num][node_num]['activated'] == 0:
-                    print("edge being deactivated:", neighbour_num, node_num)
+                    print("not clustering with this edge as its deactive:", neighbour_num, node_num)
                     del updated_track_states[neighbour_num]
 
             # don't execute merging/clustering on updated states coming from >1 node in the same xlayer
@@ -134,17 +134,13 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut):
                 print("Cannot merge, competing updated states, leaving for further iterations")
                 continue
             
-            
             if len(updated_track_states) == 1:
                 print("Only 1 updated track state, clustering cannot be performed")
                 print("leaving for further iterations")
                 continue
 
-            # convert attributes to arrays
+            # num of active inward edges
             num_edges = len(updated_track_states)
-
-
-
             if num_edges <= 2: continue
 
             # convert attributes to arrays
