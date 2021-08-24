@@ -78,6 +78,9 @@ def reweight(subGraphs, track_state_estimates_key):
                         print("REWEIGHT:", reweight)
                         print("side:", updated_state_dict['side'])  
                         updated_state_dict['mixture_weight'] = reweight
+
+                        # add as edge attribute
+                        subGraph[neighbour_num][node_num]['mixture_weight'] = reweight
                     
                         # reactivate/deactivate
                         if reweight < reweight_threshold:
@@ -111,6 +114,7 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     H = np.array([[1.,0.]])
     residual = neighbour_y - H.dot(extrp_state)     # compute the residual
     S = H.dot(extrp_cov).dot(H.T) + sigma0**2       # covariance of residual (denominator of kalman gain)
+    # S = sigma0**2 - H.dot(extrp_cov).dot(H.T)
     inv_S = np.linalg.inv(S)
     chi2 = residual.T.dot(inv_S).dot(residual)
     chi2_cut = chi2CutFactor * S[0][0]
@@ -208,7 +212,6 @@ def convert_single_updated_state(subGraphs):
 
 def main():
 
-    # reweight_threshold = 0.05
     subgraph_path = "_subgraph.gpickle"
 
     parser = argparse.ArgumentParser(description='edge outlier removal')
@@ -225,6 +228,7 @@ def main():
     os.chdir(".")
     for file in glob.glob(inputDir + "*" + subgraph_path):
         sub = nx.read_gpickle(file)
+        print("File:", file)
         subGraphs.append(sub)
 
 

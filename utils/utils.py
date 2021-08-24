@@ -38,7 +38,7 @@ def plot_save_temperature_network(G, attr, outputDir):
 
 
 # plot the subgraphs extracted using threshold on nodes
-def plot_save_subgraphs(GraphList, outputFile, title):
+def plot_save_subgraphs(GraphList, outputFile, title, save=True):
     _, ax = plt.subplots(figsize=(12,10))
     colors = ["#bf6f2e", "#377fcc", "#78c953", "#c06de3"]
     for i, subGraph in enumerate(GraphList):
@@ -64,8 +64,9 @@ def plot_save_subgraphs(GraphList, outputFile, title):
     plt.savefig(outputFile + "subgraphs.png", dpi=300)
 
     # save to serialized form & adjacency matrix
-    for i, sub in enumerate(GraphList):
-        save_network(outputFile, i, sub)
+    if save:
+        for i, sub in enumerate(GraphList):
+            save_network(outputFile, i, sub)
 
 
 # save network as serialized form & adjacency matrix
@@ -192,8 +193,13 @@ def initialize_mixture_weights(GraphList):
         for node in nodes:
             mixture_weight = 1/node[1]['degree']
             track_state_estimates = node[1]['track_state_estimates']
-            for _, v in track_state_estimates.items():
+            for neighbour_num, v in track_state_estimates.items():
                 v['mixture_weight'] = mixture_weight
+
+                # add as an edge attribute - useful in community detection
+                node_num = node[0]
+                subGraph[neighbour_num][node_num]['mixture_weight'] = mixture_weight
+
 
 
 

@@ -125,29 +125,6 @@ def main():
 
     for node in filteredNodes: G.remove_node(node)
 
-    # temporary: check for no holes
-    # find the minimum node num for each track 
-    # if there are no holes then it should be consecutive up to x9 value
-    # if there are holes then it won't be consecutive
-    # put this node back into the graph G
-    
-    # all_node_nums = G.nodes()
-    # for i in range(Ntr):
-    #     list_node_nums = []
-    #     start = i * 10
-    #     end = start + 10
-    #     for n in all_node_nums:
-    #         if n >= start and n < end:
-    #             list_node_nums.append(n)
-        
-    #     # check if consecutive
-    #     for j in range(len(list_node_nums) - 1):
-    #         if (list_node_nums[j] - list_node_nums[j+1]) != -1 :
-    #             node_to_put_back = list_node_nums[j] + 1
-    #             G.add_node(B.nodes(node_to_put_back))
-
-
-
     
     # CCA: extract subgraphs
     G = nx.to_directed(G)
@@ -160,12 +137,12 @@ def main():
     initialize_mixture_weights(subGraphs)
     
     # for i, s in enumerate(subGraphs):
+    #     print("EDGE DATA:", s.edges.data(), "\n")
     #     print("-------------------")
     #     print("SUBGRAPH " + str(i))
     #     for node in s.nodes(data=True):
     #         pprint.pprint(node)
     #     print("--------------------")
-    #     print("EDGE DATA:", s.edges.data(), "\n")
 
     
     # plot and save extracted subgraphs
