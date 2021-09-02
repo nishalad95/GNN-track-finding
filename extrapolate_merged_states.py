@@ -228,7 +228,7 @@ def main():
     os.chdir(".")
     for file in glob.glob(inputDir + "*" + subgraph_path):
         sub = nx.read_gpickle(file)
-        print("File:", file)
+        # print("File:", file)
         subGraphs.append(sub)
 
 

@@ -34,15 +34,35 @@ import pprint
 
 
 # inputDir = "output_test1/iteration_2/remaining/"
-inputDir = "output/iteration_2/remaining/"
-fragment = 4
+# inputDir = "output/iteration_2/remaining/"
+# fragment = 4
 
-subgraph_path = "_subgraph.gpickle"
-subGraphs = []
-os.chdir(".")
-for file in glob.glob(inputDir + "*" + subgraph_path):
-    sub = nx.read_gpickle(file)
+# subgraph_path = "_subgraph.gpickle"
+# subGraphs = []
+# os.chdir(".")
+# for file in glob.glob(inputDir + "*" + subgraph_path):
+#     sub = nx.read_gpickle(file)
 
+#     edges_to_remove = []
+#     for u, v in sub.edges():
+#         if sub[u][v]['activated'] == 0:
+#             edges_to_remove.append((u,v))
+    
+#     for u, v in edges_to_remove:
+#         sub.remove_edge(u, v)
+
+#     subGraphs.append(sub)
+
+
+
+
+def community_detection(subGraph, fragment):
+
+    edge_data = subGraph.edges.data()
+    if len(edge_data) == 0: return [], []
+
+    # make a copy & remove deactive edges
+    sub = subGraph.copy()
     edges_to_remove = []
     for u, v in sub.edges():
         if sub[u][v]['activated'] == 0:
@@ -51,69 +71,54 @@ for file in glob.glob(inputDir + "*" + subgraph_path):
     for u, v in edges_to_remove:
         sub.remove_edge(u, v)
 
-    subGraphs.append(sub)
 
-
-# print(subGraphs)
-# # subGraphs = subGraphs[:1]
-# # print(subGraphs)
-
-
-# for G in subGraphs:
-#     #first compute the best partition
-#     # weight = "mixture_weight"
-#     weight = "likelihood"
-#     partition = community_louvain.best_partition(G, weight=weight)
-
-#     # compute the best partition
-#     partition = community_louvain.best_partition(G, weight=weight)
-
-
-#     # draw the graph
-#     plot_community(G, partition, "")
-#     print()
-#     for node in G.nodes(data=True):
-#         pprint.pprint(node[1])
-
-
-valid_communities = []
-
-for sub in subGraphs:
-    print("\n\n")
-    edge_data = sub.edges.data()
-
-    if len(edge_data) == 0: continue
-
-    sub = igraph.Graph.from_networkx(sub)
-    coords = sub.vs()["coord_Measurement"]
-    gnn_meas = sub.vs()["GNN_Measurement"]
-    weights = sub.es()["mixture_weight"]
+    isub = igraph.Graph.from_networkx(sub)
+    coords = isub.vs()["coord_Measurement"]
+    gnn_meas = isub.vs()["GNN_Measurement"]
+    isub.es["weights"] = isub.es()["mixture_weight"]
     labels = [n.node for n in gnn_meas]
 
-    # print("labels:", labels)
-    # print("coords:", coords)
-    # print("edge weights:", weights)
-    igraph.plot(sub, layout=coords, vertex_label=labels)
 
-    partition = la.find_partition(sub, 
+    # igraph.plot(isub, layout=coords, vertex_label=labels)
+
+    partition = la.find_partition(isub, 
                                 la.ModularityVertexPartition, 
-                                weights="mixture_weight", 
+                                weights="weights", 
                                 n_iterations=-1)
     
-    igraph.plot(partition, layout=coords, vertex_label=labels)
+    # igraph.plot(partition, layout=coords, vertex_label=labels)
     membership = np.array(partition.membership)
-    print("\nMEMBERSHIP")
-    print(membership)
-    print("LABELS")
-    print(labels)
     counts = Counter(membership)
-    print("counts:", counts)
 
+    valid_communities = []
+    vc_coords = []
+    all_node_nums = subGraph.nodes()
     for community, freq in counts.items():
         # check for no track fragments
         if freq > fragment:
             idx = np.where(membership == community)[0]
-            nodes = [labels[i] for i in idx]
-            print(nodes)
+            community_nodes = [labels[i] for i in idx]
+            print(community_nodes)
 
             # check for 1 hit per layer
+            coords = [subGraph.nodes[n]["coord_Measurement"] for n in community_nodes]
+            coords = sorted(coords, reverse=True, key=lambda x: x[0])
+            
+            good_candidate = True
+            for j in range(0, len(coords)-1):
+                if (np.abs(coords[j+1][0] - coords[j][0]) != 1):
+                    good_candidate = False
+                    break
+
+            # extract community
+            if good_candidate:
+                subCopy = subGraph.copy()
+                nodes_to_remove = np.setdiff1d(all_node_nums, community_nodes)
+                subCopy.remove_nodes_from(nodes_to_remove)
+                valid_communities.append(subCopy)
+                vc_coords.append(coords)
+
+    return valid_communities, vc_coords
+
+
+# plot_save_subgraphs(valid_communities, "", "communities", save=False)

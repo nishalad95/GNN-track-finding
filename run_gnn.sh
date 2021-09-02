@@ -1,7 +1,8 @@
 #!/bin/bash
 
-SIGMA0=0.5
-CS=0.2
+SIGMA0=0.5          # r.m.s measurement error
+CS=0.2              # p-value acceptance level for good track candidate extraction
+n=4                 # minimum number of hits for good track candidate acceptance
 LUT=learn_KL/output/empvar/empvar.lut
 ROOTDIR=output
 
@@ -24,7 +25,7 @@ INPUT=$ROOTDIR/track_sim/cca_output/
 OUTPUT=$ROOTDIR/iteration_1/outlier_removal/
 mkdir -p $OUTPUT
 # clustering with empirical variance
-python clustering_v2.py -i $INPUT -o $OUTPUT -d track_state_estimates -l $LUT
+python clustering.py -i $INPUT -o $OUTPUT -d track_state_estimates -l $LUT
 
 
 # EXTRACT GOOD CANDIDATES
@@ -36,7 +37,7 @@ CANDIDATES=$ROOTDIR/iteration_1/candidates/
 REMAINING=$ROOTDIR/iteration_1/remaining/
 mkdir -p $CANDIDATES
 mkdir -p $REMAINING
-python extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -cs $CS -e $SIGMA0
+python extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -cs $CS -e $SIGMA0 -n $n
 
 
 # iteration 2
@@ -61,7 +62,7 @@ REMAINING=$ROOTDIR/iteration_2/remaining/
 mkdir -p $CANDIDATES
 mkdir -p $REMAINING
 cp -r output/iteration_1/candidates/ $CANDIDATES
-python extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -cs $CS -e $SIGMA0
+python extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -cs $CS -e $SIGMA0 -n $n
 
 
 # iteration 3
@@ -74,7 +75,7 @@ INPUT=$REMAINING
 OUTPUT=$ROOTDIR/iteration_3/outlier_removal/
 mkdir -p $OUTPUT
 # clustering with empirical variance
-python clustering_v2_updated_states.py -i $INPUT -o $OUTPUT -d updated_track_states -l $LUT
+python clustering_updated_states.py -i $INPUT -o $OUTPUT -d updated_track_states -l $LUT
 
 
 # EXTRACT GOOD CANDIDATES
@@ -87,7 +88,7 @@ REMAINING=$ROOTDIR/iteration_3/remaining/
 mkdir -p $CANDIDATES
 mkdir -p $REMAINING
 cp -r output/iteration_2/candidates/ $CANDIDATES
-python extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -cs $CS -e $SIGMA0
+python extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -cs $CS -e $SIGMA0 -n $n
 
 
 # iteration 4
@@ -112,7 +113,7 @@ REMAINING=$ROOTDIR/iteration_4/remaining/
 mkdir -p $CANDIDATES
 mkdir -p $REMAINING
 cp -r output/iteration_3/candidates/ $CANDIDATES
-python extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -cs $CS -e $SIGMA0
+python extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -cs $CS -e $SIGMA0 -n $n
 
 
 

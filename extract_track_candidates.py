@@ -8,17 +8,15 @@ import numpy as np
 import os
 import argparse
 from utils.utils import *
+from community_detection import community_detection
 
 
 def KF_track_fit(sigma0, coords):
+    
     obs_x = [c[0] for c in coords]
     obs_y = [c[1] for c in coords]
     yf = obs_y[0]
     dx = coords[1][0] - coords[0][0]
-    # dx = obs_x[1] - obs_x[0]
-
-    print("y measurements:\n", obs_y)
-    print("dx:", dx)
 
     # initialize KF at outermost layer
     f = KalmanFilter(dim_x=2, dim_z=1)
@@ -50,17 +48,21 @@ def KF_track_fit(sigma0, coords):
     total_chi2 = sum(chi2_dists)                    # chi squared statistic
     dof = len(obs_y) - 2                            # (no. of measurements * 1D) - no. of track params
     pval = distributions.chi2.sf(total_chi2, dof)
-    print("chi2 distances:", chi2_dists)
-    print("total chi2 dist", total_chi2)
     print("P value: ", pval)
 
+    # save pvalue to file
+    # print("SAVING P-VAL")
+    # file_object = open('pvals.txt', 'a')
+    # file_object.write(str(pval) + "\n")
+    # file_object.close()
+
     # plot the smoothed tracks
-    x_state = np.array(saver['x'])
-    y_a = x_state[:, 0] # y_a = y_b + t_b(x_a - x_b)
-    plt.scatter(obs_x, y_a, alpha=0.5, label="KF")
-    plt.scatter(obs_x, obs_y, alpha=0.5, label="Measurement")
-    plt.legend()
-    plt.show()
+    # x_state = np.array(saver['x'])
+    # y_a = x_state[:, 0] # y_a = y_b + t_b(x_a - x_b)
+    # plt.scatter(obs_x, y_a, alpha=0.5, label="KF")
+    # plt.scatter(obs_x, obs_y, alpha=0.5, label="Measurement")
+    # plt.legend()
+    # plt.show()
 
     return pval
 
@@ -93,6 +95,7 @@ def main():
     parser.add_argument('-r', '--remain', help='output directory to save remaining network')
     parser.add_argument('-cs', '--chisq', help='chi-squared track candidate acceptance level')
     parser.add_argument('-e', '--error', help="rms of track position measurements")
+    parser.add_argument('-n', '--numhits', help="minimum number of hits for good track candidate")
     args = parser.parse_args()
 
     inputDir = args.input
@@ -101,7 +104,7 @@ def main():
     track_acceptance = float(args.chisq)
     sigma0 = float(args.error)
     subgraph_path = "_subgraph.gpickle"
-    fragment = 4
+    fragment = int(args.numhits)
 
     # read in subgraph data
     subGraphs = []
@@ -147,21 +150,33 @@ def main():
             
             if good_candidate:
                 pval = KF_track_fit(sigma0, coords)
+                print("pval: ", pval)
                 if pval >= track_acceptance:
-                    print("Good KF fit, P value:", pval)
+                    print("Good KF fit, P value:", pval, "first coord:", coords[0])
                     extracted.append(candidate)
                 else:
-                    print("pval too small")
-                    # TODO
+                    print("pval too small, leave for further processing")
             else:
-                #TODO: run community detection
-                print("run community detection...")
+                print("Run community detection...")
+                valid_communities, vc_coords = community_detection(candidate, fragment)
+                if len(valid_communities) > 0:
+                    print("found communities via community detection")
+                    for vc, vcc in zip(valid_communities, vc_coords):
+                        pval = KF_track_fit(sigma0, vcc)
+                        if pval >= track_acceptance:
+                            print("Good KF fit, P value:", pval, "first coord:", vcc[0])
+                            extracted.append(vc)
+                            good_nodes = vc.nodes()
+                            subGraph.remove_nodes_from(good_nodes)
+                        else:
+                            print("pval too small, leave for further processing")
+                remaining.append(subGraph)
 
         else:
 
             candidate_to_remove_from_subGraph = []
             for n, candidate in enumerate(potential_tracks):
-                print("processing sub:", n)
+                print("Processing sub:", n)
 
                 # check for track fragments
                 if len(candidate.nodes()) <= fragment : 
@@ -182,15 +197,25 @@ def main():
                 if good_candidate:
                     pval = KF_track_fit(sigma0, coords)
                     if pval >= track_acceptance:
-                        print("Good KF fit, P value:", pval)
+                        print("Good KF fit, P value:", pval, "first coord:", coords[0])
                         extracted.append(candidate)
                         candidate_to_remove_from_subGraph.append(candidate)
                     else:
-                        print("pval too small")
-                        # TODO
+                        print("pval too small, leave for further processing")
                 else:
-                    #TODO: run community detection
-                    print("run community detection...")
+                    print("Run community detection...")   
+                    valid_communities, vc_coords = community_detection(candidate, fragment)
+                    if len(valid_communities) > 0:
+                        print("found communities via community detection")
+                        for vc, vcc in zip(valid_communities, vc_coords):
+                            pval = KF_track_fit(sigma0, vcc)
+                            if pval >= track_acceptance:
+                                print("Good KF fit, P value:", pval, "first coord:", vcc[0])
+                                extracted.append(vc)
+                                candidate_to_remove_from_subGraph.append(vc)
+                            else:
+                                print("pval too small, leave for further processing")
+
             
             # remove good candidates & save remaining network
             for good_candidate in candidate_to_remove_from_subGraph:
