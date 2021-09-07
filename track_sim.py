@@ -148,7 +148,7 @@ def main():
     # plot and save extracted subgraphs
     print("Saving subgraphs to serialized form & adjacency matrix...")
     title = "Weakly connected subgraphs extracted with variance of edge orientation <" + str(threshold)
-    plot_save_subgraphs(subGraphs, outputDir + "/cca_output/", title)
+    plot_save_subgraphs(subGraphs, outputDir + "/network/", title)
 
 
 if __name__ == "__main__":

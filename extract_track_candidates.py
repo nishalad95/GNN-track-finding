@@ -1,7 +1,6 @@
 from filterpy.kalman import *
 from filterpy import common
 from scipy.stats import distributions
-from scipy.stats import chi2 as chi_2
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
@@ -48,7 +47,7 @@ def KF_track_fit(sigma0, coords):
     total_chi2 = sum(chi2_dists)                    # chi squared statistic
     dof = len(obs_y) - 2                            # (no. of measurements * 1D) - no. of track params
     pval = distributions.chi2.sf(total_chi2, dof)
-    print("P value: ", pval)
+    # print("P value: ", pval)
 
     # save pvalue to file
     # print("SAVING P-VAL")
@@ -93,7 +92,7 @@ def main():
     parser.add_argument('-i', '--input', help='input directory of outlier removal')
     parser.add_argument('-c', '--candidates', help='output directory to save track candidates')
     parser.add_argument('-r', '--remain', help='output directory to save remaining network')
-    parser.add_argument('-cs', '--chisq', help='chi-squared track candidate acceptance level')
+    parser.add_argument('-p', '--pval', help='chi-squared track candidate acceptance level')
     parser.add_argument('-e', '--error', help="rms of track position measurements")
     parser.add_argument('-n', '--numhits', help="minimum number of hits for good track candidate")
     args = parser.parse_args()
@@ -101,10 +100,11 @@ def main():
     inputDir = args.input
     candidatesDir = args.candidates
     remainingDir = args.remain
-    track_acceptance = float(args.chisq)
+    track_acceptance = float(args.pval)
     sigma0 = float(args.error)
     subgraph_path = "_subgraph.gpickle"
     fragment = int(args.numhits)
+    iteration_num = inputDir.split("/")[1][-1]
 
     # read in subgraph data
     subGraphs = []
@@ -116,7 +116,7 @@ def main():
         i += 1
         path = inputDir + str(i) + subgraph_path
 
-    print("no. of subgraphs:", len(subGraphs))
+    print("Intial total no. of subgraphs:", len(subGraphs))
 
     extracted = []
     remaining = []
@@ -139,7 +139,6 @@ def main():
             # check for 1 hit per layer
             coords = list(nx.get_node_attributes(candidate,'coord_Measurement').values())
             coords = sorted(coords, reverse=True, key=lambda x: x[0])
-            print("coord:", coords[0])
             good_candidate = True
             for j in range(0, len(coords)-1):
                 if (np.abs(coords[j+1][0] - coords[j][0]) != 1):
@@ -150,7 +149,6 @@ def main():
             
             if good_candidate:
                 pval = KF_track_fit(sigma0, coords)
-                print("pval: ", pval)
                 if pval >= track_acceptance:
                     print("Good KF fit, P value:", pval, "first coord:", coords[0])
                     extracted.append(candidate)
@@ -186,7 +184,6 @@ def main():
                 # check for 1 hit per layer
                 coords = list(nx.get_node_attributes(candidate,'coord_Measurement').values())
                 coords = sorted(coords, reverse=True, key=lambda x: x[0])
-                print("Last coord: ", coords[0])
                 good_candidate = True
                 for j in range(0, len(coords)-1):
                     if (np.abs(coords[j+1][0] - coords[j][0]) != 1):
@@ -223,7 +220,12 @@ def main():
                 subGraph.remove_nodes_from(nodes)
             remaining.append(subGraph)
 
-                    
+    
+    # attach iteration number & color to good extracted tracks
+    color = ["#"+''.join([random.choice('0123456789ABCDEF') for _ in range(6) ])]
+    for subGraph in extracted:
+        subGraph.graph["iteration"] = iteration_num
+        subGraph.graph["color"] = color[0]
 
     # plot all extracted candidates, from previous iterations
     i = 0
@@ -233,7 +235,8 @@ def main():
         extracted.append(sub)
         i += 1
         path = candidatesDir + str(i) + subgraph_path
-    plot_save_subgraphs(extracted, candidatesDir, "Extracted candidates")
+    plot_save_subgraphs_iterations(extracted, candidatesDir, "Extracted candidates")
+    # plot_save_subgraphs(extracted, candidatesDir, "Extracted candidates")
     plot_save_subgraphs(remaining, remainingDir, "Remaining network")
 
 

@@ -43,7 +43,6 @@ def plot_save_subgraphs(GraphList, outputFile, title, save=True):
     colors = ["#bf6f2e", "#377fcc", "#78c953", "#c06de3"]
     for i, subGraph in enumerate(GraphList):
         color = colors[i % len(colors)]
-        # color = ["#"+''.join([random.choice('0123456789ABCDEF') for _ in range(6)])]
         pos=nx.get_node_attributes(subGraph,'coord_Measurement')
         edge_colors = []
         for u, v in subGraph.edges():
@@ -69,12 +68,47 @@ def plot_save_subgraphs(GraphList, outputFile, title, save=True):
             save_network(outputFile, i, sub)
 
 
+# used for visualising the good extracted candidates & iteration num
+def plot_save_subgraphs_iterations(GraphList, outputFile, title, save=True):
+    _, ax = plt.subplots(figsize=(12,10))
+
+    for subGraph in GraphList:
+        iteration = int(subGraph.graph["iteration"])
+        color = subGraph.graph["color"]
+        pos=nx.get_node_attributes(subGraph,'coord_Measurement')
+        edge_colors = []
+        for u, v in subGraph.edges():
+            if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
+            else: edge_colors.append("#f2f2f2")
+        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
+        nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=75, label=iteration)
+        nx.draw_networkx_labels(subGraph, pos)
+    ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
+    major_ticks = np.arange(0, 12, 1)
+    ax.set_xticks(major_ticks)
+    plt.xlim([0, 11])
+    plt.ylim([-27, 15])
+    plt.xlabel("ID layer in x axis")
+    plt.ylabel("y coordinate")
+    plt.title(title)
+
+    # plot legend & remove duplicate entries
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    plt.legend(by_label.values(), by_label.keys(), loc='upper left', title="iteration")    
+    plt.axis('on')
+    plt.savefig(outputFile + "subgraphs.png", dpi=300)
+
+    # save to serialized form & adjacency matrix
+    if save:
+        for i, sub in enumerate(GraphList):
+            save_network(outputFile, i, sub)
+
+
 # save network as serialized form & adjacency matrix
 def save_network(directory, i, subGraph):
     filename = directory + str(i) + "_subgraph.gpickle"
     nx.write_gpickle(subGraph, filename)
-    # A = nx.adjacency_matrix(subGraph).todense()
-    # np.savetxt(directory + str(i) + "_subgraph_matrix.csv", A)
 
 
 # plot the subgraphs extracted using threshold on nodes

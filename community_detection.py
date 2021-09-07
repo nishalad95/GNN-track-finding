@@ -98,7 +98,7 @@ def community_detection(subGraph, fragment):
         if freq > fragment:
             idx = np.where(membership == community)[0]
             community_nodes = [labels[i] for i in idx]
-            print(community_nodes)
+            # print(community_nodes)
 
             # check for 1 hit per layer
             coords = [subGraph.nodes[n]["coord_Measurement"] for n in community_nodes]

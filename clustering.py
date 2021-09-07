@@ -128,7 +128,7 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut):
             if smallest_dist < KL_thres:
 
                 # merge states
-                print("MERGING STATES & CLUSTERING")
+                # print("MERGING STATES & CLUSTERING")
                 merged_mean, merged_cov, merged_inv_cov = merge_states(edge_svs[idx[0]], inv_covs[idx[0]], edge_svs[idx[1]], inv_covs[idx[1]])
                 merged_prior = priors[idx[0]] + priors[idx[1]]
 
@@ -138,7 +138,7 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut):
                 inv_covs = np.delete(inv_covs, idx, axis=0)
                 priors = np.delete(priors, idx)
                 neighbors_to_deactivate = np.delete(neighbors_to_deactivate, idx, axis=0)
-                print("check neighbours to deactivate:", neighbors_to_deactivate)
+                # print("check neighbours to deactivate:", neighbors_to_deactivate)
                 num_edges = edge_svs.shape[0]
 
                 # calc distances to the merged state
@@ -152,7 +152,7 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut):
                 # recalc distances to merged state
                 while smallest_dist < KL_thres:
                     # merge states
-                    print("merging...")
+                    # print("merging...")
                     merged_mean, merged_cov, merged_inv_cov = merge_states(edge_svs[idx], inv_covs[idx], merged_mean, merged_inv_cov)
                     merged_prior = priors[idx] + merged_prior
 
@@ -162,7 +162,7 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut):
                     inv_covs = np.delete(inv_covs, idx, axis=0)
                     priors = np.delete(priors, idx)
                     neighbors_to_deactivate = np.delete(neighbors_to_deactivate, idx, axis=0)
-                    print("check neighbours to deactivate:", neighbors_to_deactivate)
+                    # print("check neighbours to deactivate:", neighbors_to_deactivate)
                     num_edges = edge_svs.shape[0]
 
                     # if all edges have merged, break the loop
@@ -175,12 +175,12 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut):
 
 
                 # store merged state as a node attribute
-                print("End of edge clusterising, saving merged state as node attribute")
+                # print("End of edge clusterising, saving merged state as node attribute")
                 subGraph.nodes[node_num][MERGED_STATE] = merged_mean
                 subGraph.nodes[node_num][MERGED_COVARIANCE] = merged_cov
                 subGraph.nodes[node_num][MERGED_PRIOR] = merged_prior
 
-                print("FINAL neighbours to deactivate:", neighbors_to_deactivate)
+                # print("Outliers found:", neighbors_to_deactivate)
 
                 if len(neighbors_to_deactivate) > 0:
                     for neighbour_num in neighbors_to_deactivate:
@@ -192,7 +192,7 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut):
 
             else:
                 # all edges are incompatible
-                print("NO CLUSTERS FOUND")
+                print("No clusters found for node num: ", node_num)
 
         # simultaneous deactivation of outlier edge connections
         print("Deactivating outlier edges...", edges_to_deactivate)
@@ -209,11 +209,9 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut):
                     perc_correct_outliers_detected += 1
             total_outliers += len(edges_to_deactivate)
 
-    print("numerator:", perc_correct_outliers_detected)
-    print("denominator:", total_outliers)
+    print("numerator:", perc_correct_outliers_detected, "denominator:", total_outliers)
     perc_correct_outliers_detected = (perc_correct_outliers_detected / total_outliers) * 100
-    print("PERC:", perc_correct_outliers_detected)
-
+    print("Percentage of correct outliers detected:", perc_correct_outliers_detected)
 
     # compute priors for a node based on inward edges??
     compute_prior_probabilities(subGraphs, TRACK_STATE_KEY)
