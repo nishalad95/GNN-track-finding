@@ -29,10 +29,6 @@ def main():
     y0 = np.array([-3,  1, -1,   3, -2,  2.5, -1.5]) #track positions at start, initial y
     yf = np.array([12, -4,  5, -14, -6, -24,   0]) #final track positions, final y
 
-    # 100+ track sim
-    #y0 = np.linspace(-3, 3, num=500)
-    #yf = np.linspace(-900, 900, num=500)
-    # random.shuffle(yf)
 
     # tau: track inclination, tau0 - gradient calculated from final & initial positions
     tau0 = (yf-y0)/(Lc[-1]-start)
@@ -62,12 +58,12 @@ def main():
         for l in range(Nl) : 
             random = np.random.normal(0.0,1.0)
             nu = sigma0*random #random error
-            gm = GNN_Measurement(xc[l], yc[l] + nu, tau0[i], sigma0, label=i, n=nNodes)
+            y_pos = yc[l] + nu
+            gm = GNN_Measurement(xc[l], y_pos, tau0[i], sigma0, label=i, n=nNodes)
             mcoll[l].append(gm)
             G.add_node(nNodes, GNN_Measurement=gm, 
-                               coord_Measurement=(xc[l], yc[l] + nu),
+                               coord_Measurement=(xc[l], y_pos),
                                truth_particle=i)
-            # print(G.nodes[nNodes]["GNN_Measurement"].track_label) # for cellular automata?
             nNodes += 1
             nhits += 1
             node_labels.append(nNodes)
@@ -75,6 +71,7 @@ def main():
         ax1.scatter(xc, yc)
     ax1.set_title('Ground truth')
     ax1.grid()
+
 
     # save the num of hits for simulated tracks
     with open(outputDir + 'truth_hit_data.txt', 'w') as file:
@@ -119,10 +116,19 @@ def main():
 
     # remove all nodes with mean edge orientation above threshold
     G = nx.Graph(G) # make a copy to unfreeze graph
-    # B = nx.Graph(G) # backup graph
     filteredNodes = [node for node, attr in G.nodes(data=True) if attr['edge_gradient_mean_var'][1] > threshold]
-    # TODO filteredNodes = [node for node, attr in G.nodes(data=True) if attr['multivariate_covariance'][1][1] > 0.05]
-
+    
+    # ensure no holes - for development purposes only
+    for i in range(Ntr):
+        start_value = i * len(Lc)
+        end_value = start_value + len(Lc) - 1
+        values_to_check = np.linspace(start_value, end_value, num=len(Lc), dtype=int)
+        intersection = sorted(list(set(values_to_check).intersection(filteredNodes)))
+        # print("intersection", intersection)
+        for j in range(len(intersection) - 1):
+            if np.abs(intersection[j+1] - intersection[j]) != 1:
+                for k in intersection[j+1:]: filteredNodes.remove(k)
+        # print("filtered nodes", filteredNodes)
     for node in filteredNodes: G.remove_node(node)
 
     

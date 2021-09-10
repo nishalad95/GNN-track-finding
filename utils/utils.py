@@ -236,15 +236,8 @@ def initialize_mixture_weights(GraphList):
 
 
 
-
 def initialize_edge_activation(GraphList):
-    for subGraph in GraphList:
-        for e in subGraph.edges:
-            attrs = {e: {"activated": 1}}
-            nx.set_edge_attributes(subGraph, attrs)
-
-
-#TODO: activate_edge() and deactivate_edge() functions
+    for subGraph in GraphList: nx.set_edge_attributes(subGraph, 1, "activated")
 
 
 def query_node_degree_in_edges(subGraph, node_num):

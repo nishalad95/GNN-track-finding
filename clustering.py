@@ -1,8 +1,5 @@
 import os, glob
-from networkx.generators import small
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 import networkx as nx
 import argparse
 from utils.utils import *
@@ -30,14 +27,12 @@ def calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs):
             pairwise_distances[i][j] = distance
     return pairwise_distances
 
-
 def calc_dist_to_merged_state(num_edges, edge_svs, edge_covs, inv_covs, merged_mean, merged_cov, merged_inv_cov):
     distances = []
     for i in range(num_edges):
         distance = KLDistance(edge_svs[i], edge_covs[i], inv_covs[i], merged_mean, merged_cov, merged_inv_cov)
         distances.append(distance)
     return distances
-
 
 def get_smallest_dist_idx(distances):
     if isinstance(distances, list):
@@ -50,7 +45,6 @@ def get_smallest_dist_idx(distances):
         row, column = np.where(distances==smallest_dist)
         idx = np.concatenate((row, column), axis=None)
     return smallest_dist, idx
-
 
 def load_lut(KL_lut):
     mapping = {}
@@ -72,8 +66,30 @@ def get_KL_upper_threshold(empvar_feature, distance, mapping):
         else: return 0
     return 0
 
+def reset_reactivate(subGraphs, sigma0):
+    reset_subGraphs = []
+    for subGraph in subGraphs:
 
-def cluster(inputDir, outputDir, track_state_key, KL_lut):
+        for (_,d) in subGraph.nodes(data=True):
+            if "merged_state" in d.keys(): 
+                del d["merged_state"]
+                del d["merged_cov"]
+                del d["merged_prior"]
+            if "updated_track_states" in d.keys():
+                del d["updated_track_states"]
+
+        for component in nx.weakly_connected_components(subGraph):
+            reset_subGraphs.append(subGraph.subgraph(component).copy())
+    
+    subGraphs = compute_track_state_estimates(reset_subGraphs, sigma0)
+    initialize_edge_activation(subGraphs)
+    compute_prior_probabilities(subGraphs, 'track_state_estimates')
+    initialize_mixture_weights(subGraphs)
+
+    return subGraphs
+
+
+def cluster(inputDir, outputDir, track_state_key, KL_lut, sigma0, reactivate):
 
     # variable names
     subgraph_path = "_subgraph.gpickle"
@@ -96,9 +112,15 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut):
         sub = nx.read_gpickle(file)
         subGraphs.append(sub)
 
+    # brute force approach to reset remaining network
+    if reactivate:
+        print("Resetting & reactivating all edges in remaining network")
+        subGraphs = reset_reactivate(subGraphs, sigma0)
+
+
+    # clustering on edges using KL-distance threshold
     perc_correct_outliers_detected = 0
     total_outliers = 0
-    # clustering on edges using KL-distance threshold
     for subGraph in subGraphs:
 
         edges_to_deactivate = []
@@ -128,7 +150,6 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut):
             if smallest_dist < KL_thres:
 
                 # merge states
-                # print("MERGING STATES & CLUSTERING")
                 merged_mean, merged_cov, merged_inv_cov = merge_states(edge_svs[idx[0]], inv_covs[idx[0]], edge_svs[idx[1]], inv_covs[idx[1]])
                 merged_prior = priors[idx[0]] + priors[idx[1]]
 
@@ -152,7 +173,6 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut):
                 # recalc distances to merged state
                 while smallest_dist < KL_thres:
                     # merge states
-                    # print("merging...")
                     merged_mean, merged_cov, merged_inv_cov = merge_states(edge_svs[idx], inv_covs[idx], merged_mean, merged_inv_cov)
                     merged_prior = priors[idx] + merged_prior
 
@@ -210,8 +230,9 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut):
             total_outliers += len(edges_to_deactivate)
 
     print("numerator:", perc_correct_outliers_detected, "denominator:", total_outliers)
-    perc_correct_outliers_detected = (perc_correct_outliers_detected / total_outliers) * 100
-    print("Percentage of correct outliers detected:", perc_correct_outliers_detected)
+    if total_outliers != 0:
+        perc_correct_outliers_detected = (perc_correct_outliers_detected / total_outliers) * 100
+        print("Percentage of correct outliers detected:", perc_correct_outliers_detected)
 
     # compute priors for a node based on inward edges??
     compute_prior_probabilities(subGraphs, TRACK_STATE_KEY)
@@ -236,14 +257,18 @@ def main():
     parser.add_argument('-o', '--output', help='output directory to save remaining network & track candidates')
     parser.add_argument('-d', '--dict', help='dictionary of track state estimates to use')
     parser.add_argument('-l', '--lut', help='lut file for KL distance acceptance region')
+    parser.add_argument('-e', '--error', help="rms of track position measurements")
+    parser.add_argument('-r', '--reactivateall', default=False, type=bool)
     args = parser.parse_args()
 
     inputDir = args.input
     outputDir = args.output
     track_states_key = args.dict
     KL_lut = args.lut
+    sigma0 = float(args.error)
+    reactivate = args.reactivateall
 
-    cluster(inputDir, outputDir, track_states_key, KL_lut)
+    cluster(inputDir, outputDir, track_states_key, KL_lut, sigma0, reactivate)
 
 
 

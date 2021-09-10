@@ -114,12 +114,28 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     H = np.array([[1.,0.]])
     residual = neighbour_y - H.dot(extrp_state)     # compute the residual
     S = H.dot(extrp_cov).dot(H.T) + sigma0**2       # covariance of residual (denominator of kalman gain)
-    # S = sigma0**2 - H.dot(extrp_cov).dot(H.T)
     inv_S = np.linalg.inv(S)
     chi2 = residual.T.dot(inv_S).dot(residual)
-    chi2_cut = chi2CutFactor * S[0][0]
-    # print("chi2:", chi2)
-    # print("chi2_cut:", chi2_cut)
+    # chi2_cut = chi2CutFactor * S[0][0]
+    chi2_cut = chi2CutFactor * 2 * sigma0
+    
+    print("chi2 distance:", chi2)
+    print("chi2_cut:", chi2_cut)
+    print("S[0][0]", S[0][0])
+    print("sigma0", sigma0)
+    print("node truth particle:", subGraph.nodes[node_num]["truth_particle"])
+    print("neighbour truth particle:", subGraph.nodes[neighbour_num]["truth_particle"])
+
+    # # save chi2 distance data
+    # # truth, chi2 distance, chi2_cut
+    # node_truth = subGraph.nodes[node_num]["truth_particle"]
+    # neighbour_truth = subGraph.nodes[neighbour_num]["truth_particle"]
+    # truth = 0
+    # if node_truth == neighbour_truth: truth = 1
+    # line = str(truth) + " " + str(chi2) + " " + str(chi2_cut) + "\n"
+    # with open('chi2_data_sigma_0.25.csv', 'a') as f:
+    #     f.write(line)
+
 
     # validate chi2 distance
     if chi2 < chi2_cut:
@@ -228,7 +244,6 @@ def main():
     os.chdir(".")
     for file in glob.glob(inputDir + "*" + subgraph_path):
         sub = nx.read_gpickle(file)
-        # print("File:", file)
         subGraphs.append(sub)
 
 

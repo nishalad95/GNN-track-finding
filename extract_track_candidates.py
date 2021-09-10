@@ -1,6 +1,6 @@
 from filterpy.kalman import *
 from filterpy import common
-from scipy.stats import distributions
+from scipy.stats import distributions, chisquare, chi2
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
@@ -15,6 +15,7 @@ def KF_track_fit(sigma0, coords):
     obs_x = [c[0] for c in coords]
     obs_y = [c[1] for c in coords]
     yf = obs_y[0]
+    # obs_y = obs_y[1:]
     dx = coords[1][0] - coords[0][0]
 
     # initialize KF at outermost layer
@@ -30,7 +31,7 @@ def KF_track_fit(sigma0, coords):
     # KF predict and update
     chi2_dists = []
     saver = common.Saver(f)
-    for measurement in obs_y:
+    for measurement in obs_y[1:]:
         f.predict()
         f.update(measurement)
         saver.save()
@@ -47,7 +48,7 @@ def KF_track_fit(sigma0, coords):
     total_chi2 = sum(chi2_dists)                    # chi squared statistic
     dof = len(obs_y) - 2                            # (no. of measurements * 1D) - no. of track params
     pval = distributions.chi2.sf(total_chi2, dof)
-    # print("P value: ", pval)
+    print("P value: ", pval)
 
     # save pvalue to file
     # print("SAVING P-VAL")
@@ -58,7 +59,7 @@ def KF_track_fit(sigma0, coords):
     # plot the smoothed tracks
     # x_state = np.array(saver['x'])
     # y_a = x_state[:, 0] # y_a = y_b + t_b(x_a - x_b)
-    # plt.scatter(obs_x, y_a, alpha=0.5, label="KF")
+    # plt.scatter(obs_x[1:], y_a, alpha=0.5, label="KF")
     # plt.scatter(obs_x, obs_y, alpha=0.5, label="Measurement")
     # plt.legend()
     # plt.show()
@@ -142,8 +143,7 @@ def main():
             good_candidate = True
             for j in range(0, len(coords)-1):
                 if (np.abs(coords[j+1][0] - coords[j][0]) != 1):
-                    print("Track", i, "bad candidate, not 1 hit per layer")
-                    remaining.append(subGraph)
+                    print("Track", i, "bad candidate, not 1 hit per layer, will process through community detection")
                     good_candidate = False
                     break
             
@@ -153,7 +153,8 @@ def main():
                     print("Good KF fit, P value:", pval, "first coord:", coords[0])
                     extracted.append(candidate)
                 else:
-                    print("pval too small, leave for further processing")
+                    print("pval too small,", pval, "leave for further processing")
+                    remaining.append(subGraph)
             else:
                 print("Run community detection...")
                 valid_communities, vc_coords = community_detection(candidate, fragment)
@@ -167,7 +168,7 @@ def main():
                             good_nodes = vc.nodes()
                             subGraph.remove_nodes_from(good_nodes)
                         else:
-                            print("pval too small, leave for further processing")
+                            print("pval too small,", pval, "leave for further processing")
                 remaining.append(subGraph)
 
         else:
@@ -198,7 +199,7 @@ def main():
                         extracted.append(candidate)
                         candidate_to_remove_from_subGraph.append(candidate)
                     else:
-                        print("pval too small, leave for further processing")
+                        print("pval too small,", pval, "leave for further processing")
                 else:
                     print("Run community detection...")   
                     valid_communities, vc_coords = community_detection(candidate, fragment)
@@ -211,7 +212,7 @@ def main():
                                 extracted.append(vc)
                                 candidate_to_remove_from_subGraph.append(vc)
                             else:
-                                print("pval too small, leave for further processing")
+                                print("pval too small,", pval, "leave for further processing")
 
             
             # remove good candidates & save remaining network
@@ -227,6 +228,7 @@ def main():
         subGraph.graph["iteration"] = iteration_num
         subGraph.graph["color"] = color[0]
 
+    print("Number of extracted candidates during this iteration:", len(extracted))
     # plot all extracted candidates, from previous iterations
     i = 0
     path = candidatesDir + str(i) + subgraph_path
@@ -235,6 +237,7 @@ def main():
         extracted.append(sub)
         i += 1
         path = candidatesDir + str(i) + subgraph_path
+    print("Total number of extracted candidates:", len(extracted))
     plot_save_subgraphs_iterations(extracted, candidatesDir, "Extracted candidates")
     # plot_save_subgraphs(extracted, candidatesDir, "Extracted candidates")
     plot_save_subgraphs(remaining, remainingDir, "Remaining network")
