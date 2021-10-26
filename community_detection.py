@@ -33,35 +33,13 @@ import pprint
 #     plt.show()
 
 
-# inputDir = "output_test1/iteration_2/remaining/"
-# inputDir = "output/iteration_2/remaining/"
-# fragment = 4
-
-# subgraph_path = "_subgraph.gpickle"
-# subGraphs = []
-# os.chdir(".")
-# for file in glob.glob(inputDir + "*" + subgraph_path):
-#     sub = nx.read_gpickle(file)
-
-#     edges_to_remove = []
-#     for u, v in sub.edges():
-#         if sub[u][v]['activated'] == 0:
-#             edges_to_remove.append((u,v))
-    
-#     for u, v in edges_to_remove:
-#         sub.remove_edge(u, v)
-
-#     subGraphs.append(sub)
-
-
-
 
 def community_detection(subGraph, fragment):
 
     edge_data = subGraph.edges.data()
     if len(edge_data) == 0: return [], []
 
-    # make a copy & remove deactive edges
+    # # make a copy & remove deactive edges
     sub = subGraph.copy()
     edges_to_remove = []
     for u, v in sub.edges():
@@ -70,21 +48,37 @@ def community_detection(subGraph, fragment):
     
     for u, v in edges_to_remove:
         sub.remove_edge(u, v)
+  
+    # # run a CCA and assign each subgraph a different partition - forms the intial partition ???
+    # sub = nx.to_directed(G)
+    # subGraphs = [sub.subgraph(c).copy() for c in nx.weakly_connected_components(sub)]
 
 
+    # convert to igraph
     isub = igraph.Graph.from_networkx(sub)
     coords = isub.vs()["coord_Measurement"]
     gnn_meas = isub.vs()["GNN_Measurement"]
-    isub.es["weights"] = isub.es()["mixture_weight"]
-    labels = [n.node for n in gnn_meas]
+    isub.es["weight"] = isub.es()["mixture_weight"]
 
+    print(isub.es["weight"])
+    labels = [n.node for n in gnn_meas]
+    weights = isub.es["weight"]
+
+    print("igraph: ", isub)
+    print("gnn measurement", gnn_meas, len(gnn_meas))
+    print("labels", labels, len(labels))
+    print("weights", weights, len(weights))
+
+    # print("Adjacency matrix:\n", isub.get_adjacency())
 
     # igraph.plot(isub, layout=coords, vertex_label=labels)
+                # edge_label = weights)
 
     partition = la.find_partition(isub, 
                                 la.ModularityVertexPartition, 
-                                weights="weights", 
+                                weights=weights, 
                                 n_iterations=-1)
+    
     
     # igraph.plot(partition, layout=coords, vertex_label=labels)
     membership = np.array(partition.membership)
@@ -121,4 +115,20 @@ def community_detection(subGraph, fragment):
     return valid_communities, vc_coords
 
 
+# ## TESTING 
+# inputDir = "output/iteration_1/remaining/"
+# fragment = 4
+
+# subgraph_path = "_subgraph.gpickle"
+# subGraphs = []
+# os.chdir(".")
+# for file in glob.glob(inputDir + "*" + subgraph_path):
+#     sub = nx.read_gpickle(file)
+#     # nx.set_edge_attributes(sub, 1, "activated")
+#     subGraphs.append(sub)
+
+# print("SubGraphs:", subGraphs)
+
+# valid_communities, _ = community_detection(subGraphs[0], fragment)
+# print("valid_communities", valid_communities)
 # plot_save_subgraphs(valid_communities, "", "communities", save=False)

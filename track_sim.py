@@ -121,6 +121,7 @@ def main():
             # print("nodes to merge:", nodes_to_merge)
             # print("truth particles to merge:", truth_particles)
             if len(nodes_to_merge) > 1: 
+                print("merging nodes:", nodes_to_merge, "in layer: ", l)
                 for k, node_num in enumerate(nodes_to_merge):
                     if k == 0 :
                         G.nodes[node_num]['mc_coord'] = (l, bin_centre)
@@ -228,7 +229,7 @@ def main():
     print("removing nodes with variance of edge orientation greater than: ", threshold)
     for (node, _) in filteredNodes: 
         G.remove_node(node)
-        print("removing node:", node)
+        # print("removing node:", node)
     
     # CCA: extract subgraphs
     G = nx.to_directed(G)
@@ -254,7 +255,7 @@ def main():
 
     
     # plot and save extracted subgraphs
-    print("Saving subgraphs to serialized form & adjacency matrix...")
+    print("Saving subgraphs to serialized form")
     title = "Weakly connected subgraphs extracted with variance of edge orientation <" + str(threshold)
     plot_save_subgraphs(subGraphs, outputDir + "/network/", title)
 

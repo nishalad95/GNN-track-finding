@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# ----------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------
 # VARIABLES
 # track sim
-VAR=0.7                 # TEMPORARY: remove nodes with empirical variance greater than VAR
-SIGMA0=0.5              # r.m.s measurement error
-ROOTDIR=output_sigma0.5          # main output directory to save results of algorithm
+VAR=0.8                       # TEMPORARY: remove nodes with empirical variance greater than VAR
+SIGMA0=0.5                    # r.m.s measurement error
+ROOTDIR=output                # main output directory to save results of algorithm
 
 # clustering
 LUT=learn_KL/output/empvar/empvar.lut       # LUT file for KL distance calibration
@@ -15,8 +15,8 @@ p=0.01                  # p-value acceptance level for good track candidate extr
 n=4                     # minimum number of hits for good track candidate acceptance
 
 # extrapolation
-c=10                    # initial chisquare distance acceptance threshold factor for extrapolated states
-# ----------------------------------------------------------------
+c=2  # initial chisquare distance acceptance threshold factor for extrapolated states
+# ----------------------------------------------------------------------------------------------
 
 
 # track simulation
@@ -29,7 +29,8 @@ python track_sim.py -t $VAR -o $OUTPUT -e $SIGMA0
 
 
 INPUT=$ROOTDIR/track_sim/network/
-for i in {1..6};
+# INPUT=$ROOTDIR/iteration_1/remaining/   # testing only
+for i in {1..2};
     do
         OUTPUT=$ROOTDIR/iteration_$i/network/
         mkdir -p $OUTPUT

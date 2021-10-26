@@ -236,17 +236,22 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, sigma0, reactivate):
 
     # compute priors for a node based on inward edges??
     compute_prior_probabilities(subGraphs, TRACK_STATE_KEY)
+  
     title = "Filtered Graph outlier edge removal using clustering with KL distance measure"
     plot_save_subgraphs(subGraphs, outputDir, title)
     plot_subgraphs_merged_state(subGraphs, outputDir, title)
 
-    # for i, s in enumerate(subGraphs):
-    #     print("-------------------")
-    #     print("SUBGRAPH " + str(i))
-    #     for node in s.nodes(data=True):
-    #         pprint.pprint(node)
-    #     print("--------------------")
-    #     print("EDGE DATA:", s.edges.data(), "\n")
+    for i, s in enumerate(subGraphs):
+        print("-------------------")
+        print("SUBGRAPH " + str(i))
+        print("-------------------")
+        print("EDGE DATA:")
+        for connection in s.edges.data():
+            print(connection)
+        print("-------------------")
+        for node in s.nodes(data=True):
+            pprint.pprint(node)
+        print("--------------------")
 
     
 

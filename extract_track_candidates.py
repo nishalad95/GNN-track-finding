@@ -104,6 +104,7 @@ def main():
     track_acceptance = float(args.pval)
     sigma0 = float(args.error)
     subgraph_path = "_subgraph.gpickle"
+    pvalsfile_path = "_pvals.csv"
     fragment = int(args.numhits)
     iteration_num = inputDir.split("/")[1][-1]
 
@@ -120,6 +121,7 @@ def main():
     print("Intial total no. of subgraphs:", len(subGraphs))
 
     extracted = []
+    extracted_pvals = []
     remaining = []
     for i, subGraph in enumerate(subGraphs):
         
@@ -152,6 +154,7 @@ def main():
                 if pval >= track_acceptance:
                     print("Good KF fit, P value:", pval, "first coord:", coords[0])
                     extracted.append(candidate)
+                    extracted_pvals.append(pval)
                 else:
                     print("pval too small,", pval, "leave for further processing")
                     remaining.append(subGraph)
@@ -165,6 +168,7 @@ def main():
                         if pval >= track_acceptance:
                             print("Good KF fit, P value:", pval, "first coord:", vcc[0])
                             extracted.append(vc)
+                            extracted_pvals.append(pval)
                             good_nodes = vc.nodes()
                             subGraph.remove_nodes_from(good_nodes)
                         else:
@@ -197,6 +201,7 @@ def main():
                     if pval >= track_acceptance:
                         print("Good KF fit, P value:", pval, "first coord:", coords[0])
                         extracted.append(candidate)
+                        extracted_pvals.append(pval)
                         candidate_to_remove_from_subGraph.append(candidate)
                     else:
                         print("pval too small,", pval, "leave for further processing")
@@ -210,6 +215,7 @@ def main():
                             if pval >= track_acceptance:
                                 print("Good KF fit, P value:", pval, "first coord:", vcc[0])
                                 extracted.append(vc)
+                                extracted_pvals.append(pval)
                                 candidate_to_remove_from_subGraph.append(vc)
                             else:
                                 print("pval too small,", pval, "leave for further processing")
@@ -237,10 +243,12 @@ def main():
         extracted.append(sub)
         i += 1
         path = candidatesDir + str(i) + subgraph_path
+
     print("Total number of extracted candidates:", len(extracted))
-    plot_save_subgraphs_iterations(extracted, candidatesDir, "Extracted candidates")
-    # plot_save_subgraphs(extracted, candidatesDir, "Extracted candidates")
+    plot_save_subgraphs_iterations(extracted, extracted_pvals, candidatesDir, "Extracted candidates")
     plot_save_subgraphs(remaining, remainingDir, "Remaining network")
+
+    # plot the distribution of edge weightings within the extracted candidates
 
 
 

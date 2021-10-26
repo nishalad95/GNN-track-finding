@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from itertools import count
 import numpy as np
+import csv
 import random
 import pprint
 
@@ -69,7 +70,7 @@ def plot_save_subgraphs(GraphList, outputFile, title, save=True):
 
 
 # used for visualising the good extracted candidates & iteration num
-def plot_save_subgraphs_iterations(GraphList, outputFile, title, save=True):
+def plot_save_subgraphs_iterations(GraphList, extracted_pvals, outputFile, title, save=True):
     _, ax = plt.subplots(figsize=(12,10))
 
     for subGraph in GraphList:
@@ -99,10 +100,16 @@ def plot_save_subgraphs_iterations(GraphList, outputFile, title, save=True):
     plt.axis('on')
     plt.savefig(outputFile + "subgraphs.png", dpi=300)
 
-    # save to serialized form & adjacency matrix
     if save:
         for i, sub in enumerate(GraphList):
-            save_network(outputFile, i, sub)
+            save_network(outputFile, i, sub) # save network to serialized form
+        
+        # save extracted candidate track quality information
+        f = open(outputFile + "pvals.csv", 'w')
+        writer = csv.writer(f)
+        for pval in extracted_pvals:
+            writer.writerow([pval])
+        f.close()
 
 
 # save network as serialized form & adjacency matrix
@@ -272,3 +279,87 @@ def run_cca(GraphList):
             cca_subGraphs.append(subGraph.subgraph(component).copy())
     print("NUMBER OF SUBGRAPHS ", len(cca_subGraphs))
     return cca_subGraphs
+
+
+# used in extrapolate_merged_states
+def calculate_side_norm_factor(subGraph, node, updated_track_states):
+    
+    # split track state estimates into LHS & RHS
+    node_num = node[0]
+    node_attr = node[1]
+    node_x_layer = node_attr['GNN_Measurement'].x
+    left_nodes, right_nodes = [], []
+    left_coords, right_coords = [], []
+
+    for neighbour_num, _ in updated_track_states.items():
+        neighbour_x_layer = subGraph.nodes[neighbour_num]['GNN_Measurement'].x
+
+        # only calculate for activated edges
+        if subGraph[neighbour_num][node_num]['activated'] == 1:
+            if neighbour_x_layer < node_x_layer: 
+                left_nodes.append(neighbour_num)
+                left_coords.append(neighbour_x_layer)
+            else: 
+                right_nodes.append(neighbour_num)
+                right_coords.append(neighbour_x_layer)
+    
+    # store norm factor as node attribute
+    left_norm = len(list(set(left_coords)))
+    for left_neighbour in left_nodes:
+        updated_track_states[left_neighbour]['side'] = "left"
+        updated_track_states[left_neighbour]['lr_layer_norm'] = 1
+        if subGraph[neighbour_num][node_num]['activated'] == 1:
+            updated_track_states[left_neighbour]['lr_layer_norm'] = left_norm
+
+    right_norm = len(list(set(right_coords)))
+    for right_neighbour in right_nodes:
+        updated_track_states[right_neighbour]['side'] = "right"
+        updated_track_states[right_neighbour]['lr_layer_norm'] = 1
+        if subGraph[neighbour_num][node_num]['activated'] == 1:
+            updated_track_states[right_neighbour]['lr_layer_norm'] = right_norm
+
+
+# used in extrapolate_merged_states
+def reweight(subGraphs, track_state_estimates_key):
+    print("Reweighting Gaussian mixture...")
+    # TODO: tune this threshold
+    reweight_threshold = 0.1
+
+    for subGraph in subGraphs:
+        if len(subGraph.nodes()) == 1: continue
+
+        for node in subGraph.nodes(data=True):
+            node_num = node[0]
+            node_attr = node[1]
+
+            if track_state_estimates_key in node_attr.keys():
+                print("\nReweighting node:", node_num)
+                updated_track_states = node_attr[track_state_estimates_key]
+                
+                calculate_side_norm_factor(subGraph, node, updated_track_states)
+                
+                # compute reweight denominator
+                reweight_denom = 0
+                for neighbour_num, updated_state_dict in updated_track_states.items():
+                    if subGraph[neighbour_num][node_num]['activated'] == 1:
+                        reweight_denom += (updated_state_dict['mixture_weight'] * updated_state_dict['likelihood'])
+                
+                # compute reweight
+                for neighbour_num, updated_state_dict in updated_track_states.items():
+                    if subGraph[neighbour_num][node_num]['activated'] == 1:
+                        reweight = (updated_state_dict['mixture_weight'] * updated_state_dict['likelihood'] * updated_state_dict['prior']) / reweight_denom
+                        reweight /= updated_state_dict['lr_layer_norm']
+                        print("REWEIGHT:", reweight)
+                        print("side:", updated_state_dict['side'])  
+                        updated_state_dict['mixture_weight'] = reweight
+
+                        # add as edge attribute
+                        subGraph[neighbour_num][node_num]['mixture_weight'] = reweight
+                    
+                        # reactivate/deactivate
+                        if reweight < reweight_threshold:
+                            subGraph[neighbour_num][node_num]['activated'] = 0
+                            print("deactivating edge: (", neighbour_num, ",", node_num, ")")
+                        else:
+                            subGraph[neighbour_num][node_num]['activated'] = 1
+                            print("reactivating edge: (", neighbour_num, ",", node_num, ")")
