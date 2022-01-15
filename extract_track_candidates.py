@@ -9,6 +9,7 @@ import argparse
 from utils.utils import *
 from community_detection import community_detection
 
+COMMUNITY_DETECTION = False
 
 def KF_track_fit(sigma0, coords):
     
@@ -159,20 +160,21 @@ def main():
                     print("pval too small,", pval, "leave for further processing")
                     remaining.append(subGraph)
             else:
-                print("Run community detection...")
-                valid_communities, vc_coords = community_detection(candidate, fragment)
-                if len(valid_communities) > 0:
-                    print("found communities via community detection")
-                    for vc, vcc in zip(valid_communities, vc_coords):
-                        pval = KF_track_fit(sigma0, vcc)
-                        if pval >= track_acceptance:
-                            print("Good KF fit, P value:", pval, "first coord:", vcc[0])
-                            extracted.append(vc)
-                            extracted_pvals.append(pval)
-                            good_nodes = vc.nodes()
-                            subGraph.remove_nodes_from(good_nodes)
-                        else:
-                            print("pval too small,", pval, "leave for further processing")
+                if COMMUNITY_DETECTION:
+                    print("Run community detection...")
+                    valid_communities, vc_coords = community_detection(candidate, fragment)
+                    if len(valid_communities) > 0:
+                        print("found communities via community detection")
+                        for vc, vcc in zip(valid_communities, vc_coords):
+                            pval = KF_track_fit(sigma0, vcc)
+                            if pval >= track_acceptance:
+                                print("Good KF fit, P value:", pval, "first coord:", vcc[0])
+                                extracted.append(vc)
+                                extracted_pvals.append(pval)
+                                good_nodes = vc.nodes()
+                                subGraph.remove_nodes_from(good_nodes)
+                            else:
+                                print("pval too small,", pval, "leave for further processing")
                 remaining.append(subGraph)
 
         else:
@@ -206,19 +208,20 @@ def main():
                     else:
                         print("pval too small,", pval, "leave for further processing")
                 else:
-                    print("Run community detection...")   
-                    valid_communities, vc_coords = community_detection(candidate, fragment)
-                    if len(valid_communities) > 0:
-                        print("found communities via community detection")
-                        for vc, vcc in zip(valid_communities, vc_coords):
-                            pval = KF_track_fit(sigma0, vcc)
-                            if pval >= track_acceptance:
-                                print("Good KF fit, P value:", pval, "first coord:", vcc[0])
-                                extracted.append(vc)
-                                extracted_pvals.append(pval)
-                                candidate_to_remove_from_subGraph.append(vc)
-                            else:
-                                print("pval too small,", pval, "leave for further processing")
+                    if COMMUNITY_DETECTION:
+                        print("Run community detection...")   
+                        valid_communities, vc_coords = community_detection(candidate, fragment)
+                        if len(valid_communities) > 0:
+                            print("found communities via community detection")
+                            for vc, vcc in zip(valid_communities, vc_coords):
+                                pval = KF_track_fit(sigma0, vcc)
+                                if pval >= track_acceptance:
+                                    print("Good KF fit, P value:", pval, "first coord:", vcc[0])
+                                    extracted.append(vc)
+                                    extracted_pvals.append(pval)
+                                    candidate_to_remove_from_subGraph.append(vc)
+                                else:
+                                    print("pval too small,", pval, "leave for further processing")
 
             
             # remove good candidates & save remaining network

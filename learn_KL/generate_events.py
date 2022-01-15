@@ -122,7 +122,7 @@ def simulate_event(threshold, sigma0, outputDir):
 
     initialize_edge_activation(subGraphs)
     compute_prior_probabilities(subGraphs)
-    initialize_mixture_weights(subGraphs)
+    compute_mixture_weights(subGraphs)
 
     # for i, s in enumerate(subGraphs):
     #     print("-------------------")

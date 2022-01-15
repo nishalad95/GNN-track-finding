@@ -227,19 +227,37 @@ def compute_prior_probabilities(GraphList, track_state_key):
                     track_state_estimates[neighbour_num]['prior'] = prior
 
 
-def initialize_mixture_weights(GraphList):
+def compute_mixture_weights(GraphList):
     for subGraph in GraphList:
         nodes = subGraph.nodes(data=True)
         if len(nodes) == 1: continue
         for node in nodes:
-            mixture_weight = 1/node[1]['degree']
+            
+            node_num = node[0]
+            node_degree = query_node_degree_in_edges(subGraph, node_num)
+            mixture_weight = 1/node_degree
+
             track_state_estimates = node[1]['track_state_estimates']
             for neighbour_num, v in track_state_estimates.items():
                 v['mixture_weight'] = mixture_weight
 
                 # add as an edge attribute - useful in community detection
-                node_num = node[0]
                 subGraph[neighbour_num][node_num]['mixture_weight'] = mixture_weight
+
+
+# def initialize_mixture_weights(GraphList):
+#     for subGraph in GraphList:
+#         nodes = subGraph.nodes(data=True)
+#         if len(nodes) == 1: continue
+#         for node in nodes:
+#             mixture_weight = 1/node[1]['degree']
+#             track_state_estimates = node[1]['track_state_estimates']
+#             for neighbour_num, v in track_state_estimates.items():
+#                 v['mixture_weight'] = mixture_weight
+
+#                 # add as an edge attribute - useful in community detection
+#                 node_num = node[0]
+#                 subGraph[neighbour_num][node_num]['mixture_weight'] = mixture_weight
 
 
 
@@ -249,12 +267,12 @@ def initialize_edge_activation(GraphList):
 
 def query_node_degree_in_edges(subGraph, node_num):
     in_edges = subGraph.in_edges(node_num) # one direction only, not double counted
-    # print("IN EDGES", in_edges)
     node_degree = 0
     for edge in in_edges:
         neighbour_num = edge[0]
         if (subGraph[neighbour_num][node_num]["activated"] == 1) : node_degree += 1
     return node_degree
+
 
 def query_empirical_mean_var(subGraph, node_num):
     gradients = []
@@ -322,7 +340,6 @@ def calculate_side_norm_factor(subGraph, node, updated_track_states):
 # used in extrapolate_merged_states
 def reweight(subGraphs, track_state_estimates_key):
     print("Reweighting Gaussian mixture...")
-    # TODO: tune this threshold
     reweight_threshold = 0.1
 
     for subGraph in subGraphs:

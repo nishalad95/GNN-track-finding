@@ -239,7 +239,7 @@ def main():
     subGraphs = compute_track_state_estimates(subGraphs, sigma0)
     initialize_edge_activation(subGraphs)
     compute_prior_probabilities(subGraphs, 'track_state_estimates')
-    initialize_mixture_weights(subGraphs)
+    compute_mixture_weights(subGraphs)
     
     # for i, s in enumerate(subGraphs):
     #     print("-------------------")

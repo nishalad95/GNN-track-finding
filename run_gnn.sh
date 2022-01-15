@@ -62,6 +62,10 @@ for i in {1..2};
             python clustering_updated_states.py -i $INPUT -o $OUTPUT -d updated_track_states -l $LUT
         fi
         
+        # TODO: Run shared_hit_identification here!
+
+
+
         echo "---------------------------------"
         echo "Extracting good track candidates"
         echo "---------------------------------"

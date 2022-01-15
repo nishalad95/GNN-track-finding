@@ -84,7 +84,7 @@ def reset_reactivate(subGraphs, sigma0):
     subGraphs = compute_track_state_estimates(reset_subGraphs, sigma0)
     initialize_edge_activation(subGraphs)
     compute_prior_probabilities(subGraphs, 'track_state_estimates')
-    initialize_mixture_weights(subGraphs)
+    compute_mixture_weights(subGraphs)
 
     return subGraphs
 
@@ -234,7 +234,10 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, sigma0, reactivate):
         perc_correct_outliers_detected = (perc_correct_outliers_detected / total_outliers) * 100
         print("Percentage of correct outliers detected:", perc_correct_outliers_detected)
 
-    # compute priors for a node based on inward edges??
+
+    # reweight the mixture based on inward active edges
+    compute_mixture_weights(subGraphs)
+    # compute priors for a node based on inward edges
     compute_prior_probabilities(subGraphs, TRACK_STATE_KEY)
   
     title = "Filtered Graph outlier edge removal using clustering with KL distance measure"
