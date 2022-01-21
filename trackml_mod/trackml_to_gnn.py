@@ -3,94 +3,76 @@ import numpy as np
 import matplotlib.pyplot as plt
 import csv
 import networkx as nx
+import random
 from GNN_Measurement import GNN_Measurement
-
-def plotGraph(graph):
-    # plot network in xy
-    _, ax = plt.subplots(figsize=(12,10))
-    pos = nx.get_node_attributes(graph,'coord_Measurement')
-    nx.draw_networkx_nodes(graph, pos, node_size=5)
-    nx.draw_networkx_edges(G, pos, alpha=0.4)
-    # nx.draw_networkx_labels(graph, pos)
-    plt.xlabel("x")
-    plt.ylabel("y")
-    plt.title("Nodes & Edges extracted from TrackML generated data")
-    #plt.savefig("xy_pixel78_trackml_mod.png", dpi=300)
-    plt.show()
-
-    # plot network in rz
-    _, ax = plt.subplots(figsize=(12,10))
-    pos = nx.get_node_attributes(graph,'r_z_coords')
-    nx.draw_networkx_nodes(graph, pos, node_size=5)
-    nx.draw_networkx_edges(G, pos, alpha=0.4)
-    # nx.draw_networkx_labels(graph, pos)
-    plt.xlabel("r")
-    plt.ylabel("z")
-    plt.title("Nodes & Edges extracted from TrackML generated data")
-    #plt.savefig("rz_pixel78_trackml_mod.png", dpi=300)
-    plt.show()
-
-    # plot xyz
-    _, ax = plt.subplots(figsize=(12,10))
-    pos = nx.get_node_attributes(graph,'coord_Measurement_3d')
-    nx.draw_networkx_nodes(graph, pos, node_size=5)
-    plt.show()
+from helper import *
+import pprint
 
 
-# graph nodes
-df_nodes = pd.read_csv("generated_events/event_1_filtered_graph_nodes.csv")
-# select graph nodes in 7 & 8 pixel volumes
-pixel_nodes_7_8 = df_nodes.loc[(df_nodes['layer_id'] >= 7000) & (df_nodes['layer_id'] <= 8999)] # look at barrel & endcap (left) only
-pixel_nodes_7_8['r'] = pixel_nodes_7_8.apply(lambda row: np.sqrt(row.x**2 + row.y**2), axis = 1)
-# print(pixel_nodes_7_8)
+def main():
 
-# graph edges
-df_edges = pd.read_csv("generated_events/event_1_filtered_graph_edges.csv")
-# set new header
-new_header = df_edges.iloc[0] #grab the first row for the header
-df_edges = df_edges[1:] #take the data less the header row
-df_edges.columns = new_header #set the header row as the df header
-# convert edge string tuple to ints
-df_edges['node2i'] = df_edges.apply(lambda row: row.name[0], axis=1)
-df_edges['node1i'] = df_edges.apply(lambda row: row.name[1], axis=1)
-df_edges = df_edges.astype({'node2i': 'int32', 'node1i': 'int32'})
-# select graph edges in 7 & 8 pixel volumes
-pixel_edges_7_8 = df_edges.loc[(df_edges['node2i'] >= 7000) & (df_edges['node2i'] <= 8999) & 
-                                (df_edges['node1i'] >= 7000) & (df_edges['node1i'] <= 8999)] 
-# print(pixel_edges_7_8)
+    event_path = "generated_events/event_1_filtered_graph_"
+    truth_event_path = "truth/event000001000-"
+    truth_event_file = truth_event_path + "nodes-particles-id.csv"
+    max_volume_region = 8000 # first consider endcap volume 7 only
+
+    nodes, edges = load_metadata(event_path, max_volume_region)
+    # load_save_truth(event_path, truth_event_path, truth_event_file) #  only need to execute once
+    truth = pd.read_csv(truth_event_file)
+
+    # create a graph network
+    endcap_graph = nx.DiGraph()
+    sigma0 = 0.5
+    construct_graph(endcap_graph, nodes, edges, truth, sigma0)
+
+    # plot the network
+    # plotGraph(endcap_graph, "endcap7_trackml_mod.png")
+    print("Endcap volume 7 graph network:")
+    print("Number of edges:", endcap_graph.number_of_edges())
+    print("Number of nodes:", endcap_graph.number_of_nodes())
+
+    # compute track state estimates
+    endcap_graph = compute_track_state_estimates([endcap_graph], sigma0)
+
+    # # print node information
+    # for i, s in enumerate(endcap_graph):
+    #     print("-------------------")
+    #     print("SUBGRAPH " + str(i))
+    #     print("-------------------")
+    #     for node in s.nodes(data=True):
+    #         pprint.pprint(node)
+    #     print("--------------------")
+
+    # maybe we don't need to filter any nodes
+    # # remove all nodes with mean edge orientation above threshold
+    # # see how the algorithm behaves in the cold region and just the endcap
+    # threshold = 0.8
+    endcap_graph = nx.Graph(endcap_graph[0])
+    # filteredNodes = [(node, attr['coord_Measurement'])for node, attr in endcap_graph.nodes(data=True) if attr['edge_gradient_mean_var'][1] > threshold]
+    # print("Removing nodes with variance of edge orientation greater than: ", threshold)
+    # for (node, _) in filteredNodes: 
+    #     endcap_graph.remove_node(node)
+    #     # print("removing node:", node)
+    # print("Number of nodes removed:", len(filteredNodes))
+
+    # out-of-the-box CCA: extract subgraphs
+    endcap_graph = nx.to_directed(endcap_graph)
+    subGraphs = [endcap_graph.subgraph(c).copy() for c in nx.weakly_connected_components(endcap_graph)]
+    
+    # compute track state estimates, priors and assign initial edge weightings
+    subGraphs = compute_track_state_estimates(subGraphs, sigma0)
+    initialize_edge_activation(subGraphs)
+    compute_prior_probabilities(subGraphs, 'track_state_estimates')
+    compute_mixture_weights(subGraphs)
+
+    print("Number of subgraphs..", len(subGraphs))
+    # plot_subgraphs(subGraphs)
+
+    # save the subgraphs
+    outputDir = "output/track_sim/network/"
+    for i, sub in enumerate(subGraphs):
+        save_network(outputDir, i, sub)
 
 
-# create a graph network
-# for every line in the df, compute gnn_measurement object
-# label = MC truth track label (particle reference)
-# n = node index
-# gm = GNN_Measurement(xpos, ypos, dy_dx, sigma0, label=i, n=nNodes)
-# G.add_node(nNodes, GNN_Measurement=gm, 
-#                                coord_Measurement=(xc[l], y_pos),
-#                                truth_particle=[i],
-#                                color=color[i])  
-G = nx.Graph()
-sigma0 = 0.5
-tau = 0 # TODO
-for i in range(len(pixel_nodes_7_8)):
-    row = pixel_nodes_7_8.iloc[i]
-    x = row.x
-    y = row.y
-    z = row.z
-    r = row.r
-    n = row.node_idx
-    label = i
-    gm = GNN_Measurement(x, y, tau, sigma0, label=label, n=n)
-    G.add_node(n, GNN_Measurement=gm, 
-                  coord_Measurement=(x, y),
-                  coord_Measurement_3d=(x, y, z),
-                  r_z_coords=(z, r))
-
-for i in range(len(pixel_edges_7_8)):
-    row = pixel_edges_7_8.iloc[i]
-    edge = (row.node2i, row.node1i)
-    G.add_edge(*edge)
-
-
-# plot the graph network
-plotGraph(G)
+if __name__ == "__main__":
+    main()
