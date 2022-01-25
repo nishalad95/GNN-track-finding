@@ -97,6 +97,7 @@ def main():
     parser.add_argument('-p', '--pval', help='chi-squared track candidate acceptance level')
     parser.add_argument('-e', '--error', help="rms of track position measurements")
     parser.add_argument('-n', '--numhits', help="minimum number of hits for good track candidate")
+    parser.add_argument('-t', '--trackml_mod', help="if data simulation in trackml setup", default=0)
     args = parser.parse_args()
 
     inputDir = args.input
@@ -107,7 +108,8 @@ def main():
     subgraph_path = "_subgraph.gpickle"
     pvalsfile_path = "_pvals.csv"
     fragment = int(args.numhits)
-    iteration_num = inputDir.split("/")[1][-1]
+    iteration_num = inputDir.split("/")[2][-1]
+    trackml_mod = bool(args.trackml_mod)
 
     # read in subgraph data
     subGraphs = []
@@ -142,14 +144,28 @@ def main():
 
             # check for 1 hit per layer
             coords = list(nx.get_node_attributes(candidate,'coord_Measurement').values())
-            coords = sorted(coords, reverse=True, key=lambda x: x[0])
-            good_candidate = True
-            for j in range(0, len(coords)-1):
-                if (np.abs(coords[j+1][0] - coords[j][0]) != 1):
-                    print("Track", i, "bad candidate, not 1 hit per layer, will process through community detection")
-                    good_candidate = False
-                    break
+            in_volume_layer_ids = list(nx.get_node_attributes(candidate, 'in_volume_layer_id').values())
             
+            if trackml_mod:
+                in_volume_layer_ids = sorted(in_volume_layer_ids, reverse=True)
+                good_candidate = True
+                for j in range(0, len(in_volume_layer_ids)-1):
+                    if (int(np.abs(in_volume_layer_ids[j+1] - in_volume_layer_ids[j])) != 2):
+                        print("Processing in_volume_layer_ids")
+                        print("Track", i, "bad candidate, not 1 hit per layer, will process through community detection")
+                        good_candidate = False
+                        break
+            else:
+                coords = sorted(coords, reverse=True, key=lambda x: x[0])
+                good_candidate = True
+                for j in range(0, len(coords)-1):
+                    if (np.abs(coords[j+1][0] - coords[j][0]) != 1):
+                        print("Processing x coordinate layer IDs")
+                        print("Track", i, "bad candidate, not 1 hit per layer, will process through community detection")
+                        good_candidate = False
+                        break
+            
+
             if good_candidate:
                 pval = KF_track_fit(sigma0, coords)
                 if pval >= track_acceptance:

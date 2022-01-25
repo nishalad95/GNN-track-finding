@@ -4,11 +4,17 @@ import matplotlib.pyplot as plt
 import csv
 import networkx as nx
 import random
-from GNN_Measurement import GNN_Measurement
+from modules.GNN_Measurement import *
 import pprint
 
 def edge_length_xy(row):
     return np.sqrt(row.x**2 + row.y**2)
+
+def get_volume_id(layer_id):
+    return int(layer_id / 1000)
+
+def get_in_volume_layer_id(layer_id):
+    return int(layer_id % 100)
 
 
 def initialize_edge_activation(GraphList):
@@ -34,7 +40,7 @@ def compute_prior_probabilities(GraphList, track_state_key):
             for neighbour_num, _ in track_state_estimates.items():
                 # inward edge coming into the node from the neighbour
                 if subGraph[neighbour_num][node_num]['activated'] == 1:
-                    layer = subGraph.nodes[neighbour_num]['GNN_Measurement'].x
+                    layer = subGraph.nodes[neighbour_num]['GNN_Measurement_3D'].x
                     if layer in layer_neighbour_num_dict.keys():
                         layer_neighbour_num_dict[layer].append(neighbour_num)
                     else:
@@ -81,10 +87,10 @@ def compute_track_state_estimates(GraphList, sigma0):
         for node in G.nodes():
             gradients = []
             state_estimates = {}
-            m1 = (G.nodes[node]["GNN_Measurement"].x, G.nodes[node]["GNN_Measurement"].y)
+            m1 = (G.nodes[node]["GNN_Measurement_3D"].x, G.nodes[node]["GNN_Measurement_3D"].y)
                         
             for neighbor in nx.all_neighbors(G, node):
-                m2 = (G.nodes[neighbor]["GNN_Measurement"].x, G.nodes[neighbor]["GNN_Measurement"].y)
+                m2 = (G.nodes[neighbor]["GNN_Measurement_3D"].x, G.nodes[neighbor]["GNN_Measurement_3D"].y)
                 grad = (m1[1] - m2[1]) / (m1[0] - m2[0])
                 gradients.append(grad)
                 edge_state_vector = np.array([m1[1], grad])
@@ -116,12 +122,18 @@ def construct_graph(graph, nodes, edges, truth, sigma0):
         row = nodes.iloc[i]
         node_idx = int(row.node_idx)
         x, y, z, r = row.x, row.y, row.z, row.r
+        volume_id, in_volume_layer_id = row.volume_id, row.in_volume_layer_id
         label =  grouped_pid.loc[grouped_pid['node_idx'] == node_idx]['single_particle_id'].item()  # MC truth label (particle id)
-        gm = GNN_Measurement(x, y, z, tau, sigma0, label=label, n=node_idx)
+        gm = GNN_Measurement(x, y, tau, sigma0, label=label, n=node_idx)
+        gm_3D = GNN_Measurement_3D(x, y, z, tau, sigma0, label=label, n=node_idx)
         graph.add_node(node_idx, GNN_Measurement=gm, 
+                            GNN_Measurement_3D=gm_3D, 
                             coord_Measurement=(x, y),
                             coord_Measurement_3d=(x, y, z),
-                            r_z_coords=(z, r))
+                            r_z_coords=(z, r),
+                            volume_id = volume_id,
+                            in_volume_layer_id = in_volume_layer_id,
+                            truth_particle=label,)
 
     # add bidirectional edges
     for i in range(len(edges)):
@@ -135,7 +147,9 @@ def load_metadata(event_path, max_volume_region):
     # graph nodes
     nodes = pd.read_csv(event_path + "nodes.csv")
     nodes = nodes.loc[nodes['layer_id'] <= max_volume_region]
-    nodes['r'] = nodes.apply(lambda row: edge_length_xy(row), axis = 1)
+    nodes['r'] = nodes.apply(lambda row: edge_length_xy(row), axis=1)
+    nodes['volume_id'] = nodes.apply(lambda row: get_volume_id(row.layer_id), axis=1) 
+    nodes['in_volume_layer_id'] = nodes.apply(lambda row: get_in_volume_layer_id(row.layer_id), axis=1)
 
     # graph edges
     edges = pd.read_csv(event_path + "edges.csv")

@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import csv
 import networkx as nx
 import random
-from GNN_Measurement import GNN_Measurement
+from modules.GNN_Measurement import *
 from helper import *
 import pprint
 

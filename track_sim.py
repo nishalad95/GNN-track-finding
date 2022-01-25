@@ -5,7 +5,7 @@ import networkx as nx
 import argparse
 import json
 from numpy.lib.function_base import average
-from modules.GNN_Measurement import GNN_Measurement
+from modules.GNN_Measurement import *
 from modules.HitPairPredictor import HitPairPredictor
 from utils.utils import *
 import pprint
