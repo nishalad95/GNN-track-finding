@@ -7,9 +7,13 @@ import random
 from modules.GNN_Measurement import *
 from helper import *
 import pprint
+import time
+import os
+import glob
 
 
-def main():
+
+def main(outputDir):
 
     event_path = "generated_events/event_1_filtered_graph_"
     truth_event_path = "truth/event000001000-"
@@ -69,10 +73,40 @@ def main():
     # plot_subgraphs(subGraphs)
 
     # save the subgraphs
-    outputDir = "output/track_sim/network/"
+    # outputDir = "output/track_sim/network/"
     for i, sub in enumerate(subGraphs):
         save_network(outputDir, i, sub)
 
 
+def print_graph_stats(inputDir):
+    # read in subgraph data
+    # inputDir = "output/track_sim/network/"
+    subgraph_path = "_subgraph.gpickle"
+    subGraphs = []
+    os.chdir(".")
+    for file in glob.glob(inputDir + "*" + subgraph_path):
+        sub = nx.read_gpickle(file)
+        subGraphs.append(sub)
+
+    num_nodes = 0
+    num_edges = 0
+    for subGraph in subGraphs:
+        num_nodes += len(subGraph.nodes())
+        num_edges += len(subGraph.edges())
+
+    print("num_nodes: ", num_nodes)
+    print("node_edges: ", num_edges)
+
+
+
 if __name__ == "__main__":
-    main()
+    start_time = time.time()
+    
+    outputDir = "output/track_sim/network/"
+    main(outputDir)
+    
+    end_time = time.time()
+    duration = end_time - start_time
+    print("Execution time (s), trackml_to_gnn.py: ", duration)
+
+    print_graph_stats(outputDir)

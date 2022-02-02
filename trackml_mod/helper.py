@@ -40,7 +40,8 @@ def compute_prior_probabilities(GraphList, track_state_key):
             for neighbour_num, _ in track_state_estimates.items():
                 # inward edge coming into the node from the neighbour
                 if subGraph[neighbour_num][node_num]['activated'] == 1:
-                    layer = subGraph.nodes[neighbour_num]['GNN_Measurement_3D'].x
+                    # layer = subGraph.nodes[neighbour_num]['GNN_Measurement_3D'].x
+                    layer = subGraph.nodes[neighbour_num]['in_volume_layer_id']
                     if layer in layer_neighbour_num_dict.keys():
                         layer_neighbour_num_dict[layer].append(neighbour_num)
                     else:
@@ -87,10 +88,14 @@ def compute_track_state_estimates(GraphList, sigma0):
         for node in G.nodes():
             gradients = []
             state_estimates = {}
-            m1 = (G.nodes[node]["GNN_Measurement_3D"].x, G.nodes[node]["GNN_Measurement_3D"].y)
+            # m1 = (G.nodes[node]["GNN_Measurement_3D"].x, G.nodes[node]["GNN_Measurement_3D"].y)
+            # (z, r)
+            m1 = (G.nodes[node]['r_z_coords'][0], G.nodes[node]['r_z_coords'][1])
                         
             for neighbor in nx.all_neighbors(G, node):
-                m2 = (G.nodes[neighbor]["GNN_Measurement_3D"].x, G.nodes[neighbor]["GNN_Measurement_3D"].y)
+                m2_xy = (G.nodes[neighbor]["GNN_Measurement_3D"].x, G.nodes[neighbor]["GNN_Measurement_3D"].y)
+                # (z, r)
+                m2 = (G.nodes[neighbor]["r_z_coords"][0], G.nodes[neighbor]["r_z_coords"][1])
                 grad = (m1[1] - m2[1]) / (m1[0] - m2[0])
                 gradients.append(grad)
                 edge_state_vector = np.array([m1[1], grad])
@@ -100,7 +105,8 @@ def compute_track_state_estimates(GraphList, sigma0):
                 key = neighbor # track state probability of A (node) conditioned on its neighborhood B
                 state_estimates[key] = {'edge_state_vector': edge_state_vector, 
                                         'edge_covariance': covariance, 
-                                        'coord_Measurement': m2
+                                        'coord_Measurement': m2_xy,
+                                        'r_z_coords' : m2
                                         }
             G.nodes[node]['edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
             G.nodes[node]['track_state_estimates'] = state_estimates

@@ -40,6 +40,7 @@ def plot_save_temperature_network(G, attr, outputDir):
 
 # plot the subgraphs extracted using threshold on nodes
 def plot_save_subgraphs(GraphList, outputFile, title, save=True):
+   # xy plot
     _, ax = plt.subplots(figsize=(12,10))
     colors = ["#bf6f2e", "#377fcc", "#78c953", "#c06de3"]
     for i, subGraph in enumerate(GraphList):
@@ -53,15 +54,31 @@ def plot_save_subgraphs(GraphList, outputFile, title, save=True):
         nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=75)
         nx.draw_networkx_labels(subGraph, pos)
     ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
-    # major_ticks = np.arange(0, 12, 1)
-    # ax.set_xticks(major_ticks)
-    # plt.xlim([0, 11])
-    # plt.ylim([-27, 15])
-    plt.xlabel("ID layer in x axis")
+    plt.xlabel("x coordinate")
     plt.ylabel("y coordinate")
     plt.title(title)
     plt.axis('on')
     plt.savefig(outputFile + "subgraphs.png", dpi=300)
+
+    # rz plot
+    _, ax = plt.subplots(figsize=(12,10))
+    colors = ["#bf6f2e", "#377fcc", "#78c953", "#c06de3"]
+    for i, subGraph in enumerate(GraphList):
+        color = colors[i % len(colors)]
+        pos=nx.get_node_attributes(subGraph,'r_z_coords')
+        edge_colors = []
+        for u, v in subGraph.edges():
+            if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
+            else: edge_colors.append("#f2f2f2")
+        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
+        nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=75)
+        nx.draw_networkx_labels(subGraph, pos)
+    ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
+    plt.xlabel("z")
+    plt.ylabel("r")
+    plt.title(title)
+    plt.axis('on')
+    plt.savefig(outputFile + "subgraphs_rz.png", dpi=300)
 
     # save to serialized form & adjacency matrix
     if save:
@@ -71,8 +88,8 @@ def plot_save_subgraphs(GraphList, outputFile, title, save=True):
 
 # used for visualising the good extracted candidates & iteration num
 def plot_save_subgraphs_iterations(GraphList, extracted_pvals, outputFile, title, save=True):
+    # xy plot
     _, ax = plt.subplots(figsize=(12,10))
-
     for subGraph in GraphList:
         iteration = int(subGraph.graph["iteration"])
         color = subGraph.graph["color"]
@@ -85,26 +102,45 @@ def plot_save_subgraphs_iterations(GraphList, extracted_pvals, outputFile, title
         nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=75, label=iteration)
         nx.draw_networkx_labels(subGraph, pos)
     ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
-    # major_ticks = np.arange(0, 12, 1)
-    # ax.set_xticks(major_ticks)
-    # plt.xlim([0, 11])
-    # plt.ylim([-27, 15])
-    plt.xlabel("ID layer in x axis")
+    plt.xlabel("x coordinate")
     plt.ylabel("y coordinate")
     plt.title(title)
-
     # plot legend & remove duplicate entries
     handles, labels = plt.gca().get_legend_handles_labels()
     by_label = dict(zip(labels, handles))
     plt.legend(by_label.values(), by_label.keys(), loc='upper left', title="iteration")    
     plt.axis('on')
-    plt.savefig(outputFile + "subgraphs.png", dpi=300)
+    plt.savefig(outputFile + "subgraphs_xy.png", dpi=300)
 
+    # rz plot
+    _, ax = plt.subplots(figsize=(12,10))
+    for subGraph in GraphList:
+        iteration = int(subGraph.graph["iteration"])
+        color = subGraph.graph["color"]
+        pos=nx.get_node_attributes(subGraph,'r_z_coords')
+        edge_colors = []
+        for u, v in subGraph.edges():
+            if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
+            else: edge_colors.append("#f2f2f2")
+        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
+        nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=75, label=iteration)
+        nx.draw_networkx_labels(subGraph, pos)
+    ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
+    plt.xlabel("z")
+    plt.ylabel("r")
+    plt.title(title)
+    # plot legend & remove duplicate entries
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    plt.legend(by_label.values(), by_label.keys(), loc='upper left', title="iteration")    
+    plt.axis('on')
+    plt.savefig(outputFile + "subgraphs_rz.png", dpi=300)
+
+    # save extracted candidate track quality information
     if save:
         for i, sub in enumerate(GraphList):
             save_network(outputFile, i, sub) # save network to serialized form
-        
-        # save extracted candidate track quality information
+
         f = open(outputFile + "pvals.csv", 'w')
         writer = csv.writer(f)
         for pval in extracted_pvals:
@@ -151,11 +187,7 @@ def plot_subgraphs_merged_state(GraphList, outputFile, title):
         nx.draw_networkx_labels(subGraph, pos)
 
     ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
-    # major_ticks = np.arange(0, 12, 1)
-    # ax.set_xticks(major_ticks)
-    # plt.xlim([0, 11])
-    # plt.ylim([-27, 15])
-    plt.xlabel("ID layer in x axis")
+    plt.xlabel("x coordinate")
     plt.ylabel("y coordinate")
     plt.title(title)
     plt.axis('on')
@@ -174,10 +206,14 @@ def compute_track_state_estimates(GraphList, sigma0):
             gradients = []
             state_estimates = {}
             G.nodes[node]['degree'] = len(G.edges(node))
-            m1 = (G.nodes[node]["GNN_Measurement"].x, G.nodes[node]["GNN_Measurement"].y)
+            # m1 = (G.nodes[node]["GNN_Measurement_3D"].x, G.nodes[node]["GNN_Measurement_3D"].y)
+            # (z, r)
+            m1 = (G.nodes[node]['r_z_coords'][0], G.nodes[node]['r_z_coords'][1])
                         
             for neighbor in nx.all_neighbors(G, node):
-                m2 = (G.nodes[neighbor]["GNN_Measurement"].x, G.nodes[neighbor]["GNN_Measurement"].y)
+                m2_xy = (G.nodes[neighbor]["GNN_Measurement_3D"].x, G.nodes[neighbor]["GNN_Measurement_3D"].y)
+                # (z, r)
+                m2 = (G.nodes[neighbor]["r_z_coords"][0], G.nodes[neighbor]["r_z_coords"][1])
                 grad = (m1[1] - m2[1]) / (m1[0] - m2[0])
                 gradients.append(grad)
                 edge_state_vector = np.array([m1[1], grad])
@@ -187,7 +223,8 @@ def compute_track_state_estimates(GraphList, sigma0):
                 key = neighbor # track state probability of A (node) conditioned on its neighborhood B
                 state_estimates[key] = {'edge_state_vector': edge_state_vector, 
                                         'edge_covariance': covariance, 
-                                        'coord_Measurement': m2
+                                        'coord_Measurement': m2_xy,
+                                        'r_z_coords' : m2
                                         }
             G.nodes[node]['edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
             G.nodes[node]['track_state_estimates'] = state_estimates
@@ -214,7 +251,8 @@ def compute_prior_probabilities(GraphList, track_state_key):
             for neighbour_num, _ in track_state_estimates.items():
                 # inward edge coming into the node from the neighbour
                 if subGraph[neighbour_num][node_num]['activated'] == 1:
-                    layer = subGraph.nodes[neighbour_num]['GNN_Measurement'].x
+                    # layer = subGraph.nodes[neighbour_num]['GNN_Measurement'].x
+                    layer = subGraph.nodes[neighbour_num]['in_volume_layer_id']
                     if layer in layer_neighbour_num_dict.keys():
                         layer_neighbour_num_dict[layer].append(neighbour_num)
                     else:

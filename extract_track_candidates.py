@@ -6,6 +6,7 @@ import networkx as nx
 import numpy as np
 import os
 import argparse
+import collections
 from utils.utils import *
 from community_detection import community_detection
 
@@ -13,6 +14,7 @@ COMMUNITY_DETECTION = False
 
 def KF_track_fit(sigma0, coords):
     
+    print("KF fit coords: \n", coords)
     obs_x = [c[0] for c in coords]
     obs_y = [c[1] for c in coords]
     yf = obs_y[0]
@@ -137,34 +139,37 @@ def main():
             candidate = potential_tracks[0]
             
             # check for track fragments
-            if len(candidate.nodes()) <= fragment : 
+            if len(candidate.nodes()) < fragment : 
                 print("Too few nodes, track fragment")
                 remaining.append(subGraph)
                 continue
 
             # check for 1 hit per layer
-            coords = list(nx.get_node_attributes(candidate,'coord_Measurement').values())
+            # coords = list(nx.get_node_attributes(candidate,'coord_Measurement').values())
             in_volume_layer_ids = list(nx.get_node_attributes(candidate, 'in_volume_layer_id').values())
+            # if trackml_mod:
+            in_volume_layer_ids = sorted(in_volume_layer_ids, reverse=True)
+            good_candidate = True
+            for j in range(0, len(in_volume_layer_ids)-1):
+                if (int(np.abs(in_volume_layer_ids[j+1] - in_volume_layer_ids[j])) != 2):
+                    print("Processing in_volume_layer_ids")
+                    print("in_volume_layer_ids: \n", in_volume_layer_ids)
+                    print("Track", i, "bad candidate, not 1 hit per layer, will process through community detection")
+                    good_candidate = False
+                    break
+            # else:
+            #     coords = sorted(coords, reverse=True, key=lambda x: x[0])
+            #     good_candidate = True
+            #     for j in range(0, len(coords)-1):
+            #         if (np.abs(coords[j+1][0] - coords[j][0]) != 1):
+            #             print("Processing x coordinate layer IDs")
+            #             print("Track", i, "bad candidate, not 1 hit per layer, will process through community detection")
+            #             good_candidate = False
+            #             break
             
-            if trackml_mod:
-                in_volume_layer_ids = sorted(in_volume_layer_ids, reverse=True)
-                good_candidate = True
-                for j in range(0, len(in_volume_layer_ids)-1):
-                    if (int(np.abs(in_volume_layer_ids[j+1] - in_volume_layer_ids[j])) != 2):
-                        print("Processing in_volume_layer_ids")
-                        print("Track", i, "bad candidate, not 1 hit per layer, will process through community detection")
-                        good_candidate = False
-                        break
-            else:
-                coords = sorted(coords, reverse=True, key=lambda x: x[0])
-                good_candidate = True
-                for j in range(0, len(coords)-1):
-                    if (np.abs(coords[j+1][0] - coords[j][0]) != 1):
-                        print("Processing x coordinate layer IDs")
-                        print("Track", i, "bad candidate, not 1 hit per layer, will process through community detection")
-                        good_candidate = False
-                        break
-            
+            r_z_coords = list(nx.get_node_attributes(candidate,'r_z_coords').values())
+            r_z_coords = sorted(r_z_coords, reverse=True, key=lambda coord: coord[0])
+            coords = r_z_coords
 
             if good_candidate:
                 pval = KF_track_fit(sigma0, coords)
@@ -205,14 +210,32 @@ def main():
                     continue
 
                 # check for 1 hit per layer
-                coords = list(nx.get_node_attributes(candidate,'coord_Measurement').values())
-                coords = sorted(coords, reverse=True, key=lambda x: x[0])
+                # coords = list(nx.get_node_attributes(candidate,'coord_Measurement').values())
+                # coords = sorted(coords, reverse=True, key=lambda x: x[0])
+                # good_candidate = True
+                # for j in range(0, len(coords)-1):
+                #     if (np.abs(coords[j+1][0] - coords[j][0]) != 1):
+                #         print("Track", i, "bad candidate, not 1 hit per layer")
+                #         good_candidate = False
+                #         break
+                
+                # check for 1 hit per layer
+                # coords = list(nx.get_node_attributes(candidate,'coord_Measurement').values())
+                in_volume_layer_ids = list(nx.get_node_attributes(candidate, 'in_volume_layer_id').values())
+                # if trackml_mod:
+                in_volume_layer_ids = sorted(in_volume_layer_ids, reverse=True)
                 good_candidate = True
-                for j in range(0, len(coords)-1):
-                    if (np.abs(coords[j+1][0] - coords[j][0]) != 1):
-                        print("Track", i, "bad candidate, not 1 hit per layer")
+                for j in range(0, len(in_volume_layer_ids)-1):
+                    if (int(np.abs(in_volume_layer_ids[j+1] - in_volume_layer_ids[j])) != 2):
+                        print("Processing in_volume_layer_ids")
+                        print("in_volume_layer_ids: \n", in_volume_layer_ids)
+                        print("Track", i, "bad candidate, not 1 hit per layer, will process through community detection")
                         good_candidate = False
                         break
+                
+                r_z_coords = list(nx.get_node_attributes(candidate,'r_z_coords').values())
+                r_z_coords = sorted(r_z_coords, reverse=True, key=lambda coord: coord[0])
+                coords = r_z_coords
                 
                 if good_candidate:
                     pval = KF_track_fit(sigma0, coords)
@@ -253,7 +276,7 @@ def main():
         subGraph.graph["iteration"] = iteration_num
         subGraph.graph["color"] = color[0]
 
-    print("Number of extracted candidates during this iteration:", len(extracted))
+    print("\nNumber of extracted candidates during this iteration:", len(extracted))
     # plot all extracted candidates, from previous iterations
     i = 0
     path = candidatesDir + str(i) + subgraph_path
@@ -263,7 +286,24 @@ def main():
         i += 1
         path = candidatesDir + str(i) + subgraph_path
 
+    # compute track purity & TODO: particle purity
+    purities = np.array([])
+    for subGraph in extracted:
+        truth_particles = nx.get_node_attributes(subGraph,'truth_particle').values()
+        print("truth particles:\n", truth_particles)
+        counter = collections.Counter(truth_particles)
+        most_common = counter.most_common(1)
+        print("most_common\n", most_common)
+        most_common_truth_particle = most_common[0][0]
+        max_freq = most_common[0][1]
+        total_num_hits = len(truth_particles)
+        print("total_num_hits", total_num_hits)
+        track_purity = max_freq / total_num_hits
+        purities = np.append(purities, track_purity)
+
     print("Total number of extracted candidates:", len(extracted))
+    print("Track purities:\n", purities)
+    np.savetxt(candidatesDir + "extracted_track_purities.csv", purities, delimiter=",")
     plot_save_subgraphs_iterations(extracted, extracted_pvals, candidatesDir, "Extracted candidates")
     plot_save_subgraphs(remaining, remainingDir, "Remaining network")
 
