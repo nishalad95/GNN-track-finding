@@ -5,7 +5,6 @@ import csv
 import networkx as nx
 import random
 import argparse
-from modules.GNN_Measurement import *
 from helper import *
 import pprint
 import os
