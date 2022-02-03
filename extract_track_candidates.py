@@ -12,7 +12,7 @@ from community_detection import community_detection
 
 COMMUNITY_DETECTION = False
 
-def KF_track_fit(sigma0, coords):
+def KF_track_fit(sigma0, mu, coords):
     
     print("KF fit coords: \n", coords)
     obs_x = [c[0] for c in coords]
@@ -29,7 +29,7 @@ def KF_track_fit(sigma0, coords):
     f.P = np.array([[sigma0**2,    0.],
                     [0.,         1000.]])   # P covariance
     f.R = sigma0**2
-    f.Q = 0.
+    f.Q = mu                                # process uncertainty
 
     # KF predict and update
     chi2_dists = []
@@ -92,12 +92,13 @@ def CCA(subCopy):
 def main():
     
     # parse command line args
-    parser = argparse.ArgumentParser(description='edge outlier removal')
+    parser = argparse.ArgumentParser(description='extract track candidates')
     parser.add_argument('-i', '--input', help='input directory of outlier removal')
     parser.add_argument('-c', '--candidates', help='output directory to save track candidates')
     parser.add_argument('-r', '--remain', help='output directory to save remaining network')
     parser.add_argument('-p', '--pval', help='chi-squared track candidate acceptance level')
     parser.add_argument('-e', '--error', help="rms of track position measurements")
+    parser.add_argument('-m', '--mu', help="uncertainty due to multiple scattering, process noise")
     parser.add_argument('-n', '--numhits', help="minimum number of hits for good track candidate")
     parser.add_argument('-t', '--trackml_mod', help="if data simulation in trackml setup", default=0)
     args = parser.parse_args()
@@ -107,6 +108,7 @@ def main():
     remainingDir = args.remain
     track_acceptance = float(args.pval)
     sigma0 = float(args.error)
+    mu = float(args.mu)
     subgraph_path = "_subgraph.gpickle"
     pvalsfile_path = "_pvals.csv"
     fragment = int(args.numhits)
@@ -172,7 +174,7 @@ def main():
             coords = r_z_coords
 
             if good_candidate:
-                pval = KF_track_fit(sigma0, coords)
+                pval = KF_track_fit(sigma0, mu, coords)
                 if pval >= track_acceptance:
                     print("Good KF fit, P value:", pval, "first coord:", coords[0])
                     extracted.append(candidate)
@@ -187,7 +189,7 @@ def main():
                     if len(valid_communities) > 0:
                         print("found communities via community detection")
                         for vc, vcc in zip(valid_communities, vc_coords):
-                            pval = KF_track_fit(sigma0, vcc)
+                            pval = KF_track_fit(sigma0, mu, vcc)
                             if pval >= track_acceptance:
                                 print("Good KF fit, P value:", pval, "first coord:", vcc[0])
                                 extracted.append(vc)
@@ -238,7 +240,7 @@ def main():
                 coords = r_z_coords
                 
                 if good_candidate:
-                    pval = KF_track_fit(sigma0, coords)
+                    pval = KF_track_fit(sigma0, mu, coords)
                     if pval >= track_acceptance:
                         print("Good KF fit, P value:", pval, "first coord:", coords[0])
                         extracted.append(candidate)
@@ -253,7 +255,7 @@ def main():
                         if len(valid_communities) > 0:
                             print("found communities via community detection")
                             for vc, vcc in zip(valid_communities, vc_coords):
-                                pval = KF_track_fit(sigma0, vcc)
+                                pval = KF_track_fit(sigma0, mu, vcc)
                                 if pval >= track_acceptance:
                                     print("Good KF fit, P value:", pval, "first coord:", vcc[0])
                                     extracted.append(vc)
@@ -290,14 +292,14 @@ def main():
     purities = np.array([])
     for subGraph in extracted:
         truth_particles = nx.get_node_attributes(subGraph,'truth_particle').values()
-        print("truth particles:\n", truth_particles)
+        # print("truth particles:\n", truth_particles)
         counter = collections.Counter(truth_particles)
         most_common = counter.most_common(1)
-        print("most_common\n", most_common)
+        # print("most_common\n", most_common)
         most_common_truth_particle = most_common[0][0]
         max_freq = most_common[0][1]
         total_num_hits = len(truth_particles)
-        print("total_num_hits", total_num_hits)
+        # print("total_num_hits", total_num_hits)
         track_purity = max_freq / total_num_hits
         purities = np.append(purities, track_purity)
 

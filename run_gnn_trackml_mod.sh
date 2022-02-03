@@ -4,10 +4,9 @@
 # VARIABLES
 # track sim
 VAR=100  #(don't remove any nodes)   # TEMPORARY: remove nodes with empirical variance greater than VAR
-SIGMA0=0.5                    # r.m.s measurement error
-ROOTDIR=trackml_mod/output                # main output directory to save results of algorithm
-
-trackml_mod=1       # if trackml mod if used instead of MC toy model - used in extract track candidates
+SIGMA0=0.5                           # r.m.s measurement error
+MU=0.5                               # multiple scattering error - process noise for KF
+ROOTDIR=trackml_mod/output           # main output directory to save results of algorithm
 
 # clustering
 LUT=learn_KL/output/empvar/empvar.lut       # LUT file for KL distance calibration
@@ -20,12 +19,19 @@ n=4                     # minimum number of hits for good track candidate accept
 c=2  # initial chisquare distance acceptance threshold factor for extrapolated states
 # ----------------------------------------------------------------------------------------------
 
-# # track simulation
-# echo "----------------------------"
-# echo "Running track simulation..."
-# echo "----------------------------"
-OUTPUT=$ROOTDIR/track_sim/
-INPUT=$ROOTDIR/track_sim/network_100/
+
+# # track conversion
+# echo "-------------------------------------------------"
+# echo "Running conversion of generated events to GNN..."
+# echo "-------------------------------------------------"
+# # OUTPUT=$ROOTDIR/track_sim/
+# start_conversion=$SECONDS
+# INPUT=$ROOTDIR/track_sim/network/
+# mkdir -p $INPUT
+# python trackml_mod/trackml_to_gnn.py -o $INPUT -e $SIGMA0 -m $MU
+# conversion_duration=$(( SECONDS - start_conversion ))
+# echo "Execution time trackml_to_gnn.py: $conversion_duration seconds"
+
 
 # time it!
 start=$SECONDS
@@ -119,7 +125,7 @@ for i in {1..2};
             cp -r $ROOTDIR/iteration_$num/candidates/ $CANDIDATES
         fi
         prev_duration=$SECONDS
-        python extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -p $p -e $SIGMA0 -t $trackml_mod -n $n
+        python extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -p $p -e $SIGMA0 -m $MU -t $trackml_mod -n $n
         INPUT=$REMAINING
 
         # time it!

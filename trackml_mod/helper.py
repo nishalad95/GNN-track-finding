@@ -81,7 +81,7 @@ def compute_mixture_weights(GraphList):
                 subGraph[neighbour_num][node_num]['mixture_weight'] = mixture_weight
 
 
-def compute_track_state_estimates(GraphList, sigma0):
+def compute_track_state_estimates(GraphList, sigma0, mu):
     S = np.matrix([[sigma0**2, 0], [0, sigma0**2]]) # covariance matrix of measurements
     
     for G in GraphList:
@@ -102,6 +102,7 @@ def compute_track_state_estimates(GraphList, sigma0):
                 H = np.array([ [1, 0], [1/(m1[0] - m2[0]), 1/(m2[0] - m1[0])] ])
                 covariance = H.dot(S).dot(H.T)
                 covariance = np.array([covariance[0,0], covariance[0,1], covariance[1,0], covariance[1,1]])
+                covariance += mu # add process noise
                 key = neighbor # track state probability of A (node) conditioned on its neighborhood B
                 state_estimates[key] = {'edge_state_vector': edge_state_vector, 
                                         'edge_covariance': covariance, 
@@ -180,7 +181,6 @@ def load_save_truth(event_path, truth_event_path, truth_event_file):
     truth = nodes_hits[['node_idx', 'hit_id']]
     hit_ids = truth['hit_id']
     particle_ids = np.array([])
-    # print("particle ids should be empty:", particle_ids)
     for hid in hit_ids:
         pid = hits_particles.loc[hits_particles['hit_id'] == hid]['particle_id'].item()
         particle_ids = np.append(particle_ids, pid)
@@ -197,6 +197,7 @@ def load_save_truth(event_path, truth_event_path, truth_event_file):
         nhits = np.append(nhits, n)
     truth['nhits'] = nhits
 
+    # save truth
     truth.to_csv(truth_event_file, index=False)
 
 
@@ -231,13 +232,11 @@ def plotGraph(graph, filename):
     # plt.show()
 
 
-# plot the subgraphs extracted using threshold on nodes
-def plot_subgraphs(GraphList):
-    # xy coords
+def plot_subgraphs_in_plane(GraphList, outputDir, key, axis1, axis2):
     _, ax = plt.subplots(figsize=(10,8))
     for i, subGraph in enumerate(GraphList):
         color = ["#"+''.join([random.choice('0123456789ABCDEF') for _ in range(6) ])][0]
-        pos=nx.get_node_attributes(subGraph,'coord_Measurement')
+        pos=nx.get_node_attributes(subGraph, key)
         nodes = subGraph.nodes()
         edge_colors = []
         for u, v in subGraph.edges():
@@ -245,29 +244,15 @@ def plot_subgraphs(GraphList):
             else: edge_colors.append("#f2f2f2")
         nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
         nx.draw_networkx_nodes(subGraph, pos, nodelist=nodes, node_color=color, node_size=5)
-    plt.xlabel("x")
-    plt.ylabel("y")
+    plt.xlabel(axis1)
+    plt.ylabel(axis2)
     plt.title("Nodes & Edges extracted from TrackML generated data")
     plt.axis('on')
-    # plt.savefig("images/xy_subgraphs_trackml_mod.png", dpi=300)
-    plt.show()
+    # plt.savefig(outputDir + axis1 + axis2 + "_subgraphs_trackml_mod.png", dpi=300)
+    # plt.show()
 
-    # rz coords
-    _, ax = plt.subplots(figsize=(10,8))
-    for i, subGraph in enumerate(GraphList):
-        color = ["#"+''.join([random.choice('0123456789ABCDEF') for _ in range(6) ])][0]
-        pos=nx.get_node_attributes(subGraph,'r_z_coords')
-        nodes = subGraph.nodes()
-        edge_colors = []
-        for u, v in subGraph.edges():
-            if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
-            else: edge_colors.append("#f2f2f2")
-        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
-        nx.draw_networkx_nodes(subGraph, pos, nodelist=nodes, node_color=color, node_size=5)
-    plt.xlabel("z")
-    plt.ylabel("r")
-    plt.title("Nodes & Edges extracted from TrackML generated data")
-    plt.axis('on')
-    # plt.savefig("images/rz_subgraphs_trackml_mod.png", dpi=300)
-    plt.show()
-
+def plot_subgraphs(GraphList, outputDir):
+    # xy plane
+    plot_subgraphs_in_plane(GraphList, outputDir, 'coord_Measurement', "x", "y")
+    # zr plane
+    plot_subgraphs_in_plane(GraphList, outputDir, 'r_z_coords', "z", "r")
