@@ -2,9 +2,7 @@ import os, glob
 import numpy as np
 import networkx as nx
 import argparse
-from utils.utils import *
-from modules.GNN_Measurement import *
-from modules.HitPairPredictor import *
+from utilities import helper as h
 import pprint
 import math
 
@@ -83,10 +81,10 @@ def reset_reactivate(subGraphs, sigma0):
         for component in nx.weakly_connected_components(subGraph):
             reset_subGraphs.append(subGraph.subgraph(component).copy())
     
-    subGraphs = compute_track_state_estimates(reset_subGraphs, sigma0)
-    initialize_edge_activation(subGraphs)
-    compute_prior_probabilities(subGraphs, 'track_state_estimates')
-    compute_mixture_weights(subGraphs)
+    subGraphs = h.compute_track_state_estimates(reset_subGraphs, sigma0)
+    h.initialize_edge_activation(subGraphs)
+    h.compute_prior_probabilities(subGraphs, 'track_state_estimates')
+    h.compute_mixture_weights(subGraphs)
 
     return subGraphs
 
@@ -131,7 +129,7 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, sigma0, reactivate):
             node_attr = node[1]
 
             empvar = node_attr[EMPIRICAL_MEAN_VAR][1]
-            num_edges = query_node_degree_in_edges(subGraph, node_num) # node degree is dynamical between iterations, only check active edges
+            num_edges = h.query_node_degree_in_edges(subGraph, node_num) # node degree is dynamical between iterations, only check active edges
             if num_edges <= 2: continue
 
             # convert attributes to arrays
@@ -238,13 +236,17 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, sigma0, reactivate):
 
 
     # reweight the mixture based on inward active edges
-    compute_mixture_weights(subGraphs)
+    h.compute_mixture_weights(subGraphs)
     # compute priors for a node based on inward edges
-    compute_prior_probabilities(subGraphs, TRACK_STATE_KEY)
+    h.compute_prior_probabilities(subGraphs, TRACK_STATE_KEY)
   
     title = "Filtered Graph outlier edge removal using clustering with KL distance measure"
-    plot_save_subgraphs(subGraphs, outputDir, title)
-    plot_subgraphs_merged_state(subGraphs, outputDir, title)
+    # plot_save_subgraphs(subGraphs, outputDir, title)
+    h.plot_subgraphs(subGraphs, outputDir, node_labels=True, save_plot=True)
+    # need to add this:
+    for i, sub in enumerate(subGraphs):
+        h.save_network(outputDir, i, sub)
+    # plot_subgraphs_merged_state(subGraphs, outputDir, title)
 
     for i, s in enumerate(subGraphs):
         print("-------------------")

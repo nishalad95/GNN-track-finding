@@ -7,9 +7,8 @@ setup(
    version='1.0',
    description='Graph Neural Network based algorithm for track finding and pattern recognition',
    author='Nisha Lad',
-   # packages=['modules', 'utils'],  #same as name
-   packages=find_packages('modules', 'utils'),
-   package_dir={'': 'utils'},
+   packages=find_packages('src'),
+   package_dir={'': 'src'},
    include_package_data = True,
-#    install_requires=['wheel', 'bar', 'greek'], #external packages as dependencies
+#    install_requires=['networkx', 'filterpy', 'python-louvain', 'scipy', 'numpy', 'pandas', 'glob'], #external packages as dependencies
 )

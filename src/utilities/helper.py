@@ -4,8 +4,9 @@ import matplotlib.pyplot as plt
 import csv
 import networkx as nx
 import random
-from modules.GNN_Measurement import *
+from GNN_Measurement import GNN_Measurement as gnn
 import pprint
+
 
 def edge_length_xy(row):
     return np.sqrt(row.x**2 + row.y**2)
@@ -40,7 +41,7 @@ def compute_prior_probabilities(GraphList, track_state_key):
             for neighbour_num, _ in track_state_estimates.items():
                 # inward edge coming into the node from the neighbour
                 if subGraph[neighbour_num][node_num]['activated'] == 1:
-                    # layer = subGraph.nodes[neighbour_num]['GNN_Measurement_3D'].x
+                    # layer = subGraph.nodes[neighbour_num]['GNN_Measurement'].x
                     layer = subGraph.nodes[neighbour_num]['in_volume_layer_id']
                     if layer in layer_neighbour_num_dict.keys():
                         layer_neighbour_num_dict[layer].append(neighbour_num)
@@ -88,12 +89,12 @@ def compute_track_state_estimates(GraphList, sigma0, mu):
         for node in G.nodes():
             gradients = []
             state_estimates = {}
-            # m1 = (G.nodes[node]["GNN_Measurement_3D"].x, G.nodes[node]["GNN_Measurement_3D"].y)
+            # m1 = (G.nodes[node]["GNN_Measurement"].x, G.nodes[node]["GNN_Measurement"].y)
             # (z, r)
             m1 = (G.nodes[node]['r_z_coords'][0], G.nodes[node]['r_z_coords'][1])
                         
             for neighbor in nx.all_neighbors(G, node):
-                m2_xy = (G.nodes[neighbor]["GNN_Measurement_3D"].x, G.nodes[neighbor]["GNN_Measurement_3D"].y)
+                m2_xy = (G.nodes[neighbor]["GNN_Measurement"].x, G.nodes[neighbor]["GNN_Measurement"].y)
                 # (z, r)
                 m2 = (G.nodes[neighbor]["r_z_coords"][0], G.nodes[neighbor]["r_z_coords"][1])
                 grad = (m1[1] - m2[1]) / (m1[0] - m2[0])
@@ -102,7 +103,7 @@ def compute_track_state_estimates(GraphList, sigma0, mu):
                 H = np.array([ [1, 0], [1/(m1[0] - m2[0]), 1/(m2[0] - m1[0])] ])
                 covariance = H.dot(S).dot(H.T)
                 covariance = np.array([covariance[0,0], covariance[0,1], covariance[1,0], covariance[1,1]])
-                covariance += mu # add process noise
+                # covariance += mu # add process noise
                 key = neighbor # track state probability of A (node) conditioned on its neighborhood B
                 state_estimates[key] = {'edge_state_vector': edge_state_vector, 
                                         'edge_covariance': covariance, 
@@ -115,9 +116,7 @@ def compute_track_state_estimates(GraphList, sigma0, mu):
     return GraphList
 
 
-def construct_graph(graph, nodes, edges, truth, sigma0):
-    tau = np.nan # track inclination from final and initial stating position - not needed
-
+def construct_graph(graph, nodes, edges, truth, sigma0, mu):
     # group truth particle ids to node index
     group = truth.groupby('node_idx')
     grouped_pid = group.apply(lambda row: row['particle_id'].unique())
@@ -131,12 +130,9 @@ def construct_graph(graph, nodes, edges, truth, sigma0):
         x, y, z, r = row.x, row.y, row.z, row.r
         volume_id, in_volume_layer_id = row.volume_id, row.in_volume_layer_id
         label =  grouped_pid.loc[grouped_pid['node_idx'] == node_idx]['single_particle_id'].item()  # MC truth label (particle id)
-        gm = GNN_Measurement(x, y, tau, sigma0, label=label, n=node_idx)
-        gm_3D = GNN_Measurement_3D(x, y, z, tau, sigma0, label=label, n=node_idx)
+        gm = gnn.GNN_Measurement(x, y, z, r, sigma0, mu, label=label, n=node_idx)
         graph.add_node(node_idx, GNN_Measurement=gm, 
-                            GNN_Measurement_3D=gm_3D, 
                             coord_Measurement=(x, y),
-                            coord_Measurement_3d=(x, y, z),
                             r_z_coords=(z, r),
                             volume_id = volume_id,
                             in_volume_layer_id = in_volume_layer_id,
@@ -207,32 +203,7 @@ def save_network(directory, i, subGraph):
     nx.write_gpickle(subGraph, filename)
 
 
-def plotGraph(graph, filename):
-    # plot network in xy
-    _, ax = plt.subplots(figsize=(12,10))
-    nodes = graph.nodes()
-    pos = nx.get_node_attributes(graph,'coord_Measurement')
-    nx.draw_networkx_nodes(graph, pos, nodelist=nodes, node_size=5, ax=ax)
-    nx.draw_networkx_edges(graph, pos, alpha=0.4, ax=ax)
-    plt.xlabel("x")
-    plt.ylabel("y")
-    plt.title("Nodes & Edges extracted from TrackML generated data")
-    # plt.savefig("images/xy_" + filename, dpi=300)
-    # plt.show()
-
-    # plot network in rz
-    _, ax = plt.subplots(figsize=(12,10))
-    pos = nx.get_node_attributes(graph,'r_z_coords')
-    nx.draw_networkx_nodes(graph, pos, nodelist=nodes, node_size=5, ax=ax)
-    nx.draw_networkx_edges(graph, pos, alpha=0.4, ax=ax)
-    plt.xlabel("z")
-    plt.ylabel("r")
-    plt.title("Nodes & Edges extracted from TrackML generated data")
-    # plt.savefig("images/rz_" + filename, dpi=300)
-    # plt.show()
-
-
-def plot_subgraphs_in_plane(GraphList, outputDir, key, axis1, axis2):
+def plot_subgraphs_in_plane(GraphList, outputDir, key, axis1, axis2, node_labels, save_plot):
     _, ax = plt.subplots(figsize=(10,8))
     for i, subGraph in enumerate(GraphList):
         color = ["#"+''.join([random.choice('0123456789ABCDEF') for _ in range(6) ])][0]
@@ -244,15 +215,84 @@ def plot_subgraphs_in_plane(GraphList, outputDir, key, axis1, axis2):
             else: edge_colors.append("#f2f2f2")
         nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
         nx.draw_networkx_nodes(subGraph, pos, nodelist=nodes, node_color=color, node_size=5)
+        if node_labels:
+            nx.draw_networkx_labels(subGraph, pos)
+    ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
     plt.xlabel(axis1)
     plt.ylabel(axis2)
     plt.title("Nodes & Edges extracted from TrackML generated data")
     plt.axis('on')
-    # plt.savefig(outputDir + axis1 + axis2 + "_subgraphs_trackml_mod.png", dpi=300)
-    # plt.show()
+    if save_plot:
+        plt.savefig(outputDir + axis1 + axis2 + "_subgraphs_trackml_mod.png", dpi=300)
 
-def plot_subgraphs(GraphList, outputDir):
+
+def plot_subgraphs(GraphList, outputDir, node_labels=False, save_plot=False):
     # xy plane
-    plot_subgraphs_in_plane(GraphList, outputDir, 'coord_Measurement', "x", "y")
+    plot_subgraphs_in_plane(GraphList, outputDir, 'coord_Measurement', "x", "y", node_labels, save_plot)
     # zr plane
-    plot_subgraphs_in_plane(GraphList, outputDir, 'r_z_coords', "z", "r")
+    plot_subgraphs_in_plane(GraphList, outputDir, 'r_z_coords', "z", "r", node_labels, save_plot)
+
+
+# used for visualising the good extracted candidates & iteration num
+def plot_save_subgraphs_iterations(GraphList, extracted_pvals, outputFile, title, node_labels=True, save_plot=True):
+    # xy plot
+    _, ax = plt.subplots(figsize=(12,10))
+    for subGraph in GraphList:
+        iteration = int(subGraph.graph["iteration"])
+        color = subGraph.graph["color"]
+        pos=nx.get_node_attributes(subGraph,'coord_Measurement')
+        edge_colors = []
+        for u, v in subGraph.edges():
+            if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
+            else: edge_colors.append("#f2f2f2")
+        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
+        nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=75, label=iteration)
+        if node_labels:
+            nx.draw_networkx_labels(subGraph, pos)
+    ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
+    plt.xlabel("x coordinate")
+    plt.ylabel("y coordinate")
+    plt.title(title)
+    # plot legend & remove duplicate entries
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    plt.legend(by_label.values(), by_label.keys(), loc='upper left', title="iteration")    
+    plt.axis('on')
+    if save_plot:
+        plt.savefig(outputFile + "subgraphs_xy.png", dpi=300)
+
+    # rz plot
+    _, ax = plt.subplots(figsize=(12,10))
+    for subGraph in GraphList:
+        iteration = int(subGraph.graph["iteration"])
+        color = subGraph.graph["color"]
+        pos=nx.get_node_attributes(subGraph,'r_z_coords')
+        edge_colors = []
+        for u, v in subGraph.edges():
+            if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
+            else: edge_colors.append("#f2f2f2")
+        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
+        nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=75, label=iteration)
+        if node_labels:    
+            nx.draw_networkx_labels(subGraph, pos)
+    ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
+    plt.xlabel("z")
+    plt.ylabel("r")
+    plt.title(title)
+    # plot legend & remove duplicate entries
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    plt.legend(by_label.values(), by_label.keys(), loc='upper left', title="iteration")    
+    plt.axis('on')
+    if save_plot:
+        plt.savefig(outputFile + "subgraphs_rz.png", dpi=300)
+
+    # save extracted candidate track quality information
+    for i, sub in enumerate(GraphList):
+        save_network(outputFile, i, sub) # save network to serialized form
+
+    f = open(outputFile + "pvals.csv", 'w')
+    writer = csv.writer(f)
+    for pval in extracted_pvals:
+        writer.writerow([pval])
+    f.close()

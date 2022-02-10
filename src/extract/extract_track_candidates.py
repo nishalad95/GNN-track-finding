@@ -7,7 +7,8 @@ import numpy as np
 import os
 import argparse
 import collections
-from utils.utils import *
+import random
+from utilities import helper as h
 from community_detection import community_detection
 
 COMMUNITY_DETECTION = False
@@ -100,9 +101,9 @@ def main():
     parser.add_argument('-e', '--error', help="rms of track position measurements")
     parser.add_argument('-m', '--mu', help="uncertainty due to multiple scattering, process noise")
     parser.add_argument('-n', '--numhits', help="minimum number of hits for good track candidate")
-    parser.add_argument('-t', '--trackml_mod', help="if data simulation in trackml setup", default=0)
     args = parser.parse_args()
 
+    # set variables
     inputDir = args.input
     candidatesDir = args.candidates
     remainingDir = args.remain
@@ -112,8 +113,10 @@ def main():
     subgraph_path = "_subgraph.gpickle"
     pvalsfile_path = "_pvals.csv"
     fragment = int(args.numhits)
-    iteration_num = inputDir.split("/")[2][-1]
-    trackml_mod = bool(args.trackml_mod)
+    # get iteration num
+    inputDir_list = inputDir.split("/")
+    iterationDir = filter(lambda x: x.startswith('iteration_'), inputDir_list)
+    for i in iterationDir: iteration_num = i.split("_")[-1]
 
     # read in subgraph data
     subGraphs = []
@@ -292,22 +295,22 @@ def main():
     purities = np.array([])
     for subGraph in extracted:
         truth_particles = nx.get_node_attributes(subGraph,'truth_particle').values()
-        # print("truth particles:\n", truth_particles)
         counter = collections.Counter(truth_particles)
         most_common = counter.most_common(1)
-        # print("most_common\n", most_common)
         most_common_truth_particle = most_common[0][0]
         max_freq = most_common[0][1]
         total_num_hits = len(truth_particles)
-        # print("total_num_hits", total_num_hits)
         track_purity = max_freq / total_num_hits
         purities = np.append(purities, track_purity)
 
     print("Total number of extracted candidates:", len(extracted))
     print("Track purities:\n", purities)
     np.savetxt(candidatesDir + "extracted_track_purities.csv", purities, delimiter=",")
-    plot_save_subgraphs_iterations(extracted, extracted_pvals, candidatesDir, "Extracted candidates")
-    plot_save_subgraphs(remaining, remainingDir, "Remaining network")
+    
+    
+    # plot_save_subgraphs_iterations(extracted, extracted_pvals, candidatesDir, "Extracted candidates")
+    h.plot_save_subgraphs_iterations(extracted, extracted_pvals, candidatesDir, "Extracted candidates", node_labels=True, save_plot=True)
+    h.plot_subgraphs(remaining, remainingDir, node_labels=True, save_plot=True)
 
     # plot the distribution of edge weightings within the extracted candidates
 
