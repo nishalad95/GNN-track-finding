@@ -71,7 +71,8 @@ def main():
     h.compute_mixture_weights(subGraphs)
 
     print("Number of subgraphs..", len(subGraphs))
-    # h.plot_subgraphs(subGraphs, outputDir)
+    # uncomment the next line for plotting
+    # h.plot_subgraphs(subGraphs, outputDir, title="Nodes & Edges extracted from TrackML generated data")
     # save the subgraphs
     for i, sub in enumerate(subGraphs):
         h.save_network(outputDir, i, sub)

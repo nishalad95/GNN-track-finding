@@ -54,7 +54,7 @@ def simulate_event(threshold, sigma0, outputDir):
             gm = GNN_Measurement(xc[l], yc[l] + nu, tau0[i], sigma0, label=i, n=nNodes)
             mcoll[l].append(gm)
             G.add_node(nNodes, GNN_Measurement=gm, 
-                               coord_Measurement=(xc[l], yc[l] + nu),
+                               xy=(xc[l], yc[l] + nu),
                                truth_particle=i)
             nNodes += 1
             nhits += 1

@@ -16,7 +16,7 @@ def plot_save_temperature_network(G, attr, outputDir):
     mapping = dict(zip(sorted(groups),count()))
     nodes = G.nodes()
     colors = [mapping[nodes[n][attr]] for n in nodes()]
-    pos = nx.get_node_attributes(G,'coord_Measurement')
+    pos = nx.get_node_attributes(G,'xy')
     nx.draw_networkx_edges(G, pos, alpha=0.1)
     nc = nx.draw_networkx_nodes(G, pos, nodelist=nodes, node_color=colors, 
                                 node_size=100, cmap=plt.cm.hot, ax=ax)
@@ -45,7 +45,7 @@ def plot_save_temperature_network(G, attr, outputDir):
 #     colors = ["#bf6f2e", "#377fcc", "#78c953", "#c06de3"]
 #     for i, subGraph in enumerate(GraphList):
 #         color = colors[i % len(colors)]
-#         pos=nx.get_node_attributes(subGraph,'coord_Measurement')
+#         pos=nx.get_node_attributes(subGraph,'xy')
 #         edge_colors = []
 #         for u, v in subGraph.edges():
 #             if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
@@ -65,7 +65,7 @@ def plot_save_temperature_network(G, attr, outputDir):
 #     colors = ["#bf6f2e", "#377fcc", "#78c953", "#c06de3"]
 #     for i, subGraph in enumerate(GraphList):
 #         color = colors[i % len(colors)]
-#         pos=nx.get_node_attributes(subGraph,'r_z_coords')
+#         pos=nx.get_node_attributes(subGraph,'zr')
 #         edge_colors = []
 #         for u, v in subGraph.edges():
 #             if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
@@ -93,7 +93,7 @@ def plot_save_subgraphs_iterations(GraphList, extracted_pvals, outputFile, title
     for subGraph in GraphList:
         iteration = int(subGraph.graph["iteration"])
         color = subGraph.graph["color"]
-        pos=nx.get_node_attributes(subGraph,'coord_Measurement')
+        pos=nx.get_node_attributes(subGraph,'xy')
         edge_colors = []
         for u, v in subGraph.edges():
             if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
@@ -117,7 +117,7 @@ def plot_save_subgraphs_iterations(GraphList, extracted_pvals, outputFile, title
     for subGraph in GraphList:
         iteration = int(subGraph.graph["iteration"])
         color = subGraph.graph["color"]
-        pos=nx.get_node_attributes(subGraph,'r_z_coords')
+        pos=nx.get_node_attributes(subGraph,'zr')
         edge_colors = []
         for u, v in subGraph.edges():
             if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
@@ -176,7 +176,7 @@ def plot_save_subgraphs_iterations(GraphList, extracted_pvals, outputFile, title
 #             else:
 #                 color.append(default_color)
 
-#         pos=nx.get_node_attributes(subGraph,'coord_Measurement')
+#         pos=nx.get_node_attributes(subGraph,'xy')
 #         edge_colors = []
 #         for u, v in subGraph.edges():
 #             if subGraph[u][v]['activated'] == 1: edge_colors.append(default_color)
@@ -208,12 +208,12 @@ def plot_save_subgraphs_iterations(GraphList, extracted_pvals, outputFile, title
 #             G.nodes[node]['degree'] = len(G.edges(node))
 #             # m1 = (G.nodes[node]["GNN_Measurement"].x, G.nodes[node]["GNN_Measurement"].y)
 #             # (z, r)
-#             m1 = (G.nodes[node]['r_z_coords'][0], G.nodes[node]['r_z_coords'][1])
+#             m1 = (G.nodes[node]['zr'][0], G.nodes[node]['zr'][1])
                         
 #             for neighbor in nx.all_neighbors(G, node):
 #                 m2_xy = (G.nodes[neighbor]["GNN_Measurement"].x, G.nodes[neighbor]["GNN_Measurement"].y)
 #                 # (z, r)
-#                 m2 = (G.nodes[neighbor]["r_z_coords"][0], G.nodes[neighbor]["r_z_coords"][1])
+#                 m2 = (G.nodes[neighbor]["zr"][0], G.nodes[neighbor]["zr"][1])
 #                 grad = (m1[1] - m2[1]) / (m1[0] - m2[0])
 #                 gradients.append(grad)
 #                 edge_state_vector = np.array([m1[1], grad])
@@ -223,8 +223,8 @@ def plot_save_subgraphs_iterations(GraphList, extracted_pvals, outputFile, title
 #                 key = neighbor # track state probability of A (node) conditioned on its neighborhood B
 #                 state_estimates[key] = {'edge_state_vector': edge_state_vector, 
 #                                         'edge_covariance': covariance, 
-#                                         'coord_Measurement': m2_xy,
-#                                         'r_z_coords' : m2
+#                                         'xy': m2_xy,
+#                                         'zr' : m2
 #                                         }
 #             G.nodes[node]['edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
 #             G.nodes[node]['track_state_estimates'] = state_estimates

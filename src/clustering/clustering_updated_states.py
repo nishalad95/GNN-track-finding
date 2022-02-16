@@ -127,7 +127,7 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut):
             # don't execute merging/clustering on updated states coming from >1 node in the same xlayer
             xlayers = []
             for neighbour_num, dict in updated_track_states.items():
-                x = dict['coord_Measurement'][0]
+                x = dict['xy'][0]
                 xlayers.append(x)
             unique_layers = np.unique(xlayers)
             if len(xlayers) != len(unique_layers): 

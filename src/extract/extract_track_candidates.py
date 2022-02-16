@@ -19,7 +19,6 @@ def KF_track_fit(sigma0, mu, coords):
     obs_x = [c[0] for c in coords]
     obs_y = [c[1] for c in coords]
     yf = obs_y[0]
-    # obs_y = obs_y[1:]
     dx = coords[1][0] - coords[0][0]
 
     # initialize KF at outermost layer
@@ -30,7 +29,7 @@ def KF_track_fit(sigma0, mu, coords):
     f.P = np.array([[sigma0**2,    0.],
                     [0.,         1000.]])   # P covariance
     f.R = sigma0**2
-    f.Q = mu                                # process uncertainty
+    f.Q = mu                                # process uncertainty/noise
 
     # KF predict and update
     chi2_dists = []
@@ -149,37 +148,28 @@ def main():
                 remaining.append(subGraph)
                 continue
 
-            # check for 1 hit per layer
-            # coords = list(nx.get_node_attributes(candidate,'coord_Measurement').values())
-            in_volume_layer_ids = list(nx.get_node_attributes(candidate, 'in_volume_layer_id').values())
-            # if trackml_mod:
-            in_volume_layer_ids = sorted(in_volume_layer_ids, reverse=True)
+            # check for > 1 hit per layer - use volume_id & in_volume_layer_id
             good_candidate = True
-            for j in range(0, len(in_volume_layer_ids)-1):
-                if (int(np.abs(in_volume_layer_ids[j+1] - in_volume_layer_ids[j])) != 2):
-                    print("Processing in_volume_layer_ids")
-                    print("in_volume_layer_ids: \n", in_volume_layer_ids)
-                    print("Track", i, "bad candidate, not 1 hit per layer, will process through community detection")
-                    good_candidate = False
-                    break
-            # else:
-            #     coords = sorted(coords, reverse=True, key=lambda x: x[0])
-            #     good_candidate = True
-            #     for j in range(0, len(coords)-1):
-            #         if (np.abs(coords[j+1][0] - coords[j][0]) != 1):
-            #             print("Processing x coordinate layer IDs")
-            #             print("Track", i, "bad candidate, not 1 hit per layer, will process through community detection")
-            #             good_candidate = False
-            #             break
-            
-            r_z_coords = list(nx.get_node_attributes(candidate,'r_z_coords').values())
-            r_z_coords = sorted(r_z_coords, reverse=True, key=lambda coord: coord[0])
-            coords = r_z_coords
+            vivl_id_values = nx.get_node_attributes(G,'vivl_id').values()
+            if len(vivl_id_values) == len(set(vivl_id_values)): 
+                print("no duplicates volume_ids & in_volume_layer_ids for this candidate")
+            else: 
+                print("Bad candidate, > 1 hit per layer, will process through community detection")
+                good_candidate = False
+
+            #TODO: need to check for holes?
+
+            # At this stage we know candidate has 1 hit per layer
+            coords = list(nx.get_node_attributes(candidate,'xy').values())
+            coords = list(nx.get_node_attributes(candidate, 'xyzr').values())
+            # sort according to decreasing radius value
+            coords = sorted(coords, reverse=True, key=lambda xyzr: xyzr[3])
+    
 
             if good_candidate:
                 pval = KF_track_fit(sigma0, mu, coords)
                 if pval >= track_acceptance:
-                    print("Good KF fit, P value:", pval, "first coord:", coords[0])
+                    print("Good KF fit, P value:", pval, "(x,y,z,r):", coords)
                     extracted.append(candidate)
                     extracted_pvals.append(pval)
                 else:
@@ -188,13 +178,14 @@ def main():
             else:
                 if COMMUNITY_DETECTION:
                     print("Run community detection...")
+                    #TODO: coordinates & community detection method needs to be updated
                     valid_communities, vc_coords = community_detection(candidate, fragment)
                     if len(valid_communities) > 0:
                         print("found communities via community detection")
                         for vc, vcc in zip(valid_communities, vc_coords):
                             pval = KF_track_fit(sigma0, mu, vcc)
                             if pval >= track_acceptance:
-                                print("Good KF fit, P value:", pval, "first coord:", vcc[0])
+                                print("Good KF fit, P value:", pval, "(x,y,z,r):", vcc)
                                 extracted.append(vc)
                                 extracted_pvals.append(pval)
                                 good_nodes = vc.nodes()
@@ -213,39 +204,30 @@ def main():
                 if len(candidate.nodes()) <= fragment : 
                     print("Too few nodes, track fragment")
                     continue
+                
 
-                # check for 1 hit per layer
-                # coords = list(nx.get_node_attributes(candidate,'coord_Measurement').values())
-                # coords = sorted(coords, reverse=True, key=lambda x: x[0])
-                # good_candidate = True
-                # for j in range(0, len(coords)-1):
-                #     if (np.abs(coords[j+1][0] - coords[j][0]) != 1):
-                #         print("Track", i, "bad candidate, not 1 hit per layer")
-                #         good_candidate = False
-                #         break
-                
-                # check for 1 hit per layer
-                # coords = list(nx.get_node_attributes(candidate,'coord_Measurement').values())
-                in_volume_layer_ids = list(nx.get_node_attributes(candidate, 'in_volume_layer_id').values())
-                # if trackml_mod:
-                in_volume_layer_ids = sorted(in_volume_layer_ids, reverse=True)
+                # check for > 1 hit per layer - use volume_id & in_volume_layer_id
                 good_candidate = True
-                for j in range(0, len(in_volume_layer_ids)-1):
-                    if (int(np.abs(in_volume_layer_ids[j+1] - in_volume_layer_ids[j])) != 2):
-                        print("Processing in_volume_layer_ids")
-                        print("in_volume_layer_ids: \n", in_volume_layer_ids)
-                        print("Track", i, "bad candidate, not 1 hit per layer, will process through community detection")
-                        good_candidate = False
-                        break
-                
-                r_z_coords = list(nx.get_node_attributes(candidate,'r_z_coords').values())
-                r_z_coords = sorted(r_z_coords, reverse=True, key=lambda coord: coord[0])
-                coords = r_z_coords
+                vivl_id_values = nx.get_node_attributes(G,'vivl_id').values()
+                if len(vivl_id_values) == len(set(vivl_id_values)): 
+                    print("no duplicates volume_ids & in_volume_layer_ids for this candidate")
+                else: 
+                    print("Bad candidate, > 1 hit per layer, will process through community detection")
+                    good_candidate = False
+
+                #TODO: need to check for holes?
+
+                # At this stage we know candidate has 1 hit per layer
+                coords = list(nx.get_node_attributes(candidate,'xy').values())
+                coords = list(nx.get_node_attributes(candidate, 'xyzr').values())
+                # sort according to decreasing radius value
+                coords = sorted(coords, reverse=True, key=lambda xyzr: xyzr[3])
+
                 
                 if good_candidate:
                     pval = KF_track_fit(sigma0, mu, coords)
                     if pval >= track_acceptance:
-                        print("Good KF fit, P value:", pval, "first coord:", coords[0])
+                        print("Good KF fit, P value:", pval, "(x,y,z,r):", coords)
                         extracted.append(candidate)
                         extracted_pvals.append(pval)
                         candidate_to_remove_from_subGraph.append(candidate)
@@ -253,14 +235,15 @@ def main():
                         print("pval too small,", pval, "leave for further processing")
                 else:
                     if COMMUNITY_DETECTION:
-                        print("Run community detection...")   
+                        print("Run community detection...")
+                        #TODO: coordinates & community detection method needs to be updated
                         valid_communities, vc_coords = community_detection(candidate, fragment)
                         if len(valid_communities) > 0:
                             print("found communities via community detection")
                             for vc, vcc in zip(valid_communities, vc_coords):
                                 pval = KF_track_fit(sigma0, mu, vcc)
                                 if pval >= track_acceptance:
-                                    print("Good KF fit, P value:", pval, "first coord:", vcc[0])
+                                    print("Good KF fit, P value:", pval, "(x,y,z,r):", vcc)
                                     extracted.append(vc)
                                     extracted_pvals.append(pval)
                                     candidate_to_remove_from_subGraph.append(vc)
@@ -310,7 +293,7 @@ def main():
     
     # plot_save_subgraphs_iterations(extracted, extracted_pvals, candidatesDir, "Extracted candidates")
     h.plot_save_subgraphs_iterations(extracted, extracted_pvals, candidatesDir, "Extracted candidates", node_labels=True, save_plot=True)
-    h.plot_subgraphs(remaining, remainingDir, node_labels=True, save_plot=True)
+    h.plot_subgraphs(remaining, remainingDir, node_labels=True, save_plot=True, title="Extracted candidates")
 
     # plot the distribution of edge weightings within the extracted candidates
 

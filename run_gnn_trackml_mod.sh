@@ -39,7 +39,12 @@ start=$SECONDS
 execution_times=($start)
 stages=("start")
 
-for i in {1..1};
+
+
+# TESTING FOR ITERATION 2 ONLY
+INPUT=$ROOTDIR/iteration_1/network/       # THIS LINE CAN BE REMOVED
+for i in {2..2};                            # THIS LINE CAN BE REMOVED
+# for i in {1..2};
     do
         OUTPUT=$ROOTDIR/iteration_$i/network/
         mkdir -p $OUTPUT
@@ -66,7 +71,7 @@ for i in {1..1};
             echo "------------------------------------------------"
             echo "Using chisq distance cut of: ${c}"
             prev_duration=$SECONDS
-            python src/extrapolate/extrapolate_merged_states.py -i $INPUT -o $OUTPUT -c $c
+            python src/extrapolate/extrapolate_merged_states.py -i $INPUT -o $OUTPUT -c $c -m $MU
             let c=$c/2   # tighter cut each time
 
             # time it!

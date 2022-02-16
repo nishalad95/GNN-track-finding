@@ -241,12 +241,9 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, sigma0, reactivate):
     h.compute_prior_probabilities(subGraphs, TRACK_STATE_KEY)
   
     title = "Filtered Graph outlier edge removal using clustering with KL distance measure"
-    # plot_save_subgraphs(subGraphs, outputDir, title)
-    h.plot_subgraphs(subGraphs, outputDir, node_labels=True, save_plot=True)
-    # need to add this:
+    h.plot_subgraphs(subGraphs, outputDir, node_labels=True, save_plot=True, title=title)
     for i, sub in enumerate(subGraphs):
         h.save_network(outputDir, i, sub)
-    # plot_subgraphs_merged_state(subGraphs, outputDir, title)
 
     for i, s in enumerate(subGraphs):
         print("-------------------")
