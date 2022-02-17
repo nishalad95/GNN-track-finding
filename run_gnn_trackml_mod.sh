@@ -5,7 +5,7 @@
 # track sim
 VAR=100  #(don't remove any nodes)   # TEMPORARY: remove nodes with empirical variance greater than VAR
 SIGMA0=0.5                           # r.m.s measurement error
-MU=0.0001                               # multiple scattering error - process noise for KF
+MU=0.000001                               # 10^-6 multiple scattering error - process noise for KF
 ROOTDIR=src/trackml_mod/output           # main output directory to save results of algorithm
 
 # clustering
@@ -20,16 +20,21 @@ c=2  # initial chisquare distance acceptance threshold factor for extrapolated s
 # ----------------------------------------------------------------------------------------------
 
 
-# # track conversion
-# echo "-------------------------------------------------"
-# echo "Running conversion of generated events to GNN..."
-# echo "-------------------------------------------------"
-# start_conversion=$SECONDS
-# INPUT=$ROOTDIR/track_sim/network/
-# mkdir -p $INPUT
-# python src/trackml_mod/event_conversion.py -o $INPUT -e $SIGMA0 -m $MU
-# conversion_duration=$(( SECONDS - start_conversion ))
-# echo "Execution time event_conversion.py: $conversion_duration seconds"
+# track conversion
+echo "-------------------------------------------------"
+echo "Running conversion of generated events to GNN..."
+echo "-------------------------------------------------"
+start_conversion=$SECONDS
+INPUT=$ROOTDIR/track_sim/network/
+mkdir -p $INPUT
+python src/trackml_mod/event_conversion.py -o $INPUT -e $SIGMA0 -m $MU
+conversion_duration=$(( SECONDS - start_conversion ))
+echo "Execution time event_conversion.py: $conversion_duration seconds"
+
+# copy the first 100 files over - DEVELOPMENT ONLY
+mkdir $ROOTDIR/track_sim/network_100/
+ls $ROOTDIR/track_sim/network/* | head -100 | xargs -I{} cp {} $ROOTDIR/track_sim/network_100/
+
 
 
 
@@ -42,9 +47,10 @@ stages=("start")
 
 
 # TESTING FOR ITERATION 2 ONLY
-INPUT=$ROOTDIR/iteration_1/network/       # THIS LINE CAN BE REMOVED
-for i in {2..2};                            # THIS LINE CAN BE REMOVED
-# for i in {1..2};
+# INPUT=$ROOTDIR/iteration_1/remaining/       # THIS LINE CAN BE REMOVED
+# for i in {2..2};                            # THIS LINE CAN BE REMOVED
+
+for i in {1..2};
     do
         OUTPUT=$ROOTDIR/iteration_$i/network/
         mkdir -p $OUTPUT

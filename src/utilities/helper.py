@@ -294,7 +294,7 @@ def save_network(directory, i, subGraph):
     nx.write_gpickle(subGraph, filename)
 
 
-def plot_subgraphs_in_plane(GraphList, outputDir, key, axis1, axis2, node_labels, save_plot, title):
+def __plot_subgraphs_in_plane(GraphList, outputDir, key, axis1, axis2, node_labels, save_plot, title):
     _, ax = plt.subplots(figsize=(10,8))
     for i, subGraph in enumerate(GraphList):
         color = ["#"+''.join([random.choice('0123456789ABCDEF') for _ in range(6) ])][0]
@@ -319,30 +319,31 @@ def plot_subgraphs_in_plane(GraphList, outputDir, key, axis1, axis2, node_labels
 
 def plot_subgraphs(GraphList, outputDir, node_labels=False, save_plot=False, title=""):
     # xy plane
-    plot_subgraphs_in_plane(GraphList, outputDir, 'xy', "x", "y", node_labels, save_plot, title)
+    __plot_subgraphs_in_plane(GraphList, outputDir, 'xy', "x", "y", node_labels, save_plot, title)
     # zr plane
-    plot_subgraphs_in_plane(GraphList, outputDir, 'zr', "z", "r", node_labels, save_plot, title)
+    __plot_subgraphs_in_plane(GraphList, outputDir, 'zr', "z", "r", node_labels, save_plot, title)
 
 
-# used for visualising the good extracted candidates & iteration num
-def plot_save_subgraphs_iterations(GraphList, extracted_pvals, outputFile, title, node_labels=True, save_plot=True):
-    # xy plot
+
+def __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, outputFile, title,
+                                                    key, axis1, axis2, node_labels, save_plot):
+
     _, ax = plt.subplots(figsize=(12,10))
     for subGraph in GraphList:
         iteration = int(subGraph.graph["iteration"])
         color = subGraph.graph["color"]
-        pos=nx.get_node_attributes(subGraph,'xy')
+        pos=nx.get_node_attributes(subGraph, key)
         edge_colors = []
         for u, v in subGraph.edges():
             if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
             else: edge_colors.append("#f2f2f2")
         nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
-        nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=75, label=iteration)
+        nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=65, label=iteration)
         if node_labels:
-            nx.draw_networkx_labels(subGraph, pos)
+            nx.draw_networkx_labels(subGraph, pos, font_size=8)
     ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
-    plt.xlabel("x coordinate")
-    plt.ylabel("y coordinate")
+    plt.xlabel(axis1)
+    plt.ylabel(axis2)
     plt.title(title)
     # plot legend & remove duplicate entries
     handles, labels = plt.gca().get_legend_handles_labels()
@@ -350,33 +351,7 @@ def plot_save_subgraphs_iterations(GraphList, extracted_pvals, outputFile, title
     plt.legend(by_label.values(), by_label.keys(), loc='upper left', title="iteration")    
     plt.axis('on')
     if save_plot:
-        plt.savefig(outputFile + "subgraphs_xy.png", dpi=300)
-
-    # rz plot
-    _, ax = plt.subplots(figsize=(12,10))
-    for subGraph in GraphList:
-        iteration = int(subGraph.graph["iteration"])
-        color = subGraph.graph["color"]
-        pos=nx.get_node_attributes(subGraph,'zr')
-        edge_colors = []
-        for u, v in subGraph.edges():
-            if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
-            else: edge_colors.append("#f2f2f2")
-        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
-        nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=75, label=iteration)
-        if node_labels:    
-            nx.draw_networkx_labels(subGraph, pos)
-    ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
-    plt.xlabel("z")
-    plt.ylabel("r")
-    plt.title(title)
-    # plot legend & remove duplicate entries
-    handles, labels = plt.gca().get_legend_handles_labels()
-    by_label = dict(zip(labels, handles))
-    plt.legend(by_label.values(), by_label.keys(), loc='upper left', title="iteration")    
-    plt.axis('on')
-    if save_plot:
-        plt.savefig(outputFile + "subgraphs_rz.png", dpi=300)
+        plt.savefig(outputFile + "subgraphs_"+ key +".png", dpi=300)
 
     # save extracted candidate track quality information
     for i, sub in enumerate(GraphList):
@@ -387,3 +362,77 @@ def plot_save_subgraphs_iterations(GraphList, extracted_pvals, outputFile, title
     for pval in extracted_pvals:
         writer.writerow([pval])
     f.close()
+
+
+# used for visualising the good extracted candidates & iteration num
+def plot_save_subgraphs_iterations(GraphList, extracted_pvals, outputFile, title, node_labels=True, save_plot=True):
+    #xy plane
+    __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, outputFile, title, 'xy', "x", "y", node_labels, save_plot)
+    #zr plane
+    __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, outputFile, title, 'zr', "z", "r", node_labels, save_plot)
+
+
+
+# # used for visualising the good extracted candidates & iteration num
+# def plot_save_subgraphs_iterations(GraphList, extracted_pvals, outputFile, title, node_labels=True, save_plot=True):
+#     # xy plot
+#     _, ax = plt.subplots(figsize=(12,10))
+#     for subGraph in GraphList:
+#         iteration = int(subGraph.graph["iteration"])
+#         color = subGraph.graph["color"]
+#         pos=nx.get_node_attributes(subGraph,'xy')
+#         edge_colors = []
+#         for u, v in subGraph.edges():
+#             if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
+#             else: edge_colors.append("#f2f2f2")
+#         nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
+#         nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=65, label=iteration)
+#         if node_labels:
+#             nx.draw_networkx_labels(subGraph, pos, font_size=8)
+#     ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
+#     plt.xlabel("x coordinate")
+#     plt.ylabel("y coordinate")
+#     plt.title(title)
+#     # plot legend & remove duplicate entries
+#     handles, labels = plt.gca().get_legend_handles_labels()
+#     by_label = dict(zip(labels, handles))
+#     plt.legend(by_label.values(), by_label.keys(), loc='upper left', title="iteration")    
+#     plt.axis('on')
+#     if save_plot:
+#         plt.savefig(outputFile + "subgraphs_xy.png", dpi=300)
+
+#     # rz plot
+#     _, ax = plt.subplots(figsize=(12,10))
+#     for subGraph in GraphList:
+#         iteration = int(subGraph.graph["iteration"])
+#         color = subGraph.graph["color"]
+#         pos=nx.get_node_attributes(subGraph,'zr')
+#         edge_colors = []
+#         for u, v in subGraph.edges():
+#             if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
+#             else: edge_colors.append("#f2f2f2")
+#         nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
+#         nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=65, label=iteration)
+#         if node_labels:    
+#             nx.draw_networkx_labels(subGraph, pos, font_size=8)
+#     ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
+#     plt.xlabel("z")
+#     plt.ylabel("r")
+#     plt.title(title)
+#     # plot legend & remove duplicate entries
+#     handles, labels = plt.gca().get_legend_handles_labels()
+#     by_label = dict(zip(labels, handles))
+#     plt.legend(by_label.values(), by_label.keys(), loc='upper left', title="iteration")    
+#     plt.axis('on')
+#     if save_plot:
+#         plt.savefig(outputFile + "subgraphs_rz.png", dpi=300)
+
+#     # save extracted candidate track quality information
+#     for i, sub in enumerate(GraphList):
+#         save_network(outputFile, i, sub) # save network to serialized form
+
+#     f = open(outputFile + "pvals.csv", 'w')
+#     writer = csv.writer(f)
+#     for pval in extracted_pvals:
+#         writer.writerow([pval])
+#     f.close()

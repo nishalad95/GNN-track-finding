@@ -6,8 +6,7 @@ import networkx as nx
 from filterpy.kalman import KalmanFilter
 from filterpy import common
 import argparse
-from utils import helper as h
-# from utils.utils import *
+from utilities import helper as h
 import pprint
 
 
@@ -186,9 +185,10 @@ def main():
         print("EDGE DATA:", s.edges.data(), "\n")
 
     title = "Subgraphs after iteration 2: message passing, extrapolation \n& validation of merged state, formation of updated state"
-    # plot_save_subgraphs(subGraphs, outputDir, title)      # this can be removed if working
     h.plot_subgraphs(subGraphs, outputDir, node_labels=True, save_plot=True, title=title)
-    # plot_subgraphs_merged_state(subGraphs, outputDir, title)  # this can be removed if working 
+    # save networks
+    for i, sub in enumerate(subGraphs):
+        h.save_network(outputDir, i, sub)
 
 
 

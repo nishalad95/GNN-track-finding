@@ -10,6 +10,7 @@ import collections
 import random
 from utilities import helper as h
 from community_detection import community_detection
+import pprint
 
 COMMUNITY_DETECTION = False
 
@@ -150,12 +151,32 @@ def main():
 
             # check for > 1 hit per layer - use volume_id & in_volume_layer_id
             good_candidate = True
-            vivl_id_values = nx.get_node_attributes(G,'vivl_id').values()
+            vivl_id_values = nx.get_node_attributes(candidate,'vivl_id').values()
+
+            #debugging
+            # print("DEBUG: vivl_id_values")
+            # print("single subgraph")
+            # print(vivl_id_values)
+
             if len(vivl_id_values) == len(set(vivl_id_values)): 
                 print("no duplicates volume_ids & in_volume_layer_ids for this candidate")
             else: 
                 print("Bad candidate, > 1 hit per layer, will process through community detection")
                 good_candidate = False
+                
+                #debugging
+                # print("-----------------------------")
+                # print("DEBUGGING SUBGRAPH")
+                # print("EDGE DATA:")
+                # for connection in subGraph.edges.data():
+                #     print(connection)
+                # print("-------------------")
+                # for n in subGraph.nodes(data=True):
+                #     pprint.pprint(n)
+                # print("-------------------------------")
+                # prefix = str(i) + "_"
+                # h.plot_subgraphs([subGraph], prefix, node_labels=True, save_plot=True, title="Extracted candidates")
+            
 
             #TODO: need to check for holes?
 
@@ -208,12 +229,30 @@ def main():
 
                 # check for > 1 hit per layer - use volume_id & in_volume_layer_id
                 good_candidate = True
-                vivl_id_values = nx.get_node_attributes(G,'vivl_id').values()
+                vivl_id_values = nx.get_node_attributes(candidate,'vivl_id').values()
+                
+                # print("DEBUG: vivl_id_values")
+                # print("multiple subgraphs")
+                # print(vivl_id_values)
+                
                 if len(vivl_id_values) == len(set(vivl_id_values)): 
                     print("no duplicates volume_ids & in_volume_layer_ids for this candidate")
                 else: 
                     print("Bad candidate, > 1 hit per layer, will process through community detection")
                     good_candidate = False
+
+                    #debugging
+                    # print("-----------------------------")
+                    # print("DEBUGGING SUBGRAPH")
+                    # print("EDGE DATA:")
+                    # for connection in subGraph.edges.data():
+                    #     print(connection)
+                    # print("-------------------")
+                    # for n in subGraph.nodes(data=True):
+                    #     pprint.pprint(n)
+                    # print("-------------------------------")
+                    # prefix = str(i) + "_multiple_"
+                    # h.plot_subgraphs([subGraph], prefix, node_labels=True, save_plot=True, title="Extracted candidates")
 
                 #TODO: need to check for holes?
 
@@ -265,7 +304,9 @@ def main():
         subGraph.graph["color"] = color[0]
 
     print("\nNumber of extracted candidates during this iteration:", len(extracted))
+    print("Number of remaining subGraphs to be further processed:", len(remaining))
     # plot all extracted candidates, from previous iterations
+    # TODO: this can be replaced with the helper function "save_network"
     i = 0
     path = candidatesDir + str(i) + subgraph_path
     while os.path.isfile(path):
@@ -286,6 +327,7 @@ def main():
         track_purity = max_freq / total_num_hits
         purities = np.append(purities, track_purity)
 
+
     print("Total number of extracted candidates:", len(extracted))
     print("Track purities:\n", purities)
     np.savetxt(candidatesDir + "extracted_track_purities.csv", purities, delimiter=",")
@@ -294,6 +336,11 @@ def main():
     # plot_save_subgraphs_iterations(extracted, extracted_pvals, candidatesDir, "Extracted candidates")
     h.plot_save_subgraphs_iterations(extracted, extracted_pvals, candidatesDir, "Extracted candidates", node_labels=True, save_plot=True)
     h.plot_subgraphs(remaining, remainingDir, node_labels=True, save_plot=True, title="Extracted candidates")
+
+    # save remaining subgraphs to be further processed
+    for i, sub in enumerate(remaining):
+        h.save_network(remainingDir, i, sub)
+
 
     # plot the distribution of edge weightings within the extracted candidates
 

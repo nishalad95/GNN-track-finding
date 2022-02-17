@@ -242,20 +242,21 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, sigma0, reactivate):
   
     title = "Filtered Graph outlier edge removal using clustering with KL distance measure"
     h.plot_subgraphs(subGraphs, outputDir, node_labels=True, save_plot=True, title=title)
+    # save networks
     for i, sub in enumerate(subGraphs):
         h.save_network(outputDir, i, sub)
 
-    for i, s in enumerate(subGraphs):
-        print("-------------------")
-        print("SUBGRAPH " + str(i))
-        print("-------------------")
-        print("EDGE DATA:")
-        for connection in s.edges.data():
-            print(connection)
-        print("-------------------")
-        for node in s.nodes(data=True):
-            pprint.pprint(node)
-        print("--------------------")
+    # for i, s in enumerate(subGraphs):
+    #     print("-------------------")
+    #     print("SUBGRAPH " + str(i))
+    #     print("-------------------")
+    #     print("EDGE DATA:")
+    #     for connection in s.edges.data():
+    #         print(connection)
+    #     print("-------------------")
+    #     for node in s.nodes(data=True):
+    #         pprint.pprint(node)
+    #     print("--------------------")
 
     
 
