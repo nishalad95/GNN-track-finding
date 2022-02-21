@@ -13,13 +13,13 @@ LUT=learn_KL/output/empvar/empvar.lut       # LUT file for KL distance calibrati
 
 # extracting track candidates
 p=0.01                  # p-value acceptance level for good track candidate extraction
-n=4                     # minimum number of hits for good track candidate acceptance
+n=4                     # minimum number of hits for good track candidate acceptance (>=n)
 
 # extrapolation
 c=2  # initial chisquare distance acceptance threshold factor for extrapolated states
 # ----------------------------------------------------------------------------------------------
 
-
+mkdir -p $ROOTDIR
 # track conversion
 echo "-------------------------------------------------"
 echo "Running conversion of generated events to GNN..."
@@ -31,10 +31,11 @@ python src/trackml_mod/event_conversion.py -o $INPUT -e $SIGMA0 -m $MU
 conversion_duration=$(( SECONDS - start_conversion ))
 echo "Execution time event_conversion.py: $conversion_duration seconds"
 
+
+
 # copy the first 100 files over - DEVELOPMENT ONLY
 mkdir $ROOTDIR/track_sim/network_100/
-ls $ROOTDIR/track_sim/network/* | head -100 | xargs -I{} cp {} $ROOTDIR/track_sim/network_100/
-
+ls $ROOTDIR/track_sim/network/* | head -500 | xargs -I{} cp {} $ROOTDIR/track_sim/network_100/
 
 
 

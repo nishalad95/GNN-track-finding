@@ -222,7 +222,7 @@ def main():
                 print("Processing sub:", n)
 
                 # check for track fragments
-                if len(candidate.nodes()) <= fragment : 
+                if len(candidate.nodes()) < fragment : 
                     print("Too few nodes, track fragment")
                     continue
                 
