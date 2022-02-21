@@ -7,8 +7,10 @@ import numpy as np
 import os
 import argparse
 import collections
-from utils.utils import *
+import random
+from utilities import helper as h
 from community_detection import community_detection
+import pprint
 
 COMMUNITY_DETECTION = False
 
@@ -18,7 +20,6 @@ def KF_track_fit(sigma0, mu, coords):
     obs_x = [c[0] for c in coords]
     obs_y = [c[1] for c in coords]
     yf = obs_y[0]
-    # obs_y = obs_y[1:]
     dx = coords[1][0] - coords[0][0]
 
     # initialize KF at outermost layer
@@ -29,7 +30,7 @@ def KF_track_fit(sigma0, mu, coords):
     f.P = np.array([[sigma0**2,    0.],
                     [0.,         1000.]])   # P covariance
     f.R = sigma0**2
-    f.Q = mu                                # process uncertainty
+    f.Q = mu                                # process uncertainty/noise
 
     # KF predict and update
     chi2_dists = []
@@ -100,9 +101,9 @@ def main():
     parser.add_argument('-e', '--error', help="rms of track position measurements")
     parser.add_argument('-m', '--mu', help="uncertainty due to multiple scattering, process noise")
     parser.add_argument('-n', '--numhits', help="minimum number of hits for good track candidate")
-    parser.add_argument('-t', '--trackml_mod', help="if data simulation in trackml setup", default=0)
     args = parser.parse_args()
 
+    # set variables
     inputDir = args.input
     candidatesDir = args.candidates
     remainingDir = args.remain
@@ -112,8 +113,10 @@ def main():
     subgraph_path = "_subgraph.gpickle"
     pvalsfile_path = "_pvals.csv"
     fragment = int(args.numhits)
-    iteration_num = inputDir.split("/")[2][-1]
-    trackml_mod = bool(args.trackml_mod)
+    # get iteration num
+    inputDir_list = inputDir.split("/")
+    iterationDir = filter(lambda x: x.startswith('iteration_'), inputDir_list)
+    for i in iterationDir: iteration_num = i.split("_")[-1]
 
     # read in subgraph data
     subGraphs = []
@@ -146,37 +149,48 @@ def main():
                 remaining.append(subGraph)
                 continue
 
-            # check for 1 hit per layer
-            # coords = list(nx.get_node_attributes(candidate,'coord_Measurement').values())
-            in_volume_layer_ids = list(nx.get_node_attributes(candidate, 'in_volume_layer_id').values())
-            # if trackml_mod:
-            in_volume_layer_ids = sorted(in_volume_layer_ids, reverse=True)
+            # check for > 1 hit per layer - use volume_id & in_volume_layer_id
             good_candidate = True
-            for j in range(0, len(in_volume_layer_ids)-1):
-                if (int(np.abs(in_volume_layer_ids[j+1] - in_volume_layer_ids[j])) != 2):
-                    print("Processing in_volume_layer_ids")
-                    print("in_volume_layer_ids: \n", in_volume_layer_ids)
-                    print("Track", i, "bad candidate, not 1 hit per layer, will process through community detection")
-                    good_candidate = False
-                    break
-            # else:
-            #     coords = sorted(coords, reverse=True, key=lambda x: x[0])
-            #     good_candidate = True
-            #     for j in range(0, len(coords)-1):
-            #         if (np.abs(coords[j+1][0] - coords[j][0]) != 1):
-            #             print("Processing x coordinate layer IDs")
-            #             print("Track", i, "bad candidate, not 1 hit per layer, will process through community detection")
-            #             good_candidate = False
-            #             break
+            vivl_id_values = nx.get_node_attributes(candidate,'vivl_id').values()
+
+            #debugging
+            # print("DEBUG: vivl_id_values")
+            # print("single subgraph")
+            # print(vivl_id_values)
+
+            if len(vivl_id_values) == len(set(vivl_id_values)): 
+                print("no duplicates volume_ids & in_volume_layer_ids for this candidate")
+            else: 
+                print("Bad candidate, > 1 hit per layer, will process through community detection")
+                good_candidate = False
+                
+                #debugging
+                # print("-----------------------------")
+                # print("DEBUGGING SUBGRAPH")
+                # print("EDGE DATA:")
+                # for connection in subGraph.edges.data():
+                #     print(connection)
+                # print("-------------------")
+                # for n in subGraph.nodes(data=True):
+                #     pprint.pprint(n)
+                # print("-------------------------------")
+                # prefix = str(i) + "_"
+                # h.plot_subgraphs([subGraph], prefix, node_labels=True, save_plot=True, title="Extracted candidates")
             
-            r_z_coords = list(nx.get_node_attributes(candidate,'r_z_coords').values())
-            r_z_coords = sorted(r_z_coords, reverse=True, key=lambda coord: coord[0])
-            coords = r_z_coords
+
+            #TODO: need to check for holes?
+
+            # At this stage we know candidate has 1 hit per layer
+            coords = list(nx.get_node_attributes(candidate,'xy').values())
+            coords = list(nx.get_node_attributes(candidate, 'xyzr').values())
+            # sort according to decreasing radius value
+            coords = sorted(coords, reverse=True, key=lambda xyzr: xyzr[3])
+    
 
             if good_candidate:
                 pval = KF_track_fit(sigma0, mu, coords)
                 if pval >= track_acceptance:
-                    print("Good KF fit, P value:", pval, "first coord:", coords[0])
+                    print("Good KF fit, P value:", pval, "(x,y,z,r):", coords)
                     extracted.append(candidate)
                     extracted_pvals.append(pval)
                 else:
@@ -185,13 +199,14 @@ def main():
             else:
                 if COMMUNITY_DETECTION:
                     print("Run community detection...")
+                    #TODO: coordinates & community detection method needs to be updated
                     valid_communities, vc_coords = community_detection(candidate, fragment)
                     if len(valid_communities) > 0:
                         print("found communities via community detection")
                         for vc, vcc in zip(valid_communities, vc_coords):
                             pval = KF_track_fit(sigma0, mu, vcc)
                             if pval >= track_acceptance:
-                                print("Good KF fit, P value:", pval, "first coord:", vcc[0])
+                                print("Good KF fit, P value:", pval, "(x,y,z,r):", vcc)
                                 extracted.append(vc)
                                 extracted_pvals.append(pval)
                                 good_nodes = vc.nodes()
@@ -207,42 +222,51 @@ def main():
                 print("Processing sub:", n)
 
                 # check for track fragments
-                if len(candidate.nodes()) <= fragment : 
+                if len(candidate.nodes()) < fragment : 
                     print("Too few nodes, track fragment")
                     continue
+                
 
-                # check for 1 hit per layer
-                # coords = list(nx.get_node_attributes(candidate,'coord_Measurement').values())
-                # coords = sorted(coords, reverse=True, key=lambda x: x[0])
-                # good_candidate = True
-                # for j in range(0, len(coords)-1):
-                #     if (np.abs(coords[j+1][0] - coords[j][0]) != 1):
-                #         print("Track", i, "bad candidate, not 1 hit per layer")
-                #         good_candidate = False
-                #         break
-                
-                # check for 1 hit per layer
-                # coords = list(nx.get_node_attributes(candidate,'coord_Measurement').values())
-                in_volume_layer_ids = list(nx.get_node_attributes(candidate, 'in_volume_layer_id').values())
-                # if trackml_mod:
-                in_volume_layer_ids = sorted(in_volume_layer_ids, reverse=True)
+                # check for > 1 hit per layer - use volume_id & in_volume_layer_id
                 good_candidate = True
-                for j in range(0, len(in_volume_layer_ids)-1):
-                    if (int(np.abs(in_volume_layer_ids[j+1] - in_volume_layer_ids[j])) != 2):
-                        print("Processing in_volume_layer_ids")
-                        print("in_volume_layer_ids: \n", in_volume_layer_ids)
-                        print("Track", i, "bad candidate, not 1 hit per layer, will process through community detection")
-                        good_candidate = False
-                        break
+                vivl_id_values = nx.get_node_attributes(candidate,'vivl_id').values()
                 
-                r_z_coords = list(nx.get_node_attributes(candidate,'r_z_coords').values())
-                r_z_coords = sorted(r_z_coords, reverse=True, key=lambda coord: coord[0])
-                coords = r_z_coords
+                # print("DEBUG: vivl_id_values")
+                # print("multiple subgraphs")
+                # print(vivl_id_values)
+                
+                if len(vivl_id_values) == len(set(vivl_id_values)): 
+                    print("no duplicates volume_ids & in_volume_layer_ids for this candidate")
+                else: 
+                    print("Bad candidate, > 1 hit per layer, will process through community detection")
+                    good_candidate = False
+
+                    #debugging
+                    # print("-----------------------------")
+                    # print("DEBUGGING SUBGRAPH")
+                    # print("EDGE DATA:")
+                    # for connection in subGraph.edges.data():
+                    #     print(connection)
+                    # print("-------------------")
+                    # for n in subGraph.nodes(data=True):
+                    #     pprint.pprint(n)
+                    # print("-------------------------------")
+                    # prefix = str(i) + "_multiple_"
+                    # h.plot_subgraphs([subGraph], prefix, node_labels=True, save_plot=True, title="Extracted candidates")
+
+                #TODO: need to check for holes?
+
+                # At this stage we know candidate has 1 hit per layer
+                coords = list(nx.get_node_attributes(candidate,'xy').values())
+                coords = list(nx.get_node_attributes(candidate, 'xyzr').values())
+                # sort according to decreasing radius value
+                coords = sorted(coords, reverse=True, key=lambda xyzr: xyzr[3])
+
                 
                 if good_candidate:
                     pval = KF_track_fit(sigma0, mu, coords)
                     if pval >= track_acceptance:
-                        print("Good KF fit, P value:", pval, "first coord:", coords[0])
+                        print("Good KF fit, P value:", pval, "(x,y,z,r):", coords)
                         extracted.append(candidate)
                         extracted_pvals.append(pval)
                         candidate_to_remove_from_subGraph.append(candidate)
@@ -250,14 +274,15 @@ def main():
                         print("pval too small,", pval, "leave for further processing")
                 else:
                     if COMMUNITY_DETECTION:
-                        print("Run community detection...")   
+                        print("Run community detection...")
+                        #TODO: coordinates & community detection method needs to be updated
                         valid_communities, vc_coords = community_detection(candidate, fragment)
                         if len(valid_communities) > 0:
                             print("found communities via community detection")
                             for vc, vcc in zip(valid_communities, vc_coords):
                                 pval = KF_track_fit(sigma0, mu, vcc)
                                 if pval >= track_acceptance:
-                                    print("Good KF fit, P value:", pval, "first coord:", vcc[0])
+                                    print("Good KF fit, P value:", pval, "(x,y,z,r):", vcc)
                                     extracted.append(vc)
                                     extracted_pvals.append(pval)
                                     candidate_to_remove_from_subGraph.append(vc)
@@ -279,7 +304,9 @@ def main():
         subGraph.graph["color"] = color[0]
 
     print("\nNumber of extracted candidates during this iteration:", len(extracted))
+    print("Number of remaining subGraphs to be further processed:", len(remaining))
     # plot all extracted candidates, from previous iterations
+    # TODO: this can be replaced with the helper function "save_network"
     i = 0
     path = candidatesDir + str(i) + subgraph_path
     while os.path.isfile(path):
@@ -292,22 +319,28 @@ def main():
     purities = np.array([])
     for subGraph in extracted:
         truth_particles = nx.get_node_attributes(subGraph,'truth_particle').values()
-        # print("truth particles:\n", truth_particles)
         counter = collections.Counter(truth_particles)
         most_common = counter.most_common(1)
-        # print("most_common\n", most_common)
         most_common_truth_particle = most_common[0][0]
         max_freq = most_common[0][1]
         total_num_hits = len(truth_particles)
-        # print("total_num_hits", total_num_hits)
         track_purity = max_freq / total_num_hits
         purities = np.append(purities, track_purity)
+
 
     print("Total number of extracted candidates:", len(extracted))
     print("Track purities:\n", purities)
     np.savetxt(candidatesDir + "extracted_track_purities.csv", purities, delimiter=",")
-    plot_save_subgraphs_iterations(extracted, extracted_pvals, candidatesDir, "Extracted candidates")
-    plot_save_subgraphs(remaining, remainingDir, "Remaining network")
+    
+    
+    # plot_save_subgraphs_iterations(extracted, extracted_pvals, candidatesDir, "Extracted candidates")
+    h.plot_save_subgraphs_iterations(extracted, extracted_pvals, candidatesDir, "Extracted candidates", node_labels=True, save_plot=True)
+    h.plot_subgraphs(remaining, remainingDir, node_labels=True, save_plot=True, title="Extracted candidates")
+
+    # save remaining subgraphs to be further processed
+    for i, sub in enumerate(remaining):
+        h.save_network(remainingDir, i, sub)
+
 
     # plot the distribution of edge weightings within the extracted candidates
 

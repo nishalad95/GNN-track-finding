@@ -35,8 +35,8 @@ for i, s in enumerate(networks):
         print("\nProcessing node num:", node)
 
         # get inward facing edges to the node
-        node_x = node_attr['coord_Measurement'][0]
-        node_y = node_attr['coord_Measurement'][1]
+        node_x = node_attr['xy'][0]
+        node_y = node_attr['xy'][1]
         inward_edges = s.in_edges(node)
         outward_edges = s.out_edges(node)
         print("inward facing edges:", inward_edges)
@@ -65,8 +65,8 @@ for i, s in enumerate(networks):
             print("edge_attr", edge_attr)
 
             weight = edge_attr['mixture_weight']
-            neighbour_x = s.nodes[edge[0]]['coord_Measurement'][0]
-            neighbour_y = s.nodes[edge[0]]['coord_Measurement'][1]
+            neighbour_x = s.nodes[edge[0]]['xy'][0]
+            neighbour_y = s.nodes[edge[0]]['xy'][1]
             dy_dx = (neighbour_y - node_y) / (neighbour_x - node_x)
             theta_r = np.arctan(dy_dx)
             theta_d = np.degrees(theta_r)

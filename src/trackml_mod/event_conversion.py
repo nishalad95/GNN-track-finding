@@ -5,7 +5,7 @@ import csv
 import networkx as nx
 import random
 import argparse
-from helper import *
+from utilities import helper as h
 import pprint
 import os
 import glob
@@ -36,8 +36,8 @@ def main():
     parser.add_argument('-o', '--outputDir', help="Full directory path of where to save graph networks")
     parser.add_argument('-e', '--error', help="rms of track position measurements")
     parser.add_argument('-m', '--mu', help="uncertainty due to multiple scattering, process noise")
-    event_path = "trackml_mod/generated_events/event_1_filtered_graph_"
-    truth_event_path = "trackml_mod/truth/event000001000-"
+    event_path = "src/trackml_mod/events/event_1_filtered_graph_"
+    truth_event_path = "src/trackml_mod/truth/event000001000-"
     truth_event_file = truth_event_path + "nodes-particles-id.csv"
     max_volume_region = 8000 # first consider endcap volume 7 only
 
@@ -47,36 +47,35 @@ def main():
     mu = float(args.mu)                # process error - due to multiple scattering
 
     # load truth information & metadata on events
-    nodes, edges = load_metadata(event_path, max_volume_region)
-    # load_save_truth(event_path, truth_event_path, truth_event_file) #  only need to execute once
+    nodes, edges = h.load_metadata(event_path, max_volume_region)
+    # h.load_save_truth(event_path, truth_event_path, truth_event_file) #  only need to execute once
     truth = pd.read_csv(truth_event_file)
 
     # create a graph network
     endcap_graph = nx.DiGraph()
-    construct_graph(endcap_graph, nodes, edges, truth, sigma0)
+    h.construct_graph(endcap_graph, nodes, edges, truth, sigma0, mu)
 
     # plot the network
-    # plotGraph(endcap_graph, "endcap7_trackml_mod.png")
     print("Endcap volume 7 graph network:")
     print("Number of edges:", endcap_graph.number_of_edges())
     print("Number of nodes:", endcap_graph.number_of_nodes())
 
     # compute track state estimates, extract subgraphs: out-of-the-box CCA
-    endcap_graph = compute_track_state_estimates([endcap_graph], sigma0, mu)
+    endcap_graph = h.compute_track_state_estimates([endcap_graph], sigma0, mu)
     endcap_graph = nx.Graph(endcap_graph[0])
     endcap_graph = nx.to_directed(endcap_graph)
     subGraphs = [endcap_graph.subgraph(c).copy() for c in nx.weakly_connected_components(endcap_graph)]
-    subGraphs = compute_track_state_estimates(subGraphs, sigma0, mu)
-    initialize_edge_activation(subGraphs)
-    compute_prior_probabilities(subGraphs, 'track_state_estimates')
-    compute_mixture_weights(subGraphs)
+    subGraphs = h.compute_track_state_estimates(subGraphs, sigma0, mu)
+    h.initialize_edge_activation(subGraphs)
+    h.compute_prior_probabilities(subGraphs, 'track_state_estimates')
+    h.compute_mixture_weights(subGraphs)
 
     print("Number of subgraphs..", len(subGraphs))
-    # plot_subgraphs(subGraphs, outputDir)
-
+    # uncomment the next line for plotting
+    # h.plot_subgraphs(subGraphs, outputDir, title="Nodes & Edges extracted from TrackML generated data")
     # save the subgraphs
     for i, sub in enumerate(subGraphs):
-        save_network(outputDir, i, sub)
+        h.save_network(outputDir, i, sub)
 
     print_graph_stats(outputDir)
 

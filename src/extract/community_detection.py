@@ -15,7 +15,7 @@ import pprint
 # def plot_community(subGraph, partition, title):
 #     _, ax = plt.subplots(figsize=(12,10))
 
-#     pos=nx.get_node_attributes(subGraph,'coord_Measurement')
+#     pos=nx.get_node_attributes(subGraph,'xy')
 #     cmap = cm.get_cmap('viridis', max(partition.values()))
 #     nx.draw_networkx_nodes(subGraph, pos, partition.keys(), node_size=75,
 #                             cmap=cmap, node_color=list(partition.values()))
@@ -56,7 +56,7 @@ def community_detection(subGraph, fragment):
 
     # convert to igraph
     isub = igraph.Graph.from_networkx(sub)
-    coords = isub.vs()["coord_Measurement"]
+    coords = isub.vs()["xy"]
     gnn_meas = isub.vs()["GNN_Measurement"]
     isub.es["weight"] = isub.es()["mixture_weight"]
 
@@ -95,7 +95,7 @@ def community_detection(subGraph, fragment):
             # print(community_nodes)
 
             # check for 1 hit per layer
-            coords = [subGraph.nodes[n]["coord_Measurement"] for n in community_nodes]
+            coords = [subGraph.nodes[n]["xy"] for n in community_nodes]
             coords = sorted(coords, reverse=True, key=lambda x: x[0])
             
             good_candidate = True
