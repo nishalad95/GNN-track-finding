@@ -1,4 +1,4 @@
-# GNN
+# GNN-track-finding
 
 GNN is a Python library using Graph Neural Networks for pattern recognition & Fast Track Finding in the ATLAS detector at the LHC
 
