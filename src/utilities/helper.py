@@ -204,12 +204,28 @@ def compute_track_state_estimates(GraphList, sigma0, mu):
     return GraphList
 
 
+def __get_particle_id(row, df):
+    particle_ids = []
+    for hit_id in row:
+        particle_id = df.loc[df.hit_id == hit_id]['particle_id'].item()
+        particle_ids.append(particle_id)
+    return particle_ids
+
+
+
 def construct_graph(graph, nodes, edges, truth, sigma0, mu):
+    # TODO: 'truth_particle' attribute needs to be updated - clustering calculation uses 1 particle id, currently needs updating
     # group truth particle ids to node index
     group = truth.groupby('node_idx')
     grouped_pid = group.apply(lambda row: row['particle_id'].unique())
     grouped_pid = pd.DataFrame({'node_idx':grouped_pid.index, 'particle_id':grouped_pid.values})
     grouped_pid['single_particle_id'] = grouped_pid['particle_id'].str[0]
+
+    # node to hit dissociation: group truth hits to node index
+    grouped_hit_id = group.apply(lambda row: row['hit_id'].unique())
+    grouped_hit_id = pd.DataFrame({'node_idx':grouped_hit_id.index, 'hit_id':grouped_hit_id.values})
+    grouped_hit_id['particle_id'] = grouped_hit_id['hit_id'].apply(lambda row: __get_particle_id(row, truth))
+    grouped_hit_id['hit_dissociation'] = grouped_hit_id.apply(lambda row: {"hit_id": row['hit_id'], "particle_id":row['particle_id']}, axis=1)
 
     # add nodes
     for i in range(len(nodes)):
@@ -217,7 +233,12 @@ def construct_graph(graph, nodes, edges, truth, sigma0, mu):
         node_idx = int(row.node_idx)
         x, y, z, r = row.x, row.y, row.z, row.r
         volume_id, in_volume_layer_id = row.volume_id, row.in_volume_layer_id
-        label =  grouped_pid.loc[grouped_pid['node_idx'] == node_idx]['single_particle_id'].item()  # MC truth label (particle id)
+        
+        # TODO: update the following
+        label = grouped_pid.loc[grouped_pid['node_idx'] == node_idx]['single_particle_id'].item()  # MC truth label (particle id)
+        
+        hit_dissociation = grouped_hit_id.loc[grouped_hit_id['node_idx'] == node_idx]['hit_dissociation'].item()
+        
         gm = gnn.GNN_Measurement(x, y, z, r, sigma0, mu, label=label, n=node_idx)
         graph.add_node(node_idx, GNN_Measurement=gm, 
                             xy=(x, y),                              # all attributes here for development only - can be abstracted away in GNN_Measurement
@@ -226,7 +247,9 @@ def construct_graph(graph, nodes, edges, truth, sigma0, mu):
                             volume_id = volume_id,
                             in_volume_layer_id = in_volume_layer_id,
                             vivl_id = (volume_id, in_volume_layer_id),
-                            truth_particle=label)
+                            # TODO: update the following
+                            truth_particle=label,
+                            hit_dissociation=hit_dissociation)
 
     # add bidirectional edges
     for i in range(len(edges)):
@@ -285,7 +308,7 @@ def load_save_truth(event_path, truth_event_path, truth_event_file):
     truth['nhits'] = nhits
 
     # save truth
-    truth.to_csv(truth_event_file, index=False)
+    truth.to_csv(truth_event_file, index=False)    
 
 
 # save network as serialized form & adjacency matrix
@@ -294,6 +317,7 @@ def save_network(directory, i, subGraph):
     nx.write_gpickle(subGraph, filename)
 
 
+# private function
 def __plot_subgraphs_in_plane(GraphList, outputDir, key, axis1, axis2, node_labels, save_plot, title):
     _, ax = plt.subplots(figsize=(10,8))
     for i, subGraph in enumerate(GraphList):
@@ -305,9 +329,9 @@ def __plot_subgraphs_in_plane(GraphList, outputDir, key, axis1, axis2, node_labe
             if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
             else: edge_colors.append("#f2f2f2")
         nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
-        nx.draw_networkx_nodes(subGraph, pos, nodelist=nodes, node_color=color, node_size=5)
+        nx.draw_networkx_nodes(subGraph, pos, nodelist=nodes, node_color=color, node_size=65)
         if node_labels:
-            nx.draw_networkx_labels(subGraph, pos)
+            nx.draw_networkx_labels(subGraph, pos, font_size=8)
     ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
     plt.xlabel(axis1)
     plt.ylabel(axis2)
@@ -325,6 +349,7 @@ def plot_subgraphs(GraphList, outputDir, node_labels=False, save_plot=False, tit
 
 
 
+# private function
 def __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, outputFile, title,
                                                     key, axis1, axis2, node_labels, save_plot):
 
@@ -370,69 +395,3 @@ def plot_save_subgraphs_iterations(GraphList, extracted_pvals, outputFile, title
     __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, outputFile, title, 'xy', "x", "y", node_labels, save_plot)
     #zr plane
     __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, outputFile, title, 'zr', "z", "r", node_labels, save_plot)
-
-
-
-# # used for visualising the good extracted candidates & iteration num
-# def plot_save_subgraphs_iterations(GraphList, extracted_pvals, outputFile, title, node_labels=True, save_plot=True):
-#     # xy plot
-#     _, ax = plt.subplots(figsize=(12,10))
-#     for subGraph in GraphList:
-#         iteration = int(subGraph.graph["iteration"])
-#         color = subGraph.graph["color"]
-#         pos=nx.get_node_attributes(subGraph,'xy')
-#         edge_colors = []
-#         for u, v in subGraph.edges():
-#             if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
-#             else: edge_colors.append("#f2f2f2")
-#         nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
-#         nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=65, label=iteration)
-#         if node_labels:
-#             nx.draw_networkx_labels(subGraph, pos, font_size=8)
-#     ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
-#     plt.xlabel("x coordinate")
-#     plt.ylabel("y coordinate")
-#     plt.title(title)
-#     # plot legend & remove duplicate entries
-#     handles, labels = plt.gca().get_legend_handles_labels()
-#     by_label = dict(zip(labels, handles))
-#     plt.legend(by_label.values(), by_label.keys(), loc='upper left', title="iteration")    
-#     plt.axis('on')
-#     if save_plot:
-#         plt.savefig(outputFile + "subgraphs_xy.png", dpi=300)
-
-#     # rz plot
-#     _, ax = plt.subplots(figsize=(12,10))
-#     for subGraph in GraphList:
-#         iteration = int(subGraph.graph["iteration"])
-#         color = subGraph.graph["color"]
-#         pos=nx.get_node_attributes(subGraph,'zr')
-#         edge_colors = []
-#         for u, v in subGraph.edges():
-#             if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
-#             else: edge_colors.append("#f2f2f2")
-#         nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
-#         nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=65, label=iteration)
-#         if node_labels:    
-#             nx.draw_networkx_labels(subGraph, pos, font_size=8)
-#     ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
-#     plt.xlabel("z")
-#     plt.ylabel("r")
-#     plt.title(title)
-#     # plot legend & remove duplicate entries
-#     handles, labels = plt.gca().get_legend_handles_labels()
-#     by_label = dict(zip(labels, handles))
-#     plt.legend(by_label.values(), by_label.keys(), loc='upper left', title="iteration")    
-#     plt.axis('on')
-#     if save_plot:
-#         plt.savefig(outputFile + "subgraphs_rz.png", dpi=300)
-
-#     # save extracted candidate track quality information
-#     for i, sub in enumerate(GraphList):
-#         save_network(outputFile, i, sub) # save network to serialized form
-
-#     f = open(outputFile + "pvals.csv", 'w')
-#     writer = csv.writer(f)
-#     for pval in extracted_pvals:
-#         writer.writerow([pval])
-#     f.close()
