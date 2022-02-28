@@ -247,27 +247,33 @@ def construct_graph(graph, nodes, edges, truth, sigma0, mu):
                             volume_id = volume_id,
                             in_volume_layer_id = in_volume_layer_id,
                             vivl_id = (volume_id, in_volume_layer_id),
-                            # TODO: update the following
-                            truth_particle=label,
+                            truth_particle=label,   # TODO: update the following
                             hit_dissociation=hit_dissociation)
-
+    
     # add bidirectional edges
     for i in range(len(edges)):
         row = edges.iloc[i]
         node1, node2 = row.node1, row.node2
-        graph.add_edge(node1, node2)
-        graph.add_edge(node2, node1)
+        # if both nodes in network, add edge
+        if (node1 in graph.nodes()) and (node2 in graph.nodes()):
+            graph.add_edge(node1, node2)
+            graph.add_edge(node2, node1)
 
 
+
+# TODO: rename to load_nodes_edges
 def load_metadata(event_path, max_volume_region):
     # graph nodes
     nodes = pd.read_csv(event_path + "nodes.csv")
+    # select nodes in region of interest
     nodes = nodes.loc[nodes['layer_id'] <= max_volume_region]
     nodes['r'] = nodes.apply(lambda row: edge_length_xy(row), axis=1)
     nodes['volume_id'] = nodes.apply(lambda row: get_volume_id(row.layer_id), axis=1) 
     nodes['in_volume_layer_id'] = nodes.apply(lambda row: get_in_volume_layer_id(row.layer_id), axis=1)
 
     # graph edges
+    # select all edges - TODO: select only edges where node1 and node2 contained in nodes df (above)
+    # TODO: much faster way of doing this
     edges = pd.read_csv(event_path + "edges.csv")
     new_header = edges.iloc[0] #grab the first row for the header
     edges = edges[1:] #take the data less the header row
@@ -275,7 +281,6 @@ def load_metadata(event_path, max_volume_region):
     edges['node2'] = edges.apply(lambda row: row.name[0], axis=1)
     edges['node1'] = edges.apply(lambda row: row.name[1], axis=1)
     edges = edges.astype({'node2': 'int32', 'node1': 'int32'})
-    edges = edges.loc[(edges['node2'] < max_volume_region) & (edges['node1'] < max_volume_region)]
 
     # return as dataframes
     return nodes, edges
@@ -290,10 +295,10 @@ def load_save_truth(event_path, truth_event_path, truth_event_file):
     nodes_hits = pd.read_csv(event_path + "nodes_to_hits.csv")
     truth = nodes_hits[['node_idx', 'hit_id']]
     hit_ids = truth['hit_id']
-    particle_ids = np.array([])
+    particle_ids = []
     for hid in hit_ids:
         pid = hits_particles.loc[hits_particles['hit_id'] == hid]['particle_id'].item()
-        particle_ids = np.append(particle_ids, pid)
+        particle_ids.append(pid)
     truth['particle_id'] = particle_ids
 
     # number of hits for each truth particle
@@ -331,7 +336,7 @@ def __plot_subgraphs_in_plane(GraphList, outputDir, key, axis1, axis2, node_labe
         nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
         nx.draw_networkx_nodes(subGraph, pos, nodelist=nodes, node_color=color, node_size=65)
         if node_labels:
-            nx.draw_networkx_labels(subGraph, pos, font_size=8)
+            nx.draw_networkx_labels(subGraph, pos, font_size=5)
     ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
     plt.xlabel(axis1)
     plt.ylabel(axis2)
@@ -365,7 +370,7 @@ def __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, output
         nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
         nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=65, label=iteration)
         if node_labels:
-            nx.draw_networkx_labels(subGraph, pos, font_size=8)
+            nx.draw_networkx_labels(subGraph, pos, font_size=5)
     ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
     plt.xlabel(axis1)
     plt.ylabel(axis2)

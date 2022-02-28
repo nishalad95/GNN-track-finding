@@ -4,7 +4,8 @@
 # VARIABLES
 # track sim
 VAR=100  #(don't remove any nodes)   # TEMPORARY: remove nodes with empirical variance greater than VAR
-SIGMA0=0.5                           # r.m.s measurement error
+SIGMA0=.0001                           # r.m.s measurement error
+# SIGMA0=0.5
 MU=0.000001                               # 10^-6 multiple scattering error - process noise for KF
 ROOTDIR=src/trackml_mod/output           # main output directory to save results of algorithm
 
@@ -35,7 +36,7 @@ echo "Execution time event_conversion.py: $conversion_duration seconds"
 
 # copy the first 100 files over - DEVELOPMENT ONLY
 mkdir $ROOTDIR/track_sim/network_100/
-ls $ROOTDIR/track_sim/network/* | head -100 | xargs -I{} cp {} $ROOTDIR/track_sim/network_100/
+ls $ROOTDIR/track_sim/network/* | head -2516 | xargs -I{} cp {} $ROOTDIR/track_sim/network_100/
 
 
 
@@ -171,5 +172,13 @@ for value in "${stages[@]}"
 do
      echo $value
 done
+
+
+
+echo "-------------------------------------------------"
+echo "Running track reconstruction efficiency:"
+echo "-------------------------------------------------"
+python src/extract/reconstruction_efficiency.py -o $ROOTDIR
+
 
 echo "DONE"
