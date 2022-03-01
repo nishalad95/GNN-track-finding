@@ -7,7 +7,8 @@ VAR=100  #(don't remove any nodes)   # TEMPORARY: remove nodes with empirical va
 SIGMA0=.0001                           # r.m.s measurement error 100 microns in xy plane
 # SIGMA0=0.5
 MU=0.000001                               # 10^-6 multiple scattering error - process noise for KF
-ROOTDIR=src/trackml_mod/output           # main output directory to save results of algorithm
+# ROOTDIR=src/trackml_mod/output           # main output directory to save results of algorithm
+ROOTDIR=src/output
 
 # clustering
 LUT=learn_KL/output/empvar/empvar.lut       # LUT file for KL distance calibration

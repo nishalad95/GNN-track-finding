@@ -10,7 +10,7 @@ start, end = ax.get_xlim()
 ax.xaxis.set_ticks(np.arange(start, end, 0.1))
 
 # my_file = open("pvals.txt", "r")
-my_file = open("src/trackml_mod/output/iteration_1/candidates/pvals.csv", "r")
+my_file = open("src/output/iteration_1/candidates/pvals.csv", "r")
 x = my_file.read()
 x = x.split("\n")
 
@@ -19,7 +19,7 @@ for val in x[:-2]:
     x_floats.append(float(val))
 
 
-my_file = open("src/trackml_mod/output/iteration_2/candidates/pvals.csv", "r")
+my_file = open("src/output/iteration_2/candidates/pvals.csv", "r")
 x = my_file.read()
 x = x.split("\n")
 

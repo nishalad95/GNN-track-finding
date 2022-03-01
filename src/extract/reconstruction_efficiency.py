@@ -19,7 +19,7 @@ outputDir = args.output
 event_truth = args.eventTruth
 # for evaluating the GNN algorithm
 # TODO: will chance in future
-inputDir = "src/trackml_mod/output/iteration_2/candidates/"
+inputDir = "src/output/iteration_2/candidates/"
 
 
 # every hit has an associated particle id: from the truth information file for hits
