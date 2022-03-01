@@ -31,7 +31,9 @@ def KF_track_fit(sigma0, mu, coords):
                     [0.,         1000.]])   # P covariance
     f.R = sigma0**2
     # f.Q = mu                                # process uncertainty/noise
-    f.Q = common.Q_continuous_white_noise(2, dt=1.0, spectral_density=0.000001)
+    f.Q = np.array([[mu,    0.],
+                    [0.,         mu]])
+    # f.Q = common.Q_continuous_white_noise(2, dt=1.0, spectral_density=0.0001)
 
     # KF predict and update
     chi2_dists = []
@@ -40,6 +42,8 @@ def KF_track_fit(sigma0, mu, coords):
         f.predict()
         f.update(measurement)
         saver.save()
+
+        print("EXTRACT STAGE: Q\n", f.Q)
 
         # calculate chi2 distance
         updated_state, updated_cov = f.x_post, f.P_post

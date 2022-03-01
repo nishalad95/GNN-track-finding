@@ -72,13 +72,17 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
         f.P = extrp_cov
         f.R = sigma0**2
         # f.Q = mu                            # process uncertainty/noise
-        f.Q = common.Q_continuous_white_noise(2, dt=1.0, spectral_density=0.000001)
+        f.Q = np.array([[mu,    0.],
+                    [0.,         mu]])
+        # f.Q = common.Q_continuous_white_noise(2, dt=1.0, spectral_density=0.0001)
         z = neighbour_y                     # "sensor reading"
 
         # perform KF update & save data
         f.predict()
         f.update(z)
         updated_state, updated_cov = f.x_post, f.P_post
+
+        print("EXTRAPOLATION STAGE: Q\n", f.Q)
 
         return { 'xy': (node_x, node_y),
                  'edge_state_vector': updated_state, 
