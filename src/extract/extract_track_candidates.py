@@ -30,7 +30,8 @@ def KF_track_fit(sigma0, mu, coords):
     f.P = np.array([[sigma0**2,    0.],
                     [0.,         1000.]])   # P covariance
     f.R = sigma0**2
-    f.Q = mu                                # process uncertainty/noise
+    # f.Q = mu                                # process uncertainty/noise
+    f.Q = common.Q_continuous_white_noise(2, dt=1.0, spectral_density=0.000001)
 
     # KF predict and update
     chi2_dists = []

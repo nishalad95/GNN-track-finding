@@ -29,7 +29,7 @@ inputDir = "src/trackml_mod/output/iteration_2/candidates/"
 # obtain reference tracks from MC truth
 #########################################
 
-reference_path = event_truth + "/event000001001-"
+reference_path = event_truth + "/event000001000-"
 
 # identify the ids of particles that have pT > 1GeV, units GeV/c
 particles = pd.read_csv(reference_path + "particles.csv", sep=',')

@@ -42,7 +42,7 @@ echo "Execution time event_conversion.py: $conversion_duration seconds"
 
 # copy the first 100 files over - DEVELOPMENT ONLY
 mkdir $ROOTDIR/track_sim/network_100/
-ls $ROOTDIR/track_sim/network/* | head -2516 | xargs -I{} cp {} $ROOTDIR/track_sim/network_100/
+ls $ROOTDIR/track_sim/network/* | head -500 | xargs -I{} cp {} $ROOTDIR/track_sim/network_100/
 
 
 
