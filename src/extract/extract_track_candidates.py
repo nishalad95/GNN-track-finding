@@ -76,6 +76,7 @@ def CCA(subCopy):
     edges_to_remove = []
     for edge in subCopy.edges():
         if subCopy[edge[0]][edge[1]]['activated'] == 0: edges_to_remove.append(edge)
+        
     
     potential_tracks = []
     if len(edges_to_remove) > 0 :
@@ -181,7 +182,7 @@ def main():
             #TODO: need to check for holes?
 
             # At this stage we know candidate has 1 hit per layer
-            coords = list(nx.get_node_attributes(candidate,'xy').values())
+            # coords = list(nx.get_node_attributes(candidate,'xy').values())
             coords = list(nx.get_node_attributes(candidate, 'xyzr').values())
             # sort according to decreasing radius value
             coords = sorted(coords, reverse=True, key=lambda xyzr: xyzr[3])
@@ -257,7 +258,7 @@ def main():
                 #TODO: need to check for holes?
 
                 # At this stage we know candidate has 1 hit per layer
-                coords = list(nx.get_node_attributes(candidate,'xy').values())
+                # coords = list(nx.get_node_attributes(candidate,'xy').values())
                 coords = list(nx.get_node_attributes(candidate, 'xyzr').values())
                 # sort according to decreasing radius value
                 coords = sorted(coords, reverse=True, key=lambda xyzr: xyzr[3])
@@ -315,24 +316,8 @@ def main():
         i += 1
         path = candidatesDir + str(i) + subgraph_path
 
-    # compute track purity & TODO: particle purity
-    purities = np.array([])
-    for subGraph in extracted:
-        truth_particles = nx.get_node_attributes(subGraph,'truth_particle').values()
-        counter = collections.Counter(truth_particles)
-        most_common = counter.most_common(1)
-        most_common_truth_particle = most_common[0][0]
-        max_freq = most_common[0][1]
-        total_num_hits = len(truth_particles)
-        track_purity = max_freq / total_num_hits
-        purities = np.append(purities, track_purity)
-
-
     print("Total number of extracted candidates:", len(extracted))
-    print("Track purities:\n", purities)
-    np.savetxt(candidatesDir + "extracted_track_purities.csv", purities, delimiter=",")
-    
-    
+
     # plot_save_subgraphs_iterations(extracted, extracted_pvals, candidatesDir, "Extracted candidates")
     h.plot_save_subgraphs_iterations(extracted, extracted_pvals, candidatesDir, "Extracted candidates", node_labels=True, save_plot=True)
     h.plot_subgraphs(remaining, remainingDir, node_labels=True, save_plot=True, title="Extracted candidates")
