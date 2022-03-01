@@ -4,7 +4,7 @@
 # VARIABLES
 # track sim
 VAR=100  #(don't remove any nodes)   # TEMPORARY: remove nodes with empirical variance greater than VAR
-SIGMA0=.0001                           # r.m.s measurement error
+SIGMA0=.0001                           # r.m.s measurement error 100 microns in xy plane
 # SIGMA0=0.5
 MU=0.000001                               # 10^-6 multiple scattering error - process noise for KF
 ROOTDIR=src/trackml_mod/output           # main output directory to save results of algorithm
@@ -20,6 +20,7 @@ n=4                     # minimum number of hits for good track candidate accept
 c=2  # initial chisquare distance acceptance threshold factor for extrapolated states
 # ----------------------------------------------------------------------------------------------
 
+
 mkdir -p $ROOTDIR
 # track conversion
 echo "-------------------------------------------------"
@@ -28,7 +29,12 @@ echo "-------------------------------------------------"
 start_conversion=$SECONDS
 INPUT=$ROOTDIR/track_sim/network/
 mkdir -p $INPUT
-python src/trackml_mod/event_conversion.py -o $INPUT -e $SIGMA0 -m $MU
+
+# event information
+EVENT_NETWORK=src/trackml_mod/event_network/minCurv_0.3_134
+EVENT_TRUTH=src/trackml_mod/event_truth
+
+python src/trackml_mod/event_conversion.py -o $INPUT -e $SIGMA0 -m $MU -n $EVENT_NETWORK -t $EVENT_TRUTH
 conversion_duration=$(( SECONDS - start_conversion ))
 echo "Execution time event_conversion.py: $conversion_duration seconds"
 
@@ -178,7 +184,7 @@ done
 echo "-------------------------------------------------"
 echo "Running track reconstruction efficiency:"
 echo "-------------------------------------------------"
-python src/extract/reconstruction_efficiency.py -o $ROOTDIR
+python src/extract/reconstruction_efficiency.py -t $EVENT_TRUTH -o $ROOTDIR
 
 
 echo "DONE"

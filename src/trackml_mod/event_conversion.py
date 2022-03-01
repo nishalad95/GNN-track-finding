@@ -36,9 +36,8 @@ def main():
     parser.add_argument('-o', '--outputDir', help="Full directory path of where to save graph networks")
     parser.add_argument('-e', '--error', help="rms of track position measurements")
     parser.add_argument('-m', '--mu', help="uncertainty due to multiple scattering, process noise")
-    event_path = "src/trackml_mod/events/event_2_filtered_graph_"
-    truth_event_path = "src/trackml_mod/truth/event000001001-"
-    truth_event_file = truth_event_path + "nodes-particles-id.csv"
+    parser.add_argument('-n', '--eventNetwork', help="Full directory path to event nodes, edges & nodes-to-hits")
+    parser.add_argument('-t', '--eventTruth', help="Full directory path to event truth from TrackML")
     
     max_volume_region = 8000 # first consider endcap volume 7 only
 
@@ -46,21 +45,21 @@ def main():
     outputDir = args.outputDir
     sigma0 = float(args.error)         # r.m.s measurement error
     mu = float(args.mu)                # process error - due to multiple scattering
+    
+    # TODO: the following will get moved to .sh file
+    # event_1 network corresponds to event000001000 truth
+    event_network = args.eventNetwork + "/event_1_filtered_graph_"
+    event_truth = args.eventTruth + "/event000001000-"
+    event_truth_file = event_truth + "nodes-particles-id.csv"
 
     # load truth information & metadata on events
-    nodes, edges = h.load_metadata(event_path, max_volume_region)
-
-    h.load_save_truth(event_path, truth_event_path, truth_event_file) #  only need to execute once
-    truth = pd.read_csv(truth_event_file)
+    nodes, edges = h.load_metadata(event_network, max_volume_region)
+    h.load_save_truth(event_network, event_truth, event_truth_file) #  only need to execute once
+    truth = pd.read_csv(event_truth_file)
 
     # create a graph network
     endcap_graph = nx.DiGraph()
     h.construct_graph(endcap_graph, nodes, edges, truth, sigma0, mu)
-
-    # debugging
-    for node in endcap_graph.nodes(data=True):
-            pprint.pprint(node)
-    # h.plot_subgraphs([endcap_graph], outputDir, title="Nodes & Edges extracted from TrackML generated data")
 
 
     # plot the network

@@ -76,6 +76,7 @@ def CCA(subCopy):
     edges_to_remove = []
     for edge in subCopy.edges():
         if subCopy[edge[0]][edge[1]]['activated'] == 0: edges_to_remove.append(edge)
+        
     
     potential_tracks = []
     if len(edges_to_remove) > 0 :

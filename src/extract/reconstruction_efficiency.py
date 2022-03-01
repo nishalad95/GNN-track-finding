@@ -12,9 +12,14 @@ import argparse
 
 # parse command line args
 parser = argparse.ArgumentParser(description='extract track candidates')
+parser.add_argument('-t', '--eventTruth', help="Full directory path to event truth from TrackML")
 parser.add_argument('-o', '--output', help='output directory to save data')
 args = parser.parse_args()
 outputDir = args.output
+event_truth = args.eventTruth
+# for evaluating the GNN algorithm
+# TODO: will chance in future
+inputDir = "src/trackml_mod/output/iteration_2/candidates/"
 
 
 # every hit has an associated particle id: from the truth information file for hits
@@ -24,7 +29,7 @@ outputDir = args.output
 # obtain reference tracks from MC truth
 #########################################
 
-reference_path = "src/trackml_mod/truth/event000001001-"
+reference_path = event_truth + "/event000001001-"
 
 # identify the ids of particles that have pT > 1GeV, units GeV/c
 particles = pd.read_csv(reference_path + "particles.csv", sep=',')
@@ -107,7 +112,6 @@ print("Number of reference tracks:", num_reference_tracks)
 # TODO
 track_candidates = []
 i = 0
-inputDir = "src/trackml_mod/output/iteration_2/candidates/"
 subgraph_path = "_subgraph.gpickle"
 path = inputDir + str(i) + subgraph_path
 while os.path.isfile(path):
