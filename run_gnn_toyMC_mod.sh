@@ -22,27 +22,29 @@ c=2  # initial chisquare distance acceptance threshold factor for extrapolated s
 
 
 mkdir -p $ROOTDIR
-# track conversion
-echo "-------------------------------------------------"
-echo "Running conversion of generated events to GNN..."
-echo "-------------------------------------------------"
-start_conversion=$SECONDS
-INPUT=$ROOTDIR/track_sim/network/
-mkdir -p $INPUT
 
-# event information
-EVENT_NETWORK=src/trackml_mod/event_network/minCurv_0.3_134
-EVENT_TRUTH=src/trackml_mod/event_truth
+# THIS WILL CHANGE FOR OUR TOY MODEL
+# # track conversion
+# echo "-------------------------------------------------"
+# echo "Running conversion of generated events to GNN..."
+# echo "-------------------------------------------------"
+# start_conversion=$SECONDS
+# INPUT=$ROOTDIR/track_sim/network/
+# mkdir -p $INPUT
 
-python src/trackml_mod/event_conversion.py -o $INPUT -e $SIGMA0 -m $MU -n $EVENT_NETWORK -t $EVENT_TRUTH
-conversion_duration=$(( SECONDS - start_conversion ))
-echo "Execution time event_conversion.py: $conversion_duration seconds"
+# # event information
+# EVENT_NETWORK=src/trackml_mod/event_network/minCurv_0.3_134
+# EVENT_TRUTH=src/trackml_mod/event_truth
+
+# python src/trackml_mod/event_conversion.py -o $INPUT -e $SIGMA0 -m $MU -n $EVENT_NETWORK -t $EVENT_TRUTH
+# conversion_duration=$(( SECONDS - start_conversion ))
+# echo "Execution time event_conversion.py: $conversion_duration seconds"
 
 
 
-# copy the first 100 files over - DEVELOPMENT ONLY
-mkdir $ROOTDIR/track_sim/network_100/
-ls $ROOTDIR/track_sim/network/* | head -500 | xargs -I{} cp {} $ROOTDIR/track_sim/network_100/
+# # copy the first 100 files over - DEVELOPMENT ONLY
+# mkdir $ROOTDIR/track_sim/network_100/
+# ls $ROOTDIR/track_sim/network/* | head -500 | xargs -I{} cp {} $ROOTDIR/track_sim/network_100/
 
 
 
