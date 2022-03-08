@@ -166,7 +166,7 @@ def reweight(subGraphs, track_state_estimates_key):
 
 
 def compute_track_state_estimates(GraphList, sigma0, mu):
-    S = np.matrix([[sigma0**2, 0], [0, sigma0**2]]) # covariance matrix of measurements
+    S = np.array([[sigma0**2, 0], [0, sigma0**2]]) # covariance matrix of measurements
     
     for G in GraphList:
         for node in G.nodes():
@@ -175,22 +175,18 @@ def compute_track_state_estimates(GraphList, sigma0, mu):
             # (x, y)
             node_gnn = G.nodes[node]["GNN_Measurement"]
             m1 = (node_gnn.x, node_gnn.y)
-            # (z, r)
-            # m1 = (node_gnn.z, node_gnn.r)
                         
             for neighbor in nx.all_neighbors(G, node):
                 # (x, y)
                 neighbour_gnn = G.nodes[neighbor]["GNN_Measurement"]
                 m2 = (neighbour_gnn.x, neighbour_gnn.y)
-                # (z, r)
-                # m2_zr = (neighbour_gnn.z, neighbour_gnn.r)
 
                 grad = (m1[1] - m2[1]) / (m1[0] - m2[0])
                 gradients.append(grad)
                 edge_state_vector = np.array([m1[1], grad])
                 H = np.array([ [1, 0], [1/(m1[0] - m2[0]), 1/(m2[0] - m1[0])] ])
                 covariance = H.dot(S).dot(H.T)
-                covariance = np.array([covariance[0,0], covariance[0,1], covariance[1,0], covariance[1,1]])
+                covariance = covariance.reshape(covariance.size)
 
                 key = neighbor # track state probability of A (node) conditioned on its neighborhood B
                 state_estimates[key] = {'edge_state_vector': edge_state_vector, 

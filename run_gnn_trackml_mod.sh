@@ -5,8 +5,7 @@
 # track sim
 VAR=100  #(don't remove any nodes)   # TEMPORARY: remove nodes with empirical variance greater than VAR
 SIGMA0=0.0001                           # r.m.s measurement error 100 microns in xy plane
-# SIGMA0=0.5
-MU=0.000001                               # 10^-6 multiple scattering error - process noise for KF
+SIGMA_MS=0.000001                       # 10^-6 multiple scattering error
 ROOTDIR=src/output
 
 # clustering
@@ -34,7 +33,7 @@ mkdir -p $INPUT
 EVENT_NETWORK=src/trackml_mod/event_network/minCurv_0.3_134
 EVENT_TRUTH=src/trackml_mod/event_truth
 
-python src/trackml_mod/event_conversion.py -o $INPUT -e $SIGMA0 -m $MU -n $EVENT_NETWORK -t $EVENT_TRUTH
+python src/trackml_mod/event_conversion.py -o $INPUT -e $SIGMA0 -m $SIGMA_MS -n $EVENT_NETWORK -t $EVENT_TRUTH
 conversion_duration=$(( SECONDS - start_conversion ))
 echo "Execution time event_conversion.py: $conversion_duration seconds"
 
@@ -42,7 +41,7 @@ echo "Execution time event_conversion.py: $conversion_duration seconds"
 
 # copy the first 100 files over - DEVELOPMENT ONLY
 mkdir $ROOTDIR/track_sim/network_100/
-ls $ROOTDIR/track_sim/network/* | head -500 | xargs -I{} cp {} $ROOTDIR/track_sim/network_100/
+ls $ROOTDIR/track_sim/network/* | head -100 | xargs -I{} cp {} $ROOTDIR/track_sim/network_100/
 
 
 
@@ -85,7 +84,7 @@ for i in {1..2};
             echo "------------------------------------------------"
             echo "Using chisq distance cut of: ${c}"
             prev_duration=$SECONDS
-            python src/extrapolate/extrapolate_merged_states.py -i $INPUT -o $OUTPUT -c $c -m $MU
+            python src/extrapolate/extrapolate_merged_states.py -i $INPUT -o $OUTPUT -c $c -m $SIGMA_MS
             let c=$c/2   # tighter cut each time
 
             # time it!
@@ -145,7 +144,7 @@ for i in {1..2};
             cp -r $ROOTDIR/iteration_$num/candidates/ $CANDIDATES
         fi
         prev_duration=$SECONDS
-        python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -p $p -e $SIGMA0 -m $MU -n $n
+        python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -p $p -e $SIGMA0 -m $SIGMA_MS -n $n
         INPUT=$REMAINING
 
         # time it!

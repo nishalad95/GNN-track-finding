@@ -14,7 +14,7 @@ import pprint
 
 COMMUNITY_DETECTION = False
 
-def KF_track_fit(sigma0, mu, coords):
+def KF_track_fit(sigma0, sigma_ms, coords):
     
     print("KF fit coords: \n", coords)
     obs_x = [c[0] for c in coords]
@@ -25,23 +25,48 @@ def KF_track_fit(sigma0, mu, coords):
     # initialize KF at outermost layer
     # 2D KF:
     # f = KalmanFilter(dim_x=2, dim_z=1)
-    # f.x = np.array([yf, 0.])             # X state vector
-    # f.F = np.array([[1.,dx], [0.,1.]])      # F state transition matrix
-    # f.H = np.array([[1.,0.]])               # H measurement matrix
+    # f.x = np.array([yf, 0.])                  # X state vector
+    # f.F = np.array([[1.,dx], [0.,1.]])        # F state transition matrix
+    # f.H = np.array([[1.,0.]])                 # H measurement matrix
     # f.P = np.array([[sigma0**2,    0.],
-    #                 [0.,         1000.]])   # P covariance
-    # f.R = sigma0**2
-    # f.Q = mu                                # process uncertainty/noise
+    #                 [0.,         1000.]])     # P covariance
+    # f.R = sigma0**2                           # R measurement noise
+    # f.Q = sigma_ms**2                         # Q process uncertainty/noise, due to multiple scattering
+
+
+    # variables for F; state transition matrix
+    alpha = 1.0                                 # OU parameter TODO: check with Dmitry the intialization of this value in the KF or do we get this from the track state?
+    e1 = np.exp(-np.abs(dx) * alpha)
+    f1 = (1.0 - e1) / alpha
+    g1 = (np.abs(dx) - f1) / alpha
+    # variables for Q process noise matrix
+    sigma_ou = 0.1                              # TODO: check what value this is!!
+    sw2 = sigma_ou**2                           # OU parameter 
+    st2 = sigma_ms**2                           # process noise representing multiple scattering
+    dx2 = dx**2
+    dxw2 = dx2 * sw2
+    Q02 = 0.5*dxw2
+    Q01 = dx*(st2 + Q02)
+    Q12 = dx*sw2
 
     # 3D KF:
-    f = KalmanFilter(dim_x=2, dim_z=1)
-    f.x = np.array([yf, 0.])             # X state vector [yf, dy/dx, w] = [coordinate, track inclination, integrated OU]
-    f.F = np.array([[1.,dx], [0.,1.]])      # F state transition matrix
-    f.H = np.array([[1.,0.]])               # H measurement matrix
-    f.P = np.array([[sigma0**2,    0.],     # R measuremtn noise
-                    [0.,         1000.]])   # P covariance
-    f.R = sigma0**2
-    f.Q = mu                                # process uncertainty/noise
+    f = KalmanFilter(dim_x=3, dim_z=1)
+    f.x = np.array([yf, 0., 0.])                # X state vector [yf, dy/dx, w] = [coordinate, track inclination, integrated OU]
+                                                # TODO: check with Dmitry the intialization of integraated OU
+    
+    f.F = np.array([[1.,    dx,     g1], 
+                    [0.,    1.,     f1],
+                    [0.,    0.,     e1]])                           # F state transition matrix, extrapolation Jacobian - linear & OU
+    f.H = np.array([[1., 0., 1.]])                                  # H measurement matrix TODO: check with Dmitry this is right
+    f.P = np.array([[sigma0**2,    0.,  0.],     
+                    [0.,         1000., 0.],
+                    [0.,            0., sigma_ms**2]])                       # P covariance TODO: check if this is right
+    
+    f.R = sigma0**2                                                 # R measuremnt noise
+    f.Q = np.array([[dx2*(st2 + 0.25*dxw2), Q01,        Q02], 
+                    [Q01,                   st2 + dxw2, Q12],
+                    [Q02,                   Q12,        sw2]])      # Q process uncertainty/noise, OU model
+
 
 
     # KF predict and update
@@ -54,11 +79,13 @@ def KF_track_fit(sigma0, mu, coords):
 
         print("EXTRACT STAGE: Q\n", f.Q)
 
-        # calculate chi2 distance
+        # update
         updated_state, updated_cov = f.x_post, f.P_post
         residual = measurement - f.H.dot(updated_state) 
         S = f.H.dot(updated_cov).dot(f.H.T) + f.R
         inv_S = np.linalg.inv(S)
+
+        # chi2 distance
         chi2_dist = residual.T.dot(inv_S).dot(residual)
         chi2_dists.append(chi2_dist)
     
@@ -114,7 +141,7 @@ def main():
     parser.add_argument('-r', '--remain', help='output directory to save remaining network')
     parser.add_argument('-p', '--pval', help='chi-squared track candidate acceptance level')
     parser.add_argument('-e', '--error', help="rms of track position measurements")
-    parser.add_argument('-m', '--mu', help="uncertainty due to multiple scattering, process noise")
+    parser.add_argument('-m', '--sigma_ms', help="uncertainty due to multiple scattering, process noise")
     parser.add_argument('-n', '--numhits', help="minimum number of hits for good track candidate")
     args = parser.parse_args()
 
@@ -124,7 +151,7 @@ def main():
     remainingDir = args.remain
     track_acceptance = float(args.pval)
     sigma0 = float(args.error)
-    mu = float(args.mu)
+    sigma_ms = float(args.sigma_ms)
     subgraph_path = "_subgraph.gpickle"
     pvalsfile_path = "_pvals.csv"
     fragment = int(args.numhits)
@@ -203,7 +230,7 @@ def main():
     
 
             if good_candidate:
-                pval = KF_track_fit(sigma0, mu, coords)
+                pval = KF_track_fit(sigma0, sigma_ms, coords)
                 if pval >= track_acceptance:
                     print("Good KF fit, P value:", pval, "(x,y,z,r):", coords)
                     extracted.append(candidate)
@@ -219,7 +246,7 @@ def main():
                     if len(valid_communities) > 0:
                         print("found communities via community detection")
                         for vc, vcc in zip(valid_communities, vc_coords):
-                            pval = KF_track_fit(sigma0, mu, vcc)
+                            pval = KF_track_fit(sigma0, sigma_ms, vcc)
                             if pval >= track_acceptance:
                                 print("Good KF fit, P value:", pval, "(x,y,z,r):", vcc)
                                 extracted.append(vc)
@@ -279,7 +306,7 @@ def main():
 
                 
                 if good_candidate:
-                    pval = KF_track_fit(sigma0, mu, coords)
+                    pval = KF_track_fit(sigma0, sigma_ms, coords)
                     if pval >= track_acceptance:
                         print("Good KF fit, P value:", pval, "(x,y,z,r):", coords)
                         extracted.append(candidate)
@@ -295,7 +322,7 @@ def main():
                         if len(valid_communities) > 0:
                             print("found communities via community detection")
                             for vc, vcc in zip(valid_communities, vc_coords):
-                                pval = KF_track_fit(sigma0, mu, vcc)
+                                pval = KF_track_fit(sigma0, sigma_ms, vcc)
                                 if pval >= track_acceptance:
                                     print("Good KF fit, P value:", pval, "(x,y,z,r):", vcc)
                                     extracted.append(vc)
