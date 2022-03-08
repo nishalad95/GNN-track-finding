@@ -23,14 +23,26 @@ def KF_track_fit(sigma0, mu, coords):
     dx = coords[1][0] - coords[0][0]
 
     # initialize KF at outermost layer
+    # 2D KF:
+    # f = KalmanFilter(dim_x=2, dim_z=1)
+    # f.x = np.array([yf, 0.])             # X state vector
+    # f.F = np.array([[1.,dx], [0.,1.]])      # F state transition matrix
+    # f.H = np.array([[1.,0.]])               # H measurement matrix
+    # f.P = np.array([[sigma0**2,    0.],
+    #                 [0.,         1000.]])   # P covariance
+    # f.R = sigma0**2
+    # f.Q = mu                                # process uncertainty/noise
+
+    # 3D KF:
     f = KalmanFilter(dim_x=2, dim_z=1)
-    f.x = np.array([yf, 0.])                # X state vector 
+    f.x = np.array([yf, 0.])             # X state vector [yf, dy/dx, w] = [coordinate, track inclination, integrated OU]
     f.F = np.array([[1.,dx], [0.,1.]])      # F state transition matrix
     f.H = np.array([[1.,0.]])               # H measurement matrix
-    f.P = np.array([[sigma0**2,    0.],
+    f.P = np.array([[sigma0**2,    0.],     # R measuremtn noise
                     [0.,         1000.]])   # P covariance
     f.R = sigma0**2
     f.Q = mu                                # process uncertainty/noise
+
 
     # KF predict and update
     chi2_dists = []
@@ -39,6 +51,8 @@ def KF_track_fit(sigma0, mu, coords):
         f.predict()
         f.update(measurement)
         saver.save()
+
+        print("EXTRACT STAGE: Q\n", f.Q)
 
         # calculate chi2 distance
         updated_state, updated_cov = f.x_post, f.P_post

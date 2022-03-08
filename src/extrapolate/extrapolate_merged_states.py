@@ -79,6 +79,8 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
         f.update(z)
         updated_state, updated_cov = f.x_post, f.P_post
 
+        print("EXTRAPOLATION STAGE: Q\n", f.Q)
+
         return { 'xy': (node_x, node_y),
                  'edge_state_vector': updated_state, 
                  'edge_covariance': updated_cov,

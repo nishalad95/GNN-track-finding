@@ -334,9 +334,9 @@ def __plot_subgraphs_in_plane(GraphList, outputDir, key, axis1, axis2, node_labe
             if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
             else: edge_colors.append("#f2f2f2")
         nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
-        nx.draw_networkx_nodes(subGraph, pos, nodelist=nodes, node_color=color, node_size=65)
+        nx.draw_networkx_nodes(subGraph, pos, nodelist=nodes, node_color=color, node_size=50)
         if node_labels:
-            nx.draw_networkx_labels(subGraph, pos, font_size=5)
+            nx.draw_networkx_labels(subGraph, pos, font_size=4)
     ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
     plt.xlabel(axis1)
     plt.ylabel(axis2)
@@ -368,9 +368,9 @@ def __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, output
             if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
             else: edge_colors.append("#f2f2f2")
         nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
-        nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=65, label=iteration)
+        nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=50, label=iteration)
         if node_labels:
-            nx.draw_networkx_labels(subGraph, pos, font_size=5)
+            nx.draw_networkx_labels(subGraph, pos, font_size=4)
     ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
     plt.xlabel(axis1)
     plt.ylabel(axis2)

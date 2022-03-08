@@ -9,8 +9,8 @@ class HitPairPredictor() :
     
     def predict(self, m1, m2, start = 0) :
         dx = m2.x-m1.x
-        tau0 = (m2.y-m1.y)/dx # gradient
+        # tau0 = (m2.y-m1.y)/dx # gradient
         y0 =(m1.y*m2.x-m2.y*m1.x+self.start*(m2.y-m1.y))/dx
-        if tau0 > self.max_tau or tau0 < self.min_tau : return 0
+        # if tau0 > self.max_tau or tau0 < self.min_tau : return 0
         if y0 > self.max_y0 or y0 < self.min_y0 : return 0
         return 1
