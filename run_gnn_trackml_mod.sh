@@ -4,7 +4,7 @@
 # VARIABLES
 # track sim
 VAR=100  #(don't remove any nodes)   # TEMPORARY: remove nodes with empirical variance greater than VAR
-SIGMA0=.0001                           # r.m.s measurement error 100 microns in xy plane
+SIGMA0=0.0001                           # r.m.s measurement error 100 microns in xy plane
 # SIGMA0=0.5
 MU=0.000001                               # 10^-6 multiple scattering error - process noise for KF
 ROOTDIR=src/output

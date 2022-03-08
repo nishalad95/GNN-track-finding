@@ -71,10 +71,7 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
         f.H = H                             # H measurement matrix
         f.P = extrp_cov
         f.R = sigma0**2
-        # f.Q = mu                            # process uncertainty/noise
-        f.Q = np.array([[mu,    0.],
-                    [0.,         mu]])
-        # f.Q = common.Q_continuous_white_noise(2, dt=1.0, spectral_density=0.0001)
+        f.Q = mu                            # process uncertainty/noise
         z = neighbour_y                     # "sensor reading"
 
         # perform KF update & save data

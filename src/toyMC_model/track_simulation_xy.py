@@ -39,7 +39,8 @@ def simulate_event():
     num_hits = 10
     radius = 10
     # angle_of_track = [1, 3, 6]      # num_tracks = len(angle_of_track) * 8
-    angle_of_track = [1, 6]
+    # angle_of_track = [1, 6]
+    angle_of_track = [0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9.5]
     coords = np.array([])
     for i in angle_of_track:
         y = np.sqrt(radius**2 - i**2)    
@@ -70,7 +71,9 @@ def simulate_event():
     fig = plt.figure(figsize=(20, 8))
     ax1 = fig.add_subplot(1, 2, 1)
     for n in range(num_tracks):
-        gradient = (coords[n][1] - start[n][1]) / (coords[n][0] - start[n][0])
+        dy = coords[n][1] - start[n][1]
+        dx = coords[n][0] - start[n][0]
+        gradient = dy/dx
         x = np.linspace(start[n][0], coords[n][0], num_hits)
         y = np.array([])
         # print("track number: ", n)
@@ -94,7 +97,7 @@ def simulate_event():
     ax1.set_xlabel("x")
     ax1.set_ylabel("y")
     ax1.grid()
-    ax1.legend(loc="best",fontsize=6)
+    # ax1.legend(loc="best",fontsize=6)
     ax1.set_title("XY Toy MC Model")
 
 
@@ -118,8 +121,8 @@ def simulate_event():
                         if (np.abs(c) <= 1.8) and (np.abs(x_intercept) <= 1.8):
                             nPairs += 1
                             ax2.plot([gm1.x, gm2.x],[gm1.y,gm2.y],alpha = 0.5)
-                            edge = (node1, node2)
-                            G.add_edge(*edge)
+                            # edge = (node1, node2)
+                            G.add_edge(node1, node2, dx=dx, m=m)
     print('Found', nPairs, 'hit pairs')
     ax2.set_title('Hit pairs')
     ax2.grid()
@@ -133,32 +136,57 @@ def simulate_event():
     
     # plot graph network
     # G = nx.to_directed(G)   # freeze graph
-    print("subGraph:", G)
-    print("type: ", type(G))
     _, ax = plt.subplots(figsize=(10,8))
     plot_network([G], "", ax, node_labels=True)
     plt.show()
 
-    # remove highly dense nodes
-    for i in range(num_tracks):
-        G.remove_node((i*10) + 1)
+    # dx distribution 
+    dx = nx.get_edge_attributes(G, 'dx').values()
+    plt.hist(dx, bins=100)
+    plt.show()
+
+    # m distribution 
+    m = nx.get_edge_attributes(G, 'm').values()
+    plt.hist(m, bins=100)
+    plt.show()
+
+
+    # remove small dx nodes
+    copyG = G.copy()
+    for node1, node2, data in copyG.edges(data=True):
+        if np.abs(data['dx']) > 0.75:
+            if node1 in G: G.remove_node(node1)
+            if node2 in G: G.remove_node(node2)
+
 
     # plot graph network
     G = nx.to_directed(G)   # freeze graph
-    print("subGraph:", G)
-    print("type: ", type(G))
     _, ax = plt.subplots(figsize=(10,8))
     plot_network([G], "", ax, node_labels=True)
+    plt.show()
+
+    # dx distribution 
+    dx = nx.get_edge_attributes(G, 'dx').values()
+    plt.hist(dx, bins=100)
+    plt.show()
+
+    # m distribution 
+    m = nx.get_edge_attributes(G, 'm').values()
+    plt.hist(m, bins=100)
+    plt.show()
+
+    plt.scatter(x, dx)
+    plt.show()
+    plt.scatter(x, m)
     plt.show()
 
     # connected component analysis
     subGraphs = [G.subgraph(c).copy() for c in nx.weakly_connected_components(G)]
-    print("subGraph:", subGraphs[0])
-    print("type: ", type(subGraphs[0]))
     _, ax = plt.subplots(figsize=(10,8))
     for i in subGraphs:
         plot_network([i], "", ax, node_labels=True)
     plt.show()
+
 
 
 
