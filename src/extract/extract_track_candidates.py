@@ -22,8 +22,7 @@ def KF_track_fit(sigma0, sigma_ms, coords):
     yf = obs_y[0]
     dx = coords[1][0] - coords[0][0]
 
-    # initialize KF at outermost layer
-    # 2D KF:
+    # 2D KF: initialize at outermost layer
     # f = KalmanFilter(dim_x=2, dim_z=1)
     # f.x = np.array([yf, 0.])                  # X state vector
     # f.F = np.array([[1.,dx], [0.,1.]])        # F state transition matrix
@@ -33,36 +32,37 @@ def KF_track_fit(sigma0, sigma_ms, coords):
     # f.R = sigma0**2                           # R measurement noise
     # f.Q = sigma_ms**2                         # Q process uncertainty/noise, due to multiple scattering
 
-
     # variables for F; state transition matrix
-    alpha = 1.0                                 # OU parameter TODO: check with Dmitry the intialization of this value in the KF or do we get this from the track state?
+    alpha = 0.1                                                     # OU parameter TODO: this value needs to be tuned
     e1 = np.exp(-np.abs(dx) * alpha)
     f1 = (1.0 - e1) / alpha
     g1 = (np.abs(dx) - f1) / alpha
     # variables for Q process noise matrix
-    sigma_ou = 0.1                              # TODO: check what value this is!!
-    sw2 = sigma_ou**2                           # OU parameter 
-    st2 = sigma_ms**2                           # process noise representing multiple scattering
+    sigma_ou = 0.0001                                               # 10^-4
+    sw2 = sigma_ou**2                                               # OU parameter 
+    st2 = sigma_ms**2                                               # process noise representing multiple scattering
     dx2 = dx**2
     dxw2 = dx2 * sw2
     Q02 = 0.5*dxw2
     Q01 = dx*(st2 + Q02)
     Q12 = dx*sw2
 
-    # 3D KF:
+    # 3D KF: initialize at outermost layer
     f = KalmanFilter(dim_x=3, dim_z=1)
-    f.x = np.array([yf, 0., 0.])                # X state vector [yf, dy/dx, w] = [coordinate, track inclination, integrated OU]
-                                                # TODO: check with Dmitry the intialization of integraated OU
+    f.x = np.array([yf, 0., 0.])                                    # X state vector [yf, dy/dx, w] = [coordinate, track inclination, integrated OU]
     
     f.F = np.array([[1.,    dx,     g1], 
                     [0.,    1.,     f1],
                     [0.,    0.,     e1]])                           # F state transition matrix, extrapolation Jacobian - linear & OU
-    f.H = np.array([[1., 0., 1.]])                                  # H measurement matrix TODO: check with Dmitry this is right
-    f.P = np.array([[sigma0**2,    0.,  0.],     
-                    [0.,         1000., 0.],
-                    [0.,            0., sigma_ms**2]])                       # P covariance TODO: check if this is right
+    
+    f.H = np.array([[1., 0., 0.]])                                  # H measurement matrix
+    
+    f.P = np.array([[sigma0**2,  0., 0.],     
+                    [0.,         1., 0.],
+                    [0.,         0., 1.]])                          # P covariance
     
     f.R = sigma0**2                                                 # R measuremnt noise
+    
     f.Q = np.array([[dx2*(st2 + 0.25*dxw2), Q01,        Q02], 
                     [Q01,                   st2 + dxw2, Q12],
                     [Q02,                   Q12,        sw2]])      # Q process uncertainty/noise, OU model
@@ -77,13 +77,13 @@ def KF_track_fit(sigma0, sigma_ms, coords):
         f.update(measurement)
         saver.save()
 
-        print("EXTRACT STAGE: Q\n", f.Q)
-
         # update
         updated_state, updated_cov = f.x_post, f.P_post
         residual = measurement - f.H.dot(updated_state) 
         S = f.H.dot(updated_cov).dot(f.H.T) + f.R
         inv_S = np.linalg.inv(S)
+
+        print("DEBUGGING:\n updated_state:\n", updated_state, "\nupdated_cov:\n", updated_cov)
 
         # chi2 distance
         chi2_dist = residual.T.dot(inv_S).dot(residual)

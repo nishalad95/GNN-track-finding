@@ -35,7 +35,7 @@ def main():
     parser = argparse.ArgumentParser(description='Convert trackml csv to GNN')
     parser.add_argument('-o', '--outputDir', help="Full directory path of where to save graph networks")
     parser.add_argument('-e', '--error', help="rms of track position measurements")
-    parser.add_argument('-m', '--sigmaMS', help="uncertainty due to multiple scattering, process noise")
+    parser.add_argument('-m', '--sigma_ms', help="uncertainty due to multiple scattering, process noise")
     parser.add_argument('-n', '--eventNetwork', help="Full directory path to event nodes, edges & nodes-to-hits")
     parser.add_argument('-t', '--eventTruth', help="Full directory path to event truth from TrackML")
     
@@ -44,7 +44,7 @@ def main():
     args = parser.parse_args()
     outputDir = args.outputDir
     sigma0 = float(args.error)         # r.m.s measurement error
-    sigma_ms = float(args.sigmaMS)                # process error - due to multiple scattering
+    sigma_ms = float(args.sigma_ms)                # process error - due to multiple scattering
     
     # TODO: the following will get moved to .sh file
     # event_1 network corresponds to event000001000 truth
@@ -54,7 +54,7 @@ def main():
 
     # load truth information & metadata on events
     nodes, edges = h.load_metadata(event_network, max_volume_region)
-    h.load_save_truth(event_network, event_truth, event_truth_file) #  only need to execute once
+    # h.load_save_truth(event_network, event_truth, event_truth_file) #  only need to execute once
     truth = pd.read_csv(event_truth_file)
 
     # create a graph network
