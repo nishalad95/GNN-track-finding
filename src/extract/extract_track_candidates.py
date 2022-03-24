@@ -11,8 +11,118 @@ import random
 from utilities import helper as h
 from community_detection import community_detection
 import pprint
+from collections import Counter
+from itertools import combinations
+import itertools
+from math import *
+
 
 COMMUNITY_DETECTION = False
+separation_3d_threshold = 10
+
+def compute_3d_distance(coord1, coord2):
+    x1, y1, z1 = coord1[0], coord1[1], coord1[2]
+    x2, y2, z2 = coord2[0], coord2[1], coord2[2]
+    return np.sqrt( (x1 - x2)**2 + (y1 - y2)**2 + (z1 - z2)**2 )
+
+def get_midpoint_coords(xyzr_coords):
+    x1, y1, z1 = xyzr_coords[0][0], xyzr_coords[0][1], xyzr_coords[0][2]
+    x2, y2, z2 = xyzr_coords[1][0], xyzr_coords[1][1], xyzr_coords[1][2]
+    xm = (x1 + x2) / 2
+    ym = (y1 + y2) / 2
+    zm = (z1 + z2) / 2
+    rm = np.sqrt(xm**2 + ym**2)
+    return xm, ym, zm, rm
+
+def check_close_proximity_nodes(subGraph, good_candidate):
+
+    # determine if a subgraph contains between 1 and 2 layers with multiple nodes
+    node_in_volume_layer_id_dict = nx.get_node_attributes(subGraph, 'in_volume_layer_id')
+    node_module_id_dict = nx.get_node_attributes(subGraph, 'module_id')
+    counts = Counter(node_in_volume_layer_id_dict.values())
+    num_nodes_in_same_layer = 2
+    layer_counts_dict = dict((k, v) for k, v in dict(counts).items() if int(v) == num_nodes_in_same_layer)
+    num_layers_with_multiple_nodes = len(layer_counts_dict)
+
+    if 1 <= num_layers_with_multiple_nodes <= 2:
+        # get node indexes which are in the same layer
+        for layer_id, count in layer_counts_dict.items():
+            node_idx = [node for node in node_in_volume_layer_id_dict.keys() if layer_id == node_in_volume_layer_id_dict[node]]
+            print("nodes that are close together:\n", node_idx)
+            
+            # currently only merging with 2 nodes in close proximity
+            if len(node_idx) == num_nodes_in_same_layer:
+
+                # check that these 2 nodes have a common node in their neighbourhood
+                node1 = node_idx[0]
+                node2 = node_idx[1]
+                node1_edges = subGraph.edges(node1)
+                node2_edges = subGraph.edges(node2)
+                node1_edges = list(itertools.chain.from_iterable(node1_edges))
+                node2_edges = list(itertools.chain.from_iterable(node2_edges))
+                node1_edges = filter(lambda val: val != node1, node1_edges)
+                node2_edges = filter(lambda val: val != node2, node2_edges)
+                common_nodes = list(set(node1_edges).intersection(node2_edges))
+
+                if len(common_nodes) != 0:
+                    # compute pairwise separation in 3D space of all nodes in close proximity in this layer
+                    xyzr_coords = [subGraph.nodes[n]['xyzr'] for n in node_idx]
+                    separation = [compute_3d_distance(a, b) for a, b in combinations(xyzr_coords, 2)]
+
+                    # node merging if separation is below threhold
+                    if all(i <= separation_3d_threshold for i in separation):
+                        xm, ym, zm, rm = get_midpoint_coords(xyzr_coords)
+                        # replace for node 1, delete node 2
+                        # TODO: combine hit ids --> merging of nodes merges the hits and module ids
+                        node1 = node_idx[0]
+                        node2 = node_idx[1]
+                        subGraph.nodes[node1]['xyzr'] = (xm, ym, zm, rm)
+                        subGraph.nodes[node1]['xy'] = (xm, ym)
+                        subGraph.nodes[node1]['zr'] = (zm, rm)
+                        subGraph.nodes[node1]['GNN_Measurement'].x = xm
+                        subGraph.nodes[node1]['GNN_Measurement'].y = ym
+                        subGraph.nodes[node1]['GNN_Measurement'].z = zm
+                        subGraph.nodes[node1]['GNN_Measurement'].r = rm
+                        subGraph.remove_node(node2)
+                        good_candidate = True
+    else:
+        good_candidate = False      
+    
+    return subGraph, good_candidate
+
+
+
+
+def angle_trunc(a):
+    while a < 0.0:
+        a += pi * 2
+    return a
+
+# get angle to the positive x axis in radians
+def getAngleBetweenPoints(p1, p2):
+    deltaY = p2[1] - p1[1]
+    deltaX = p2[0] - p1[0]
+    return angle_trunc(atan2(deltaY, deltaX))
+
+def rotate_track(coords):
+    p1 = coords[0]
+    p2 = coords[1]
+    angle = 2*pi - getAngleBetweenPoints(p1, p2)
+
+    # rotate counter clockwise
+    cos_angle = np.cos(angle)
+    sin_angle = np.sin(angle)
+    rotated_coords = []
+    for c in coords:
+        x, y = c[0], c[1]
+        x_new = x * np.cos(angle) - y * np.sin(angle)    # x_new = xcos(angle) - ysin(angle)
+        y_new = x * np.sin(angle) + y * np.cos(angle)    # y_new = xsin(angle) + ycos(angle) 
+        rotated_coords.append((x_new, y_new)) 
+    return rotated_coords
+    
+
+
+
 
 def KF_track_fit(sigma0, sigma_ms, coords):
     
@@ -195,34 +305,28 @@ def main():
             good_candidate = True
             vivl_id_values = nx.get_node_attributes(candidate,'vivl_id').values()
 
-            #debugging
-            # print("DEBUG: vivl_id_values")
-            # print("single subgraph")
-            # print(vivl_id_values)
-
             if len(vivl_id_values) == len(set(vivl_id_values)): 
                 print("no duplicates volume_ids & in_volume_layer_ids for this candidate")
             else: 
-                print("Bad candidate, > 1 hit per layer, will process through community detection")
+                print("Bad candidate, > 1 hit per layer, will check close proximity nodes using 3d separation")
                 good_candidate = False
-                
-                #debugging
-                # print("-----------------------------")
-                # print("DEBUGGING SUBGRAPH")
-                # print("EDGE DATA:")
-                # for connection in subGraph.edges.data():
-                #     print(connection)
-                # print("-------------------")
-                # for n in subGraph.nodes(data=True):
-                #     pprint.pprint(n)
-                # print("-------------------------------")
-                # prefix = str(i) + "_"
-                # h.plot_subgraphs([subGraph], prefix, node_labels=True, save_plot=True, title="Extracted candidates")
+                # At this stage - more than 1 hit per layer
+                # check to see if close proximity nodes - merge - check for 1 hit per layer, than pass through KF
+                candidate, good_candidate = check_close_proximity_nodes(candidate, good_candidate)
+                if good_candidate:
+                    # check for > 1 hit per layer - use volume_id & in_volume_layer_id
+                    vivl_id_values = nx.get_node_attributes(candidate,'vivl_id').values()
+                    if len(vivl_id_values) == len(set(vivl_id_values)): 
+                        print("no duplicates volume_ids & in_volume_layer_ids for this candidate")
+                    else:
+                        print("Bad candidate, will process through community detection")
+                else:
+                    print("Bad candidate, will process through community detection")
             
 
             #TODO: need to check for holes?
 
-            # At this stage we know candidate has 1 hit per layer
+            # At this stage we know candidate has 1 hit per layer or they have been merged with close proximity module ids
             # coords = list(nx.get_node_attributes(candidate,'xy').values())
             coords = list(nx.get_node_attributes(candidate, 'xyzr').values())
             # sort according to decreasing radius value
@@ -236,8 +340,27 @@ def main():
                     extracted.append(candidate)
                     extracted_pvals.append(pval)
                 else:
-                    print("pval too small,", pval, "leave for further processing")
-                    remaining.append(subGraph)
+                    # TESTING: 
+                    # old code:
+                    # print("pval too small,", pval, "leave for further processing")
+                    # remaining.append(subGraph)
+                    # TODO: 
+                    # p-value too small, rotate the track to the xaxis - recheck KF p-value
+                    # if still too small, then leave for community detection
+                    # rotate track
+                    # recheck KF fit
+                    # TESTING:
+                    # NEW CODE
+                    coords = rotate_track(coords)
+                    pval = KF_track_fit(sigma0, sigma_ms, coords)
+                    if pval >= track_acceptance:
+                        print("Good KF fit, P value:", pval, "(x,y,z,r):", coords)
+                        extracted.append(candidate)
+                        extracted_pvals.append(pval)
+                    else:
+                        print("pval too small,", pval, "leave for further processing")
+                        remaining.append(subGraph)
+
             else:
                 if COMMUNITY_DETECTION:
                     print("Run community detection...")
@@ -272,30 +395,26 @@ def main():
                 # check for > 1 hit per layer - use volume_id & in_volume_layer_id
                 good_candidate = True
                 vivl_id_values = nx.get_node_attributes(candidate,'vivl_id').values()
-                
-                # print("DEBUG: vivl_id_values")
-                # print("multiple subgraphs")
-                # print(vivl_id_values)
-                
+
                 if len(vivl_id_values) == len(set(vivl_id_values)): 
                     print("no duplicates volume_ids & in_volume_layer_ids for this candidate")
                 else: 
-                    print("Bad candidate, > 1 hit per layer, will process through community detection")
+                    print("Bad candidate, > 1 hit per layer, will check close proximity nodes using 3d separation")
                     good_candidate = False
+                    # At this stage - more than 1 hit per layer
+                    # check to see if close proximity nodes - merge - check for 1 hit per layer, than pass through KF
+                    candidate, good_candidate = check_close_proximity_nodes(candidate, good_candidate)
+                    if good_candidate:
+                        # check for > 1 hit per layer - use volume_id & in_volume_layer_id
+                        vivl_id_values = nx.get_node_attributes(candidate,'vivl_id').values()
+                        if len(vivl_id_values) == len(set(vivl_id_values)): 
+                            print("no duplicates volume_ids & in_volume_layer_ids for this candidate")
+                        else:
+                            print("Bad candidate, will process through community detection")
+                    else:
+                        print("Bad candidate, will process through community detection")
 
-                    #debugging
-                    # print("-----------------------------")
-                    # print("DEBUGGING SUBGRAPH")
-                    # print("EDGE DATA:")
-                    # for connection in subGraph.edges.data():
-                    #     print(connection)
-                    # print("-------------------")
-                    # for n in subGraph.nodes(data=True):
-                    #     pprint.pprint(n)
-                    # print("-------------------------------")
-                    # prefix = str(i) + "_multiple_"
-                    # h.plot_subgraphs([subGraph], prefix, node_labels=True, save_plot=True, title="Extracted candidates")
-
+                  
                 #TODO: need to check for holes?
 
                 # At this stage we know candidate has 1 hit per layer
@@ -313,7 +432,28 @@ def main():
                         extracted_pvals.append(pval)
                         candidate_to_remove_from_subGraph.append(candidate)
                     else:
-                        print("pval too small,", pval, "leave for further processing")
+                        # TESTING: 
+                        # old code:
+                        # print("pval too small,", pval, "leave for further processing")
+                        # remaining.append(subGraph)
+                        # TODO: 
+                        # p-value too small, rotate the track to the xaxis - recheck KF p-value
+                        # if still too small, then leave for community detection
+                        # rotate track
+                        # recheck KF fit
+                        # TESTING:
+                        # NEW CODE
+                        coords = rotate_track(coords)
+                        pval = KF_track_fit(sigma0, sigma_ms, coords)
+                        if pval >= track_acceptance:
+                            print("Good KF fit, P value:", pval, "(x,y,z,r):", coords)
+                            extracted.append(candidate)
+                            extracted_pvals.append(pval)
+                        else:
+                            print("pval too small,", pval, "leave for further processing")
+                            remaining.append(subGraph)
+
+
                 else:
                     if COMMUNITY_DETECTION:
                         print("Run community detection...")
