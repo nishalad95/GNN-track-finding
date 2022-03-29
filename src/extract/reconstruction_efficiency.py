@@ -18,8 +18,8 @@ args = parser.parse_args()
 outputDir = args.output
 event_truth = args.eventTruth
 # for evaluating the GNN algorithm
-# TODO: will chance in future
-inputDir = "src/output/iteration_2/candidates/"
+# TODO: will change in future
+inputDir = "src/output/iteration_1/candidates/"
 
 
 # every hit has an associated particle id: from the truth information file for hits
@@ -78,22 +78,6 @@ for i, p in enumerate(unique_particle_ids):
             # good reference track found
             num_reference_tracks += 1
             reference_tracks_dict[p] = ref_track.hit_id.to_list()   # add to dictionary
-            # if i < 1:
-            #     print("ref track:\n", ref_track)
-            #     print("hit_ids in reference track")
-            #     print(reference_tracks_dict[p])
-            #     x = ref_track.x.to_list()
-            #     y = ref_track.y.to_list()
-            #     z = ref_track.z.to_list()
-            #     r = ref_track.r.to_list()
-            #     plt.scatter(x, y, s=10)
-            #     plt.xlabel("x")
-            #     plt.ylabel("y")
-            #     plt.show()
-            #     plt.scatter(z, r, s=10)
-            #     plt.xlabel("z")
-            #     plt.ylabel("r")
-            #     plt.show()
         else:
             # TODO: handle this case
             print(">1 hit per module!! TODO: will need to handle this case!")

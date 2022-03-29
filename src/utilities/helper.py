@@ -199,7 +199,6 @@ def compute_track_state_estimates(GraphList, sigma0, sigma_ms):
                 
                 covariance = H.dot(S).dot(H.T)                      # state covariance (matrix)
                 covariance = covariance.reshape(covariance.size)
-                print("initialization of track state estimates & cov:\n", covariance)
 
                 key = neighbor # track state probability of A (node) conditioned on its neighborhood B
                 track_state_estimates[key] = {  'edge_state_vector': track_state_vector, 

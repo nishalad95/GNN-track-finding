@@ -139,18 +139,9 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, sigma0, reactivate):
             
             edge_covs = np.array([component[EDGE_COV] for component in track_state_estimates.values()])
 
-            print("edge_covs in clustering:\n", edge_covs)
-
             # edge_covs = np.reshape(edge_covs[:, :, np.newaxis], (num_edges, 2, 2))
             edge_covs = np.reshape(edge_covs[:, :, np.newaxis], (num_edges, 3, 3))
-
-            print("edge_covs in clustering:\n", edge_covs)
-
-
             inv_covs = np.linalg.inv(edge_covs)
-
-            print("inverse edge_covs in clustering:\n", inv_covs)
-
             priors = np.array([component[PRIOR] for component in track_state_estimates.values()])
 
             # calculate pairwise distances between edge state vectors, find smallest distance & keep track of merged states
