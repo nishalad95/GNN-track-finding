@@ -10,7 +10,7 @@ SIGMA_MS=0.0001         # 10^-4 multiple scattering error
 ROOTDIR=src/output      # output directory to store GNN algorithm output
 
 # clustering
-LUT=learn_KL/toyMC_model/output/empvar/empvar.lut   # LUT file for KL distance calibration
+LUT=learn_KL/output/empvar/empvar.lut   # LUT file for KL distance calibration
 
 # extrapolation
 c=2                     # initial chi2 distance acceptance threshold for extrapolated states
@@ -25,18 +25,18 @@ s=10                    # 3d distance threshold for close proximity nodes, used 
 # -----------------------------
 # Track conversion
 # -----------------------------
-# mkdir -p $ROOTDIR
-# echo "-------------------------------------------------"
-# echo "Running conversion of generated events to GNN..."
-# echo "-------------------------------------------------"
-# start_conversion=$SECONDS
-# INPUT=$ROOTDIR/track_sim/network/
-# mkdir -p $INPUT
-# EVENT_NETWORK=src/trackml_mod/event_network/minCurv_0.3_134
+mkdir -p $ROOTDIR
+echo "-------------------------------------------------"
+echo "Running conversion of generated events to GNN..."
+echo "-------------------------------------------------"
+start_conversion=$SECONDS
+INPUT=$ROOTDIR/track_sim/network/
+mkdir -p $INPUT
+EVENT_NETWORK=src/trackml_mod/event_network/minCurv_0.3_134
 EVENT_TRUTH=src/trackml_mod/event_truth
-# python src/trackml_mod/event_conversion.py -o $INPUT -e $SIGMA0 -m $SIGMA_MS -n $EVENT_NETWORK -t $EVENT_TRUTH
-# conversion_duration=$(( SECONDS - start_conversion ))
-# echo "Execution time event_conversion.py: $conversion_duration seconds"
+python src/trackml_mod/event_conversion.py -o $INPUT -e $SIGMA0 -m $SIGMA_MS -n $EVENT_NETWORK -t $EVENT_TRUTH
+conversion_duration=$(( SECONDS - start_conversion ))
+echo "Execution time event_conversion.py: $conversion_duration seconds"
 
 
 

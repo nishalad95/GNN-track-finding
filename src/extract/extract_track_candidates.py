@@ -158,12 +158,14 @@ def KF_track_fit(sigma0, sigma_ms, coords):
     dx = coords[1][0] - coords[0][0]
 
     # variables for F; state transition matrix
-    alpha = 0.1                                                     # OU parameter TODO: this value needs to be tuned
+    alpha = 0.1                                                    # OU parameter
     e1 = np.exp(-np.abs(dx) * alpha)
     f1 = (1.0 - e1) / alpha
     g1 = (np.abs(dx) - f1) / alpha
+    
     # variables for Q process noise matrix
-    sigma_ou = 0.0001                                               # 10^-4
+    # sigma_ou = 0.0001                                               # 10^-4: TODO needs tuning
+    sigma_ou = 0.00001
     sw2 = sigma_ou**2                                               # OU parameter 
     st2 = sigma_ms**2                                               # process noise representing multiple scattering
     dx2 = dx**2
