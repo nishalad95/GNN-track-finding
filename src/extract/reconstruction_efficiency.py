@@ -136,6 +136,8 @@ for i, track in enumerate(track_candidates):
     print("Track purity:", track_purity)
     print("Particle purity:", particle_purity)
 
+    # TODO: need to make sure we only accept particle purity & track purity > 0.5 and plot their distributions
+
     # compute number of reconstructed tracks
     if track_purity >= 0.5:     # good reconstructed track
         # check if reconstructed track particle_id appears in reference tracks

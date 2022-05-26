@@ -37,12 +37,6 @@ COMMUNITY_DETECTION = False
     #                 print("pval too small,", pval, "leave for further processing")
 
 
-def compute_3d_distance(coord1, coord2):
-    x1, y1, z1 = coord1[0], coord1[1], coord1[2]
-    x2, y2, z2 = coord2[0], coord2[1], coord2[2]
-    return np.sqrt( (x1 - x2)**2 + (y1 - y2)**2 + (z1 - z2)**2 )
-
-
 def get_midpoint_coords(xyzr_coords):
     x1, y1, z1 = xyzr_coords[0][0], xyzr_coords[0][1], xyzr_coords[0][2]
     x2, y2, z2 = xyzr_coords[1][0], xyzr_coords[1][1], xyzr_coords[1][2]
@@ -85,7 +79,7 @@ def check_close_proximity_nodes(subGraph, separation_3d_threshold):
                 if len(common_nodes) != 0:
                     # compute pairwise separation in 3D space of all nodes in close proximity in this layer
                     xyzr_coords = [subGraph.nodes[n]['xyzr'] for n in node_idx]
-                    separation = [compute_3d_distance(a, b) for a, b in combinations(xyzr_coords, 2)]
+                    separation = [h.compute_3d_distance(a, b) for a, b in combinations(xyzr_coords, 2)]
 
                     # node merging if separation is below threhold
                     if all(i <= separation_3d_threshold for i in separation):
@@ -114,41 +108,6 @@ def check_close_proximity_nodes(subGraph, separation_3d_threshold):
                         subGraph.remove_node(node2)
     return subGraph
 
-
-def angle_trunc(a):
-    while a < 0.0:
-        a += pi * 2
-    return a
-
-
-# get angle to the positive x axis in radians
-def getAngleBetweenPoints(p1, p2):
-    deltaY = p2[1] - p1[1]
-    deltaX = p2[0] - p1[0]
-    return angle_trunc(atan2(deltaY, deltaX))
-
-
-def rotate_track(coords, separation_3d_threshold):
-    # coords are ordered from outermost to innermost -> use innermost edge
-    p1 = coords[-1]
-    p2 = coords[-2]
-
-    # if nodes p1 and p2 are too close, use the next node
-    distance = compute_3d_distance(p1, p2)
-    if distance < separation_3d_threshold:
-        p2 = coords[-3]
-
-    # rotate counter clockwise, first edge to be parallel with x axis
-    angle = 2*pi - getAngleBetweenPoints(p1, p2)
-    cos_angle = np.cos(angle)
-    sin_angle = np.sin(angle)
-    rotated_coords = []
-    for c in coords:
-        x, y = c[0], c[1]
-        x_new = x * np.cos(angle) - y * np.sin(angle)    # x_new = xcos(angle) - ysin(angle)
-        y_new = x * np.sin(angle) + y * np.cos(angle)    # y_new = xsin(angle) + ycos(angle) 
-        rotated_coords.append((x_new, y_new)) 
-    return rotated_coords
 
 
 def KF_track_fit(sigma0, sigma_ms, coords):
@@ -305,7 +264,7 @@ def main():
                     # rotate the track such that innermost edge parallel to x-axis
                     coords = list(nx.get_node_attributes(candidate, 'xyzr').values())
                     coords = sorted(coords, reverse=True, key=lambda xyzr: xyzr[3])
-                    coords = rotate_track(coords, separation_3d_threshold)
+                    coords = h.rotate_track(coords, separation_3d_threshold)
                     # apply KF track fit
                     pval = KF_track_fit(sigma0, sigma_ms, coords)
                     if pval >= track_acceptance:
