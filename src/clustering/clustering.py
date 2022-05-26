@@ -136,8 +136,11 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, sigma0, reactivate):
             track_state_estimates = node_attr[TRACK_STATE_KEY]
             neighbors_to_deactivate = np.array([connection for connection in track_state_estimates.keys()])
             edge_svs = np.array([component[EDGE_STATE_VECTOR] for component in track_state_estimates.values()])
+            
             edge_covs = np.array([component[EDGE_COV] for component in track_state_estimates.values()])
-            edge_covs = np.reshape(edge_covs[:, :, np.newaxis], (num_edges, 2, 2))
+
+            # edge_covs = np.reshape(edge_covs[:, :, np.newaxis], (num_edges, 2, 2))
+            edge_covs = np.reshape(edge_covs[:, :, np.newaxis], (num_edges, 3, 3))
             inv_covs = np.linalg.inv(edge_covs)
             priors = np.array([component[PRIOR] for component in track_state_estimates.values()])
 
@@ -246,17 +249,20 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, sigma0, reactivate):
     for i, sub in enumerate(subGraphs):
         h.save_network(outputDir, i, sub)
 
-    # for i, s in enumerate(subGraphs):
-    #     print("-------------------")
-    #     print("SUBGRAPH " + str(i))
-    #     print("-------------------")
-    #     print("EDGE DATA:")
-    #     for connection in s.edges.data():
-    #         print(connection)
-    #     print("-------------------")
-    #     for node in s.nodes(data=True):
-    #         pprint.pprint(node)
-    #     print("--------------------")
+    print("-------------------------------------------")
+    print("CLUSTERING STAGE NETWORK:")
+    print("-------------------------------------------")
+    for i, s in enumerate(subGraphs):
+        print("-------------------")
+        print("SUBGRAPH " + str(i))
+        print("-------------------")
+        print("EDGE DATA:")
+        for connection in s.edges.data():
+            print(connection)
+        print("-------------------")
+        for node in s.nodes(data=True):
+            pprint.pprint(node)
+        print("--------------------")
 
     
 

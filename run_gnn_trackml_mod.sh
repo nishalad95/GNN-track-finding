@@ -2,39 +2,39 @@
 
 # ---------------------------------------------------------------------------------------------
 # VARIABLES
+# ---------------------------------------------------------------------------------------------
+
 # track sim
-VAR=100  #(don't remove any nodes)   # TEMPORARY: remove nodes with empirical variance greater than VAR
-SIGMA0=0.0001                           # r.m.s measurement error 100 microns in xy plane
-# SIGMA0=0.5
-MU=0.000001                               # 10^-6 multiple scattering error - process noise for KF
-ROOTDIR=src/output
+SIGMA0=0.0001           # r.m.s measurement error 100 microns in xy plane
+SIGMA_MS=0.0001         # 10^-4 multiple scattering error
+ROOTDIR=src/output      # output directory to store GNN algorithm output
 
 # clustering
-LUT=learn_KL/output/empvar/empvar.lut       # LUT file for KL distance calibration
+LUT=learn_KL/output/empvar/empvar.lut   # LUT file for KL distance calibration
+
+# extrapolation
+c=2                     # initial chi2 distance acceptance threshold for extrapolated states
 
 # extracting track candidates
 p=0.01                  # p-value acceptance level for good track candidate extraction
 n=4                     # minimum number of hits for good track candidate acceptance (>=n)
+s=10                    # 3d distance threshold for close proximity nodes, used in node merging
 
-# extrapolation
-c=2  # initial chisquare distance acceptance threshold factor for extrapolated states
 # ----------------------------------------------------------------------------------------------
 
-
+# -----------------------------
+# Track conversion
+# -----------------------------
 mkdir -p $ROOTDIR
-# track conversion
 echo "-------------------------------------------------"
 echo "Running conversion of generated events to GNN..."
 echo "-------------------------------------------------"
 start_conversion=$SECONDS
 INPUT=$ROOTDIR/track_sim/network/
 mkdir -p $INPUT
-
-# event information
 EVENT_NETWORK=src/trackml_mod/event_network/minCurv_0.3_134
 EVENT_TRUTH=src/trackml_mod/event_truth
-
-python src/trackml_mod/event_conversion.py -o $INPUT -e $SIGMA0 -m $MU -n $EVENT_NETWORK -t $EVENT_TRUTH
+python src/trackml_mod/event_conversion.py -o $INPUT -e $SIGMA0 -m $SIGMA_MS -n $EVENT_NETWORK -t $EVENT_TRUTH
 conversion_duration=$(( SECONDS - start_conversion ))
 echo "Execution time event_conversion.py: $conversion_duration seconds"
 
@@ -42,8 +42,7 @@ echo "Execution time event_conversion.py: $conversion_duration seconds"
 
 # copy the first 100 files over - DEVELOPMENT ONLY
 mkdir $ROOTDIR/track_sim/network_100/
-ls $ROOTDIR/track_sim/network/* | head -500 | xargs -I{} cp {} $ROOTDIR/track_sim/network_100/
-
+ls $ROOTDIR/track_sim/network/* | head -2000 | xargs -I{} cp {} $ROOTDIR/track_sim/network_100/
 
 
 INPUT=$ROOTDIR/track_sim/network_100/
@@ -53,12 +52,11 @@ execution_times=($start)
 stages=("start")
 
 
-
 # TESTING FOR ITERATION 2 ONLY
 # INPUT=$ROOTDIR/iteration_1/remaining/       # THIS LINE CAN BE REMOVED
 # for i in {2..2};                            # THIS LINE CAN BE REMOVED
 
-for i in {1..2};
+for i in {1..1};
     do
         OUTPUT=$ROOTDIR/iteration_$i/network/
         mkdir -p $OUTPUT
@@ -85,7 +83,7 @@ for i in {1..2};
             echo "------------------------------------------------"
             echo "Using chisq distance cut of: ${c}"
             prev_duration=$SECONDS
-            python src/extrapolate/extrapolate_merged_states.py -i $INPUT -o $OUTPUT -c $c -m $MU
+            python src/extrapolate/extrapolate_merged_states.py -i $INPUT -o $OUTPUT -c $c -m $SIGMA_MS
             let c=$c/2   # tighter cut each time
 
             # time it!
@@ -145,7 +143,7 @@ for i in {1..2};
             cp -r $ROOTDIR/iteration_$num/candidates/ $CANDIDATES
         fi
         prev_duration=$SECONDS
-        python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -p $p -e $SIGMA0 -m $MU -n $n
+        python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -p $p -e $SIGMA0 -m $SIGMA_MS -n $n -s $s
         INPUT=$REMAINING
 
         # time it!
@@ -185,6 +183,10 @@ echo "-------------------------------------------------"
 echo "Running track reconstruction efficiency:"
 echo "-------------------------------------------------"
 python src/extract/reconstruction_efficiency.py -t $EVENT_TRUTH -o $ROOTDIR
+echo "-------------------------------------------------"
+echo "Plotting Purity distribution..."
+echo "-------------------------------------------------"
+python src/extract/purity.py
 
 
 echo "DONE"

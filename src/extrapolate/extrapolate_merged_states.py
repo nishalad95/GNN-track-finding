@@ -11,7 +11,7 @@ import pprint
 
 
 
-def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour_attr, chi2CutFactor, mu):
+def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour_attr, chi2CutFactor, sigma_ms):
     node_x = node_attr['GNN_Measurement'].x
     node_y = node_attr['GNN_Measurement'].y
     neighbour_x = neighbour_attr['GNN_Measurement'].x
@@ -23,27 +23,39 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     # extrapolate the merged state from the central node to the neighbour node & storing at the neighbur node
     print("extrapolating merged state for", node_num, "to", neighbour_num)
     dx = neighbour_x - node_x
-    F = np.array([ [1, dx], [0, 1] ])
+    
+    # variables for F; state transition matrix
+    alpha = 0.1                                 # OU parameter TODO: this value needs to be tuned
+    e1 = np.exp(-np.abs(dx) * alpha)
+    f1 = (1.0 - e1) / alpha
+    g1 = (np.abs(dx) - f1) / alpha
+    # variables for Q process noise matrix
+    sigma_ou = 0.0001                           # 10^-4
+    sw2 = sigma_ou**2                           # OU parameter 
+    st2 = sigma_ms**2                           # process noise representing multiple scattering
+    dx2 = dx**2
+    dxw2 = dx2 * sw2
+    Q02 = 0.5*dxw2
+    Q01 = dx*(st2 + Q02)
+    Q12 = dx*sw2
+
+    F = np.array([[1.,    dx,     g1], 
+                  [0.,    1.,     f1],
+                  [0.,    0.,     e1]])      # F state transition matrix, extrapolation Jacobian - linear & OU
     extrp_state = F.dot(merged_state)
     extrp_cov = F.dot(merged_cov).dot(F.T)
 
     # validate the extrapolated state against the measurement at the neighbour node
     # calc chi2 distance between measurement at neighbour node and extrapolated track state
-    H = np.array([[1.,0.]])
+    H = np.array([[1., 0., 0.]])
     residual = neighbour_y - H.dot(extrp_state)     # compute the residual
     S = H.dot(extrp_cov).dot(H.T) + sigma0**2       # covariance of residual (denominator of kalman gain)
     inv_S = np.linalg.inv(S)
     chi2 = residual.T.dot(inv_S).dot(residual)
-    # chi2_cut = chi2CutFactor * 2 * sigma0
+     
     chi2_cut = chi2CutFactor
-    
-    print("chi2 distance:", chi2)
-    print("chi2_cut:", chi2_cut)
-    print("sigma0", sigma0)
-    print("node truth particle:", subGraph.nodes[node_num]["truth_particle"])
-    print("neighbour truth particle:", subGraph.nodes[neighbour_num]["truth_particle"])
 
-    # save chi2 distance data
+    # save chi2 distance data - USED FOR TUNING THE CHI2 CUT FACTOR
     # truth, chi2 distance, chi2_cut
     # node_truth = subGraph.nodes[node_num]["truth_particle"]
     # neighbour_truth = subGraph.nodes[neighbour_num]["truth_particle"]
@@ -52,7 +64,6 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     # line = str(truth) + " " + str(chi2) + " " + str(chi2_cut) + "\n"
     # with open('chi2_data_sigma_0.1.csv', 'a') as f:
     #     f.write(line)
-
 
     # validate chi2 distance
     if chi2 < chi2_cut:
@@ -65,13 +76,15 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
         print("likelihood: ", likelihood)
 
         # initialize KF
-        f = KalmanFilter(dim_x=2, dim_z=1)
+        f = KalmanFilter(dim_x=3, dim_z=1)
         f.x = extrp_state                   # X state vector
         f.F = F                             # F state transition matrix
         f.H = H                             # H measurement matrix
         f.P = extrp_cov
         f.R = sigma0**2
-        f.Q = mu                            # process uncertainty/noise
+        f.Q = np.array([[dx2*(st2 + 0.25*dxw2), Q01,        Q02], 
+                        [Q01,                   st2 + dxw2, Q12],
+                        [Q02,                   Q12,        sw2]])      # Q process uncertainty/noise, OU model
         z = neighbour_y                     # "sensor reading"
 
         # perform KF update & save data
@@ -79,7 +92,6 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
         f.update(z)
         updated_state, updated_cov = f.x_post, f.P_post
 
-        print("EXTRAPOLATION STAGE: Q\n", f.Q)
 
         return { 'xy': (node_x, node_y),
                  'edge_state_vector': updated_state, 
@@ -97,7 +109,7 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
 
 
 
-def message_passing(subGraphs, chi2CutFactor, mu):
+def message_passing(subGraphs, chi2CutFactor, sigma_ms):
     for subGraph in subGraphs:
         if len(subGraph.nodes()) == 1: continue
 
@@ -114,7 +126,7 @@ def message_passing(subGraphs, chi2CutFactor, mu):
                     # extrapolating outwards, from node to neighbour
                     if subGraph[node_num][neighbour_num]["activated"] == 1:
                         neighbour_attr = subGraph.nodes[neighbour_num]
-                        updated_state_dict = extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour_attr, chi2CutFactor, mu)
+                        updated_state_dict = extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour_attr, chi2CutFactor, sigma_ms)
                         if updated_state_dict != None:
                             # store the updated track states at the neighbour node
                             if 'updated_track_states' not in neighbour_attr:
@@ -155,12 +167,12 @@ def main():
     parser.add_argument('-i', '--inputDir', help='input directory of outlier removal')
     parser.add_argument('-o', '--outputDir', help='output directory for updated states')
     parser.add_argument('-c', '--chi2CutFactor', help='chi2 cut factor for threshold')
-    parser.add_argument('-m', '--mu', help="uncertainty due to multiple scattering, process noise")
+    parser.add_argument('-m', '--sigma_ms', help="uncertainty due to multiple scattering, process noise")
     args = parser.parse_args()
     inputDir = args.inputDir
     outputDir = args.outputDir
     chi2CutFactor = float(args.chi2CutFactor)
-    mu = float(args.mu)                # process error - due to multiple scattering
+    sigma_ms = float(args.sigma_ms)                # process error - due to multiple scattering
 
     # read in subgraph data
     subGraphs = []
@@ -171,7 +183,7 @@ def main():
 
 
     # distribute merged state to neighbours, extrapolate, validation & create new updated state(s)
-    message_passing(subGraphs, chi2CutFactor, mu)
+    message_passing(subGraphs, chi2CutFactor, sigma_ms)
     convert_single_updated_state(subGraphs)
 
     h.compute_prior_probabilities(subGraphs, 'updated_track_states')

@@ -17,6 +17,8 @@ def get_volume_id(layer_id):
 def get_in_volume_layer_id(layer_id):
     return int(layer_id % 100)
 
+# def get_module_id(node_idx, truth_df):
+#     return truth_df.loc[truth_df.node_idx == node_idx]['module_id']
 
 def initialize_edge_activation(GraphList):
     for subGraph in GraphList: nx.set_edge_attributes(subGraph, 1, "activated")
@@ -165,41 +167,46 @@ def reweight(subGraphs, track_state_estimates_key):
 
 
 
-def compute_track_state_estimates(GraphList, sigma0, mu):
-    S = np.matrix([[sigma0**2, 0], [0, sigma0**2]]) # covariance matrix of measurements
+def compute_track_state_estimates(GraphList, sigma0, sigma_ms):
+    S = np.array([  [sigma0**2,         0,                  0], 
+                    [0,                 sigma0**2,          0], 
+                    [0,                 0,                  1]])        # edge covariance matrix
+    
     
     for G in GraphList:
         for node in G.nodes():
             gradients = []
-            state_estimates = {}
-            # (x, y)
+            track_state_estimates = {}
             node_gnn = G.nodes[node]["GNN_Measurement"]
             m1 = (node_gnn.x, node_gnn.y)
-            # (z, r)
-            # m1 = (node_gnn.z, node_gnn.r)
                         
             for neighbor in nx.all_neighbors(G, node):
-                # (x, y)
                 neighbour_gnn = G.nodes[neighbor]["GNN_Measurement"]
                 m2 = (neighbour_gnn.x, neighbour_gnn.y)
-                # (z, r)
-                # m2_zr = (neighbour_gnn.z, neighbour_gnn.r)
 
-                grad = (m1[1] - m2[1]) / (m1[0] - m2[0])
+                dy = m1[1] - m2[1]
+                dx = m1[0] - m2[0]
+                grad = dy / dx
                 gradients.append(grad)
-                edge_state_vector = np.array([m1[1], grad])
-                H = np.array([ [1, 0], [1/(m1[0] - m2[0]), 1/(m2[0] - m1[0])] ])
-                covariance = H.dot(S).dot(H.T)
-                covariance = np.array([covariance[0,0], covariance[0,1], covariance[1,0], covariance[1,1]])
+                
+                w = 0.
+                # [yf, dy/dx, w] = [coordinate, track inclination, integrated OU]
+                # measurement covariance in position: sigma0**2
+                track_state_vector = np.array([m1[1], grad, w])
+                H = np.array([  [1,                 0,                  0], 
+                                [1/dx,              -1/dx,              0],
+                                [0,                 0,                  1] ])
+                
+                covariance = H.dot(S).dot(H.T)                      # state covariance (matrix)
+                covariance = covariance.reshape(covariance.size)
 
                 key = neighbor # track state probability of A (node) conditioned on its neighborhood B
-                state_estimates[key] = {'edge_state_vector': edge_state_vector, 
-                                        'edge_covariance': covariance, 
-                                        'xy': m2,
-                                        # 'zr' : m2_zr
-                                        }
+                track_state_estimates[key] = {  'edge_state_vector': track_state_vector, 
+                                                'edge_covariance': covariance, 
+                                                'xy': m2,
+                                             }
             G.nodes[node]['edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
-            G.nodes[node]['track_state_estimates'] = state_estimates
+            G.nodes[node]['track_state_estimates'] = track_state_estimates
 
     return GraphList
 
@@ -227,12 +234,17 @@ def construct_graph(graph, nodes, edges, truth, sigma0, mu):
     grouped_hit_id['particle_id'] = grouped_hit_id['hit_id'].apply(lambda row: __get_particle_id(row, truth))
     grouped_hit_id['hit_dissociation'] = grouped_hit_id.apply(lambda row: {"hit_id": row['hit_id'], "particle_id":row['particle_id']}, axis=1)
 
+    grouped_module_ids = group['module_id'].unique()
+
     # add nodes
     for i in range(len(nodes)):
         row = nodes.iloc[i]
         node_idx = int(row.node_idx)
         x, y, z, r = row.x, row.y, row.z, row.r
-        volume_id, in_volume_layer_id = row.volume_id, row.in_volume_layer_id
+        volume_id, in_volume_layer_id= row.volume_id, row.in_volume_layer_id
+
+        # get module ids linked to this node (multiple here)
+        module_id = grouped_module_ids[node_idx]
         
         # TODO: update the following
         label = grouped_pid.loc[grouped_pid['node_idx'] == node_idx]['single_particle_id'].item()  # MC truth label (particle id)
@@ -247,6 +259,7 @@ def construct_graph(graph, nodes, edges, truth, sigma0, mu):
                             volume_id = volume_id,
                             in_volume_layer_id = in_volume_layer_id,
                             vivl_id = (volume_id, in_volume_layer_id),
+                            module_id = module_id,
                             truth_particle=label,   # TODO: update the following
                             hit_dissociation=hit_dissociation)
     
@@ -270,6 +283,7 @@ def load_metadata(event_path, max_volume_region):
     nodes['r'] = nodes.apply(lambda row: edge_length_xy(row), axis=1)
     nodes['volume_id'] = nodes.apply(lambda row: get_volume_id(row.layer_id), axis=1) 
     nodes['in_volume_layer_id'] = nodes.apply(lambda row: get_in_volume_layer_id(row.layer_id), axis=1)
+    # nodes['module_id'] = nodes.apply(lambda row: get_module_id(), axis=1)
 
     # graph edges
     # select all edges - TODO: select only edges where node1 and node2 contained in nodes df (above)
@@ -290,16 +304,19 @@ def load_save_truth(event_path, truth_event_path, truth_event_file):
     # truth event
     hits_particles = pd.read_csv(truth_event_path + "truth.csv")
     particles_nhits = pd.read_csv(truth_event_path + "particles.csv")
+    hits_module_id = pd.read_csv(truth_event_path + "hits.csv")
 
     # nodes to hits
     nodes_hits = pd.read_csv(event_path + "nodes_to_hits.csv")
-    truth = nodes_hits[['node_idx', 'hit_id']]
-    hit_ids = truth['hit_id']
-    particle_ids = []
-    for hid in hit_ids:
-        pid = hits_particles.loc[hits_particles['hit_id'] == hid]['particle_id'].item()
-        particle_ids.append(pid)
-    truth['particle_id'] = particle_ids
+ 
+    # for every node and hit_id mapping, get the particle_id & module_id
+    truth = pd.DataFrame(columns = ['node_idx', 'hit_id', 'particle_id', 'module_id', 'nhits'])
+    truth['node_idx'] = nodes_hits['node_idx']
+    truth['hit_id'] = nodes_hits['hit_id']
+    for index, row in truth.iterrows():
+        hit_id = row.hit_id
+        truth['particle_id'][index] = hits_particles.loc[hits_particles.hit_id == hit_id].particle_id.item()
+        truth['module_id'][index] = hits_module_id.loc[hits_module_id.hit_id == hit_id].module_id.item()
 
     # number of hits for each truth particle
     nhits = np.array([])
