@@ -19,7 +19,9 @@ outputDir = args.output
 event_truth = args.eventTruth
 # for evaluating the GNN algorithm
 # TODO: will change in future
-inputDir = "src/output/iteration_1/candidates/"
+# inputDir = "src/output/iteration_1/candidates/"
+# TODO: for endcap only
+inputDir = "outputs/output_rotated_tracks/iteration_1/candidates/"
 
 
 # every hit has an associated particle id: from the truth information file for hits
@@ -31,10 +33,10 @@ inputDir = "src/output/iteration_1/candidates/"
 
 reference_path = event_truth + "/event000001000-"
 
-# identify the ids of particles that have pT > 1GeV, units GeV/c
+# identify the ids of particles that have pT > 150MeV, units GeV/c
 particles = pd.read_csv(reference_path + "particles.csv", sep=',')
 particles = particles.assign(pT=lambda row: (np.sqrt(row.px**2 + row.py**2)))
-pt_cut = 1.  # units of momentum GeV/c
+pt_cut = 1.0  # units of momentum GeV/c
 particles = particles.loc[particles.pT >= pt_cut]
 particle_ids = particles.particle_id.to_list()
 
@@ -63,7 +65,7 @@ left_endcap_hits = left_endcap_hits.assign(r=lambda row: (np.sqrt(row.x**2 + row
 
 # Compute number of reference tracks: Apply a cut on the num of hits
 # require >= 4 hits per track (in the volume of interest) to be a reference track
-num_hits = 4
+num_hits = 13
 unique_particle_ids = left_endcap_hits.particle_id.unique()
 num_reference_tracks = 0
 reference_tracks_dict = {}          # key:value particle_id:[hit_ids]
@@ -98,25 +100,30 @@ track_candidates = []
 i = 0
 subgraph_path = "_subgraph.gpickle"
 path = inputDir + str(i) + subgraph_path
+# print("path:\n", path)
 while os.path.isfile(path):
+    # print("path:\n", path)
     sub = nx.read_gpickle(path)
     track_candidates.append(sub)
     i += 1
     path = inputDir + str(i) + subgraph_path
 
-
+print("inputDir:\n", inputDir)
+print("number of track candidates to process:", len(track_candidates))
 
 num_reconstructed_tracks = 0
 track_purities = np.array([])
 particle_purities = np.array([])
-truth_num_hits = pd.read_csv(reference_path + "nodes-particles-id.csv", sep=',')
+truth_num_hits = pd.read_csv(reference_path + "nodes-particles-id-endcap-volume7.csv", sep=',')
+# truth_num_hits = pd.read_csv(reference_path + "nodes-particles-id.csv", sep=',')
+print("reference_path: \n", reference_path)
 
 for i, track in enumerate(track_candidates):
+    # if i == 0:   # temporary for debugging
     print("---\nProcessing track candidate ", str(i), "\n---")
     # {node: {hit_id: [], particle_id: []} }
     hit_dissociation = nx.get_node_attributes(track, 'hit_dissociation').values()
 
-    # if i == 0:   # temporary for debugging
     gnn_particle_ids = []
     for hd in hit_dissociation:
         values = list(hd.values())
@@ -130,18 +137,24 @@ for i, track in enumerate(track_candidates):
     # compute track purity and particle purity
     track_purity = n_good / len(gnn_particle_ids)
     track_purities = np.append(track_purities, track_purity)
-    nhits = truth_num_hits.loc[truth_num_hits.particle_id == reconstructed_particle_id]['nhits'].iloc[0]
+    # nhits = truth_num_hits.loc[truth_num_hits.particle_id == reconstructed_particle_id]['nhits'].iloc[0]
+    # TODO: the following line is temporary for the endcap volume region 7 only! Will need changing later
+    nhits = truth_num_hits.loc[truth_num_hits.particle_id == reconstructed_particle_id]['nhits_endcap_volume7'].iloc[0]
+    nhits = nhits * 1.0
+    print("nhits: ", nhits)
     particle_purity = n_good / nhits
     particle_purities = np.append(particle_purities, particle_purity)
     print("Track purity:", track_purity)
     print("Particle purity:", particle_purity)
 
     # compute number of reconstructed tracks
-    if track_purity >= 0.5:     # good reconstructed track
+    if (track_purity >= 0.5) and (particle_purity >= 0.5):     # good reconstructed track
         # check if reconstructed track particle_id appears in reference tracks
         if reconstructed_particle_id in reference_tracks_dict.keys():
             print("HURRAY! Reconstructed particle id exists in reference tracks particles!")
             reference_hits = reference_tracks_dict[reconstructed_particle_id]
+            print("n_good:", n_good)
+            print("length of reference track hits:", len(reference_hits))
             if n_good >= 0.5 * len(reference_hits):
                 print("track reconstructed by gnn! particle_id: ", reconstructed_particle_id)
                 num_reconstructed_tracks += 1
@@ -154,7 +167,8 @@ np.savetxt(outputDir + "/extracted_track_purities.csv", track_purities, delimite
 np.savetxt(outputDir + "/extracted_particle_purities.csv", particle_purities, delimiter=",")
 
 
-print("num of reconstructed tracks:", num_reconstructed_tracks)
+print("\nTotal num of reconstructed tracks:", num_reconstructed_tracks)
+print("Total num of reference tracks:", num_reference_tracks)
 efficiency = num_reconstructed_tracks * 100 / num_reference_tracks
 efficiency= "{:.3f}".format(efficiency)
 print("----------------------------")
