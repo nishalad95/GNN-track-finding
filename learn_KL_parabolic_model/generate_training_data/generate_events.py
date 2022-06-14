@@ -3,16 +3,39 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import argparse
 import json
-from modules.GNN_Measurement import *
-from modules.HitPairPredictor import *
-from utils.utils import *
+from GNN_Measurement import *
+from HitPairPredictor import *
+from utils import *
 import pprint
 import pickle
 import itertools
 
 
+def plot_subgraphs_xy(GraphList, key):
+    _, ax = plt.subplots(figsize=(10,8))
+    for i, subGraph in enumerate(GraphList):
+        color = ["#"+''.join([random.choice('0123456789ABCDEF') for _ in range(6) ])][0]
+        pos=nx.get_node_attributes(subGraph, key)
+        nodes = subGraph.nodes()
+        edge_colors = []
+        for u, v in subGraph.edges():
+            if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
+            else: edge_colors.append("#f2f2f2")
+        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
+        nx.draw_networkx_nodes(subGraph, pos, nodelist=nodes, node_color=color, node_size=50)
+        nx.draw_networkx_labels(subGraph, pos, font_size=4)
+    ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
+    plt.xlabel("ID in x label")
+    plt.ylabel("y")
+    plt.axis('on')
+    plt.show()
+
+
+
+
 def simulate_event(threshold, sigma0, outputDir):
 
+    sigma_ms = 0.0001
     Lc = np.array([1,2,3,4,5,6,7,8,9,10]) #detector layer coordinates along x-axis
     Nl = len(Lc) #number of layers
     start = 0
@@ -30,10 +53,10 @@ def simulate_event(threshold, sigma0, outputDir):
     Ntr = len(y0) #number of simulated tracks
 
     # plotting the intial track toy model
-    # fig = plt.figure(figsize=(16, 9))
-    # ax1 = fig.add_subplot(1, 2, 1)
-    # major_ticks = np.arange(0, 11, 1)
-    # ax1.set_xticks(major_ticks)
+    fig = plt.figure(figsize=(16, 9))
+    ax1 = fig.add_subplot(1, 2, 1)
+    major_ticks = np.arange(0, 11, 1)
+    ax1.set_xticks(major_ticks)
 
     G = nx.Graph()
     nNodes = 0
@@ -51,7 +74,7 @@ def simulate_event(threshold, sigma0, outputDir):
         node_labels = []
         for l in range(Nl) : 
             nu = sigma0*np.random.normal(0.0,1.0) #random error
-            gm = GNN_Measurement(xc[l], yc[l] + nu, tau0[i], sigma0, label=i, n=nNodes)
+            gm = GNN_Measurement(xc[l], yc[l] + nu, 0, 0, sigma0, sigma_ms, tau0[i], label=i, n=nNodes)
             mcoll[l].append(gm)
             G.add_node(nNodes, GNN_Measurement=gm, 
                                xy=(xc[l], yc[l] + nu),
@@ -60,19 +83,19 @@ def simulate_event(threshold, sigma0, outputDir):
             nhits += 1
             node_labels.append(nNodes)
         num_hits[i] = {"num_hits" : nhits, "node_labels" : node_labels}
-    #     ax1.scatter(xc, yc)
-    # ax1.set_title('Ground truth')
-    # ax1.grid()
+        ax1.scatter(xc, yc)
+    ax1.set_title('Ground truth')
+    ax1.grid()
 
-    # save the num of hits for simulated tracks
-    with open(outputDir + 'truth_hit_data.txt', 'w') as file:
-        file.write(json.dumps(num_hits))
+    # # save the num of hits for simulated tracks
+    # with open(outputDir + 'truth_hit_data.txt', 'w') as file:
+    #     file.write(json.dumps(num_hits))
 
     # generate hit pair predictions
     tau = 3.5
     hpp = HitPairPredictor(start, 7.0, tau) #max y0 and tau value
-    # ax2 = fig.add_subplot(1, 2, 2)
-    # ax2.set_xticks(major_ticks)
+    ax2 = fig.add_subplot(1, 2, 2)
+    ax2.set_xticks(major_ticks)
     
     nPairs = 0
     # plot hit-pair predictions as edges, add edges to the graph network
@@ -85,16 +108,16 @@ def simulate_event(threshold, sigma0, outputDir):
                     result = hpp.predict(m1, m2)
                     if result ==  0 : continue #pair (m1,m2) is rejected
                     nPairs += 1
-                    # ax2.plot([m1.x, m2.x],[m1.y,m2.y],alpha = 0.5)
+                    ax2.plot([m1.x, m2.x],[m1.y,m2.y],alpha = 0.5)
                     edge = (m1.node, m2.node)
                     G.add_edge(*edge)
     # print('Found', nPairs, 'hit pairs')
 
     # plot the ground truth and predicted hit pairs
-    # ax2.set_title('Hit pairs')
-    # ax2.grid()
-    # plt.tight_layout()
-    # plt.savefig(outputDir + 'simulated_tracks_hit_pairs.png', dpi=300)
+    ax2.set_title('Hit pairs')
+    ax2.grid()
+    plt.tight_layout()
+    plt.savefig(outputDir + 'simulated_tracks_hit_pairs.png', dpi=300)
 
     # compute track state estimates
     Graphs = compute_track_state_estimates([G], sigma0)
@@ -103,8 +126,6 @@ def simulate_event(threshold, sigma0, outputDir):
     # remove all nodes with mean edge orientation above threshold
     G = nx.Graph(G) # make a copy to unfreeze graph
     filteredNodes = [node for node, attr in G.nodes(data=True) if attr['edge_gradient_mean_var'][1] > threshold]
-    # TODO
-    # filteredNodes = [node for node, attr in G.nodes(data=True) if attr['multivariate_covariance'][1][1] > 0.05]
     for node in filteredNodes: G.remove_node(node)
     
     # CCA: extract subgraphs
@@ -113,16 +134,13 @@ def simulate_event(threshold, sigma0, outputDir):
 
     # compute track state estimates, priors and assign initial edge weightings
     subGraphs = compute_track_state_estimates(subGraphs, sigma0)
-    # for sub in subGraphs:
-    #     for node in sub.nodes(data=True):
-    #         node_attr = node[1]
-    #         if node_attr['edge_gradient_mean_var'][1] >= 0.6:
-    #             print("SOMETHINGS WRONG")
-    #             pprint.pprint(node)
-
     initialize_edge_activation(subGraphs)
-    compute_prior_probabilities(subGraphs)
+    compute_prior_probabilities(subGraphs, 'track_state_estimates')
     compute_mixture_weights(subGraphs)
+
+    # plot the subgraphs
+    # print("plotting subgraphs....")
+    # plot_subgraphs_xy(subGraphs, "xy")
 
     # for i, s in enumerate(subGraphs):
     #     print("-------------------")
@@ -148,14 +166,18 @@ def main():
     num_events = int(args.numEvents)
     outputDir = args.output
 
-    events = {}
     for i in range(num_events):
+        print("Running event number: ", str(i))
         subGraphs = simulate_event(threshold, sigma0, outputDir)
-        events["event_" + str(i)] = subGraphs
-        # print("len:", len(subGraphs))
+        event_num = "event_" + str(i)
+        events = {event_num : subGraphs}
 
-    with open(outputDir + str(num_events) + "_events.gpickle", 'wb') as f:
-        pickle.dump(events, f)
+        print("len of subgraphs produced:", len(subGraphs))
+        # print("events dictionary:", events)
+        with open(outputDir + event_num + ".gpickle", 'ab+') as f:
+            pickle.dump(events, f)
+        
+
 
 if __name__ == "__main__":
     main()
