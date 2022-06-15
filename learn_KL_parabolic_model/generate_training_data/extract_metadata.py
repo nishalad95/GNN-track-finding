@@ -55,8 +55,7 @@ with open(outputDir + str(num_events) + '_events_training_data.csv', 'w+', encod
         subGraphs = list(event.values())[0]
         for n, subGraph in enumerate(subGraphs):
 
-            # print("processing the subGraph:", subGraph)
-            if n != 1: continue
+            print("processing the subGraph:", subGraph)
 
             for node in subGraph.nodes(data=True):
                 node_num = node[0]
@@ -83,6 +82,7 @@ with open(outputDir + str(num_events) + '_events_training_data.csv', 'w+', encod
                 inv_covs = np.linalg.inv(edge_covs)
 
                 pairwise_distances = calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs)
+                # print("pairwise distances:\n", pairwise_distances)
 
                 # compute truth edges
                 node_truth = node_attr['truth_particle']

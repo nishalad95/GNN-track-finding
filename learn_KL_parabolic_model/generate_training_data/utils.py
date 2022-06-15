@@ -55,6 +55,15 @@ def compute_prior_probabilities(GraphList, track_state_key):
                     track_state_estimates[neighbour_num]['prior'] = prior
 
 
+def query_node_degree_out_edges(subGraph, node_num):
+    in_edges = subGraph.out_edges(node_num) # one direction only, not double counted
+    node_degree = 0
+    for edge in in_edges:
+        neighbour_num = edge[0]
+        if (subGraph[node_num][neighbour_num]["activated"] == 1) : node_degree += 1
+    return node_degree
+
+
 def query_node_degree_in_edges(subGraph, node_num):
     in_edges = subGraph.in_edges(node_num) # one direction only, not double counted
     node_degree = 0
@@ -210,17 +219,16 @@ def rotate_track(coords, separation_3d_threshold=None):
 
 
 def compute_track_state_estimates(GraphList, sigma0):
-    # TODO: what realistic errors should there be?
-    sigma0 = 0.1       # larger error in m_0 due to beamspot error
-    sigmaA = 0.0001     # 100 microns
-    sigmaB = 0.0001     # 100 microns
+    sigma0 = 4.0        # 4.0mm larger error in m_0 due to beamspot error
+    sigmaA = 0.1        # 0.1mm
+    sigmaB = 0.1        # 0.1mm
     S = np.array([  [sigma0**2,         0,                  0], 
                     [0,                 sigmaA**2,          0], 
                     [0,                 0,                  sigmaB**2]])        # edge covariance matrix
     
     m_0 = 0.0   # measurements for parabolic model
     m_A = 0.0
-    for G in GraphList:
+    for i, G in enumerate(GraphList):
         for node in G.nodes():
             gradients = []
             track_state_estimates = {}
@@ -280,6 +288,9 @@ def compute_track_state_estimates(GraphList, sigma0):
                 track_state_estimates[key] = {  'edge_state_vector': track_state_vector, 
                                                 'edge_covariance': covariance }
 
+            # TODO: debugging
+            # if i == 0:
+            #     print("track state estimates:\n", track_state_estimates)
             # store all track state estimates at the node
             G.nodes[node]['track_state_estimates'] = track_state_estimates
             # (mean, variance) of edge orientation - needed for KL distance in clustering

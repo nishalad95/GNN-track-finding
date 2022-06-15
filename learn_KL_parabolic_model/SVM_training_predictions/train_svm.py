@@ -101,7 +101,7 @@ def plot_svm_decision_boundary(X, y, clf, levels, title):
     plt.xlabel("Empirical variance of edge orientation, for any given node",fontsize=14)
     plt.ylabel("Pairwise KL distance",fontsize=14)
     plt.title(title)
-    # plt.savefig("output/svm_poly3_c0.1_gamma_0.1.png", dpi=300)
+    plt.savefig("output/svm_poly3_c0.1_gamma_0.1.png", dpi=300)
     plt.show()
 
 
@@ -128,10 +128,12 @@ def adjusted_classes(y_scores, t):
 feature = 'emp_var'
 
 # load data
-filename = "output/track_sim/sigma0.5/10000_events_training_data.csv"
+filename = "output/track_sim/sigma4.0/1000_events_training_data_downsampled.csv"
 df = pd.read_csv(filename)
 
-df = downsample(df, 50000)
+print(df)
+
+df = downsample(df, 1000)
 correct_pairs = df.loc[df['truth'] == 1]
 incorrect_pairs = df.loc[df['truth'] == 0]
 incorrect_pairs = downsample(incorrect_pairs, len(correct_pairs))
@@ -151,9 +153,6 @@ y_test = pd.concat([yc_test, yi_test], ignore_index=False)
 
 print("Size of training set: ", X_train.size)
 print("Size of test set: ", X_test.size)
-
-
-
 
 
 # # scaler fit applied to all training data
@@ -193,34 +192,30 @@ print("Size of test set: ", X_test.size)
 # X_test_pca = pca.transform(X_test_s)
 
 
-
-
-
-
-# # grid search cv to find optimum hyperparameters
-pipe_steps = [('SVM', SVC(class_weight='balanced'))]
+# grid search cv to find optimum hyperparameters
+# pipe_steps = [('SVM', SVC(class_weight='balanced'))]
 # check_params = {
 #     'SVM__kernel' : ['poly'],
 #     'SVM__degree' : [3],
 #     'SVM__C': [0.1],
 #     'SVM__gamma': [0.1]
 # }
-check_params = {
-    'SVM__kernel' : ['poly'],
-    'SVM__degree' : [2, 3],
-    'SVM__C': [0.1, 1.0],
-    'SVM__gamma': [0.1, 1.0]
-}
+# check_params = {
+#     'SVM__kernel' : ['poly'],
+#     'SVM__degree' : [2, 3],
+#     'SVM__C': [0.1, 1.0],
+#     'SVM__gamma': [0.1, 1.0]
+# }
 
 # pipeline = Pipeline(pipe_steps)
 # print("Start fitting training data...")
 
 # create_grid = GridSearchCV(pipeline, param_grid=check_params, cv=2, 
-#                            scoring='recall', verbose=1, n_jobs=-1)
-# create_grid.fit(X_train_pca, y_train)
+#                            scoring='recall', verbose=1, n_jobs=-1, error_score='raise')
+# create_grid.fit(X_train, y_train)
 
 # # apply the trained svm to the test data
-# print("Score for 4 fold CV := %3.2f" %(create_grid.score(X_test_pca, y_test)))
+# print("Score for 2 fold CV := %3.2f" %(create_grid.score(X_test, y_test)))
 # print("Best fit parameters from training data:")
 # print(create_grid.best_params_)
 # print("Cross-val complete")
@@ -241,17 +236,18 @@ C=0.1
 gamma=0.1
 
 clf = SVC(kernel=kernel, class_weight='balanced', C=C, gamma=gamma, degree=degree)
-# clf.fit(X_train, y_train)
 model = clf.fit(X_train, y_train)
 
 # # save model to disk
-# pickle.dump(model, open("output/svm_poly3_c0.1_gamma_0.1.sav", 'wb'))
+pickle.dump(model, open("SVM_training_predictions/svm_poly3_c0.1_gamma_0.1.sav", 'wb'))
 
+
+# PAUSE HERE
 print("Making predictions on test set....")
 y_pred = clf.predict(X_test)
 
-# load the model from disk
-# clf = pickle.load(open("output/svm_poly3_c0.1_gamma_0.1.sav", 'rb'))
+# # load the model from disk
+# # clf = pickle.load(open("output/svm_poly3_c0.1_gamma_0.1.sav", 'rb'))
 
 y_scores = clf.decision_function(X_test)
 

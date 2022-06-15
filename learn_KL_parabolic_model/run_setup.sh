@@ -10,8 +10,8 @@ echo "--------------------------------------------------------------------------
 echo "Generating events for learning optimal KL threshold with the parabolic model..."
 echo "---------------------------------------------------------------------------------"
 
-NUM_EVENTS=2               # currently each event with 10 tracks
-SIGMA0=0.1
+NUM_EVENTS=1000               # currently each event with 10 tracks
+SIGMA0=4.0                  # ignore this, uncertainties are properly defined in compute_track_state_estimates
 EDGE_VAR_THRES=0.8         # remove nodes with mean edge orientation above threshold
 OUTPUT=output/track_sim/sigma$SIGMA0/
 
@@ -26,7 +26,7 @@ INPUT=$OUTPUT
 echo "extracting metadata..."
 python generate_training_data/extract_metadata.py -i $INPUT -o $OUTPUT -n $NUM_EVENTS
 
-# # plot the training data
+# plot the training data
 # python SVM_training_predictions/plot_training_data.py
 
 echo "DONE"

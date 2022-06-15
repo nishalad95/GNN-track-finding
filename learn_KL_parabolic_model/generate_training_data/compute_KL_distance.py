@@ -24,6 +24,7 @@ def calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs):
 parser = argparse.ArgumentParser(description='track hit-pair simulator')
 parser.add_argument('-i', '--inputDir', help='input directory containing network gpickle file')
 parser.add_argument('-o', '--outputDir', help='output directory to save metadata')
+parser.add_argument('-n', '--numEvents', help='number of events')
 args = parser.parse_args()
 
 inputDir = args.inputDir
@@ -40,7 +41,7 @@ with open(outputDir + str(num_events) + '_events_training_data.csv', 'w', encodi
     writer = csv.writer(f)
     writer.writerow(header)
 
-    for _, subGraphs in events.items():
+    for i, subGraphs in events.items():
         for n, subGraph in enumerate(subGraphs):
             if n != 1: continue
 
@@ -49,17 +50,18 @@ with open(outputDir + str(num_events) + '_events_training_data.csv', 'w', encodi
                 node_attr = node[1]
 
                 emp_var = node_attr['edge_gradient_mean_var'][1]
-                # TODO: change this - query the node degree
-                num_edges = node_attr['degree']
+                num_edges = query_node_degree_in_edges(subGraph, node_num)
                 if num_edges <= 1: continue
 
                 # convert attributes to arrays
                 track_state_estimates = node_attr["track_state_estimates"]
+                # if i == 0:
+                #     print("track state estimates:\n", track_state_estimates)
+
                 edge_connections = np.array([tuple(connection) for connection in track_state_estimates.keys()])
                 edge_svs = np.array([component['edge_state_vector'] for component in track_state_estimates.values()])
                 edge_covs = np.array([component['edge_covariance'] for component in track_state_estimates.values()])
-                # TODO: change this to 3 x 3
-                edge_covs = np.reshape(edge_covs[:, :, np.newaxis], (num_edges, 2, 2))
+                edge_covs = np.reshape(edge_covs[:, :, np.newaxis], (num_edges, 3, 3))
                 inv_covs = np.linalg.inv(edge_covs)
 
                 pairwise_distances = calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs)
