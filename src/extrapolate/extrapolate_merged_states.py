@@ -30,7 +30,7 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     f1 = (1.0 - e1) / alpha
     g1 = (np.abs(dx) - f1) / alpha
     # variables for Q process noise matrix
-    sigma_ou = 0.0001                           # 10^-4
+    sigma_ou = 0.0                              # for extrapolation sigma_ou should be zero
     sw2 = sigma_ou**2                           # OU parameter 
     st2 = sigma_ms**2                           # process noise representing multiple scattering
     dx2 = dx**2

@@ -68,11 +68,11 @@ def main():
     print("Number of nodes:", endcap_graph.number_of_nodes())
 
     # compute track state estimates, extract subgraphs: out-of-the-box CCA
-    endcap_graph = h.compute_track_state_estimates([endcap_graph], sigma0, sigma_ms)
+    endcap_graph = h.compute_track_state_estimates([endcap_graph], sigma0)
     endcap_graph = nx.Graph(endcap_graph[0])
     endcap_graph = nx.to_directed(endcap_graph)
     subGraphs = [endcap_graph.subgraph(c).copy() for c in nx.weakly_connected_components(endcap_graph)]
-    subGraphs = h.compute_track_state_estimates(subGraphs, sigma0, sigma_ms)
+    subGraphs = h.compute_track_state_estimates(subGraphs, sigma0)
     h.initialize_edge_activation(subGraphs)
     h.compute_prior_probabilities(subGraphs, 'track_state_estimates')
     h.compute_mixture_weights(subGraphs)

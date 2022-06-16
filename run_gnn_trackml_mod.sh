@@ -5,12 +5,12 @@
 # ---------------------------------------------------------------------------------------------
 
 # track sim
-SIGMA0=0.0001           # r.m.s measurement error 100 microns in xy plane
+SIGMA0=4.0           # r.m.s measurement error 100 microns in xy plane
 SIGMA_MS=0.0001         # 10^-4 multiple scattering error
 ROOTDIR=src/output      # output directory to store GNN algorithm output
 
 # clustering
-LUT=learn_KL/output/empvar/empvar.lut   # LUT file for KL distance calibration
+LUT=learn_KL_linear_model/output/empvar/empvar.lut   # LUT file for KL distance calibration
 
 # extrapolation
 c=2                     # initial chi2 distance acceptance threshold for extrapolated states

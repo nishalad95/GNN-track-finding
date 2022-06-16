@@ -6,6 +6,7 @@ import networkx as nx
 import random
 from GNN_Measurement import GNN_Measurement as gnn
 import pprint
+from math import *
 
 
 def edge_length_xy(row):
@@ -166,49 +167,130 @@ def reweight(subGraphs, track_state_estimates_key):
                             print("reactivating edge: (", neighbour_num, ",", node_num, ")")
 
 
+# TODO: some of these functions are in the rotation of a track during the extraction
+# they can be used from these functions instead - duplication of code
+def compute_3d_distance(coord1, coord2):
+    x1, y1, z1 = coord1[0], coord1[1], coord1[2]
+    x2, y2, z2 = coord2[0], coord2[1], coord2[2]
+    return np.sqrt( (x1 - x2)**2 + (y1 - y2)**2 + (z1 - z2)**2 )
 
-def compute_track_state_estimates(GraphList, sigma0, sigma_ms):
+
+def angle_trunc(a):
+    while a < 0.0:
+        a += pi * 2
+    return a
+
+
+# get angle to the positive x axis in radians
+def getAngleBetweenPoints(p1, p2):
+    deltaY = p2[1] - p1[1]
+    deltaX = p2[0] - p1[0]
+    return angle_trunc(atan2(deltaY, deltaX))
+
+
+def rotate_track(coords, separation_3d_threshold=None):
+    # coords are ordered from outermost to innermost -> use innermost edge
+    p1 = coords[-1]
+    p2 = coords[-2]
+
+    # if nodes p1 and p2 are too close, use the next node
+    if separation_3d_threshold is not None:    
+        distance = compute_3d_distance(p1, p2)
+        if distance < separation_3d_threshold:
+            p2 = coords[-3]
+
+    # rotate counter clockwise, first edge to be parallel with x axis
+    angle = 2*pi - getAngleBetweenPoints(p1, p2)
+    cos_angle = np.cos(angle)
+    sin_angle = np.sin(angle)
+    rotated_coords = []
+    for c in coords:
+        x, y = c[0], c[1]
+        x_new = x * np.cos(angle) - y * np.sin(angle)    # x_new = xcos(angle) - ysin(angle)
+        y_new = x * np.sin(angle) + y * np.cos(angle)    # y_new = xsin(angle) + ycos(angle) 
+        rotated_coords.append((x_new, y_new)) 
+    return rotated_coords
+
+def compute_track_state_estimates(GraphList, sigma0):
+    sigma0 = 4.0        # 4.0mm larger error in m_0 due to beamspot error
+    sigmaA = 0.1        # 0.1mm
+    sigmaB = 0.1        # 0.1mm
     S = np.array([  [sigma0**2,         0,                  0], 
-                    [0,                 sigma0**2,          0], 
-                    [0,                 0,                  1]])        # edge covariance matrix
+                    [0,                 sigmaA**2,          0], 
+                    [0,                 0,                  sigmaB**2]])        # edge covariance matrix
     
-    
-    for G in GraphList:
+    m_0 = 0.0   # measurements for parabolic model
+    m_A = 0.0
+    for i, G in enumerate(GraphList):
         for node in G.nodes():
             gradients = []
             track_state_estimates = {}
+            
+            # create a list of node & neighbour coords including the origin
             node_gnn = G.nodes[node]["GNN_Measurement"]
-            m1 = (node_gnn.x, node_gnn.y)
-                        
+            m_node = (node_gnn.x, node_gnn.y)
+            coords = [(0.0, 0.0), m_node]
+            keys = [-1, node]
+
             for neighbor in nx.all_neighbors(G, node):
                 neighbour_gnn = G.nodes[neighbor]["GNN_Measurement"]
-                m2 = (neighbour_gnn.x, neighbour_gnn.y)
+                m_neighbour = (neighbour_gnn.x, neighbour_gnn.y)
+                coords.append(m_neighbour)
+                keys.append(neighbor)
 
-                dy = m1[1] - m2[1]
-                dx = m1[0] - m2[0]
+                dy = m_node[1] - m_neighbour[1]
+                dx = m_node[0] - m_neighbour[0]
                 grad = dy / dx
                 gradients.append(grad)
-                
-                w = 0.
-                # [yf, dy/dx, w] = [coordinate, track inclination, integrated OU]
-                # measurement covariance in position: sigma0**2
-                track_state_vector = np.array([m1[1], grad, w])
-                H = np.array([  [1,                 0,                  0], 
-                                [1/dx,              -1/dx,              0],
-                                [0,                 0,                  1] ])
-                
-                covariance = H.dot(S).dot(H.T)                      # state covariance (matrix)
-                covariance = covariance.reshape(covariance.size)
+            
+            # [neighbour1, neighbour2, ..., node, (0.0, 0.0)]
+            coords.reverse()
+            keys.reverse()
 
-                key = neighbor # track state probability of A (node) conditioned on its neighborhood B
+            # rotate the node & its neighbours to local node-specific coordinate system
+            rotated_coords = rotate_track(coords)
+
+            # translate all coords such that the node in question becomes the new origin
+            x_trans = rotated_coords[-2][0]
+            y_trans = rotated_coords[-2][1]
+            transformed_coords = []
+            for rc in rotated_coords:
+                tx = rc[0] - x_trans
+                ty = rc[1] - y_trans
+                tc = (tx, ty)
+                transformed_coords.append(tc)
+            # print("TRANSLATED COORDS:\n", transformed_coords)
+
+            # for each neighbour connection obtain the measurement vector in the new axis
+            # [m_0, m_A, m_B] m_0 the old origin, m_A the new origin, m_B the neighbour
+            x_0 = transformed_coords[-1][0]
+            transformed_neighbour_coords = transformed_coords[:-2]
+            keys = keys[:-2]
+            for tnc, key in zip(transformed_neighbour_coords, keys):
+                x_B = tnc[0]
+                m_B = tnc[1]
+                measurement_vector = [m_0, m_A, m_B]
+                H = np.array([  [x_0**2,         x_0,          1], 
+                                [0,                0,          1], 
+                                [x_B**2,         x_B,          1]])
+
+                # compute track state parameters & covariance
+                H_inv = np.linalg.inv(H)    # invert H matrix to obtain measurement matrix
+                track_state_vector = H_inv.dot(measurement_vector)
+                covariance = H_inv.dot(S).dot(H_inv.T)
                 track_state_estimates[key] = {  'edge_state_vector': track_state_vector, 
-                                                'edge_covariance': covariance, 
-                                                'xy': m2,
-                                             }
-            G.nodes[node]['edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
+                                                'edge_covariance': covariance }
+
+            # TODO: debugging
+            # if i == 0:
+            #     print("track state estimates:\n", track_state_estimates)
+            # store all track state estimates at the node
             G.nodes[node]['track_state_estimates'] = track_state_estimates
+            # (mean, variance) of edge orientation - needed for KL distance in clustering
+            G.nodes[node]['edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
 
     return GraphList
+
 
 
 def __get_particle_id(row, df):
