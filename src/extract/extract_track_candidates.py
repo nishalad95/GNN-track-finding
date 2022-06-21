@@ -43,76 +43,76 @@ def compute_3d_distance(coord1, coord2):
     return np.sqrt( (x1 - x2)**2 + (y1 - y2)**2 + (z1 - z2)**2 )
 
 
-def get_midpoint_coords(xyzr_coords):
-    x1, y1, z1 = xyzr_coords[0][0], xyzr_coords[0][1], xyzr_coords[0][2]
-    x2, y2, z2 = xyzr_coords[1][0], xyzr_coords[1][1], xyzr_coords[1][2]
-    xm = (x1 + x2) / 2
-    ym = (y1 + y2) / 2
-    zm = (z1 + z2) / 2
-    rm = np.sqrt(xm**2 + ym**2)
-    return xm, ym, zm, rm
+# def get_midpoint_coords(xyzr_coords):
+#     x1, y1, z1 = xyzr_coords[0][0], xyzr_coords[0][1], xyzr_coords[0][2]
+#     x2, y2, z2 = xyzr_coords[1][0], xyzr_coords[1][1], xyzr_coords[1][2]
+#     xm = (x1 + x2) / 2
+#     ym = (y1 + y2) / 2
+#     zm = (z1 + z2) / 2
+#     rm = np.sqrt(xm**2 + ym**2)
+#     return xm, ym, zm, rm
 
 
-def check_close_proximity_nodes(subGraph, separation_3d_threshold):
-    # determine if a subgraph contains between 1 - 3 layers with 2 close nodes
-    node_in_volume_layer_id_dict = nx.get_node_attributes(subGraph, 'in_volume_layer_id')
-    # node_module_id_dict = nx.get_node_attributes(subGraph, 'module_id')
-    counts = Counter(node_in_volume_layer_id_dict.values())
-    num_nodes_in_same_layer = 2
-    layer_counts_dict = dict((k, v) for k, v in dict(counts).items() if int(v) == num_nodes_in_same_layer)
-    num_layers_with_multiple_nodes = len(layer_counts_dict)     # currently every layer with 2 nodes in it (num_nodes_in_same_layer)
+# def check_close_proximity_nodes(subGraph, separation_3d_threshold):
+#     # determine if a subgraph contains between 1 - 3 layers with 2 close nodes
+#     node_in_volume_layer_id_dict = nx.get_node_attributes(subGraph, 'in_volume_layer_id')
+#     # node_module_id_dict = nx.get_node_attributes(subGraph, 'module_id')
+#     counts = Counter(node_in_volume_layer_id_dict.values())
+#     num_nodes_in_same_layer = 2
+#     layer_counts_dict = dict((k, v) for k, v in dict(counts).items() if int(v) == num_nodes_in_same_layer)
+#     num_layers_with_multiple_nodes = len(layer_counts_dict)     # currently every layer with 2 nodes in it (num_nodes_in_same_layer)
 
-    if 1 <= num_layers_with_multiple_nodes <= 3:
-        # get node indexes which are in the same layer
-        for layer_id, count in layer_counts_dict.items():
-            node_idx = [node for node in node_in_volume_layer_id_dict.keys() if layer_id == node_in_volume_layer_id_dict[node]]
-            print("nodes that are close together:\n", node_idx)
+#     if 1 <= num_layers_with_multiple_nodes <= 3:
+#         # get node indexes which are in the same layer
+#         for layer_id, count in layer_counts_dict.items():
+#             node_idx = [node for node in node_in_volume_layer_id_dict.keys() if layer_id == node_in_volume_layer_id_dict[node]]
+#             print("nodes that are close together:\n", node_idx)
             
-            # currently only merging with 2 nodes in close proximity
-            if len(node_idx) == num_nodes_in_same_layer:
+#             # currently only merging with 2 nodes in close proximity
+#             if len(node_idx) == num_nodes_in_same_layer:
 
-                # check that these 2 nodes have a common node in their neighbourhood
-                node1 = node_idx[0]
-                node2 = node_idx[1]
-                node1_edges = subGraph.edges(node1)
-                node2_edges = subGraph.edges(node2)
-                node1_edges = list(itertools.chain.from_iterable(node1_edges))
-                node2_edges = list(itertools.chain.from_iterable(node2_edges))
-                node1_edges = filter(lambda val: val != node1, node1_edges)
-                node2_edges = filter(lambda val: val != node2, node2_edges)
-                common_nodes = list(set(node1_edges).intersection(node2_edges))
+#                 # check that these 2 nodes have a common node in their neighbourhood
+#                 node1 = node_idx[0]
+#                 node2 = node_idx[1]
+#                 node1_edges = subGraph.edges(node1)
+#                 node2_edges = subGraph.edges(node2)
+#                 node1_edges = list(itertools.chain.from_iterable(node1_edges))
+#                 node2_edges = list(itertools.chain.from_iterable(node2_edges))
+#                 node1_edges = filter(lambda val: val != node1, node1_edges)
+#                 node2_edges = filter(lambda val: val != node2, node2_edges)
+#                 common_nodes = list(set(node1_edges).intersection(node2_edges))
 
-                if len(common_nodes) != 0:
-                    # compute pairwise separation in 3D space of all nodes in close proximity in this layer
-                    xyzr_coords = [subGraph.nodes[n]['xyzr'] for n in node_idx]
-                    separation = [compute_3d_distance(a, b) for a, b in combinations(xyzr_coords, 2)]
+#                 if len(common_nodes) != 0:
+#                     # compute pairwise separation in 3D space of all nodes in close proximity in this layer
+#                     xyzr_coords = [subGraph.nodes[n]['xyzr'] for n in node_idx]
+#                     separation = [compute_3d_distance(a, b) for a, b in combinations(xyzr_coords, 2)]
 
-                    # node merging if separation is below threhold
-                    if all(i <= separation_3d_threshold for i in separation):
-                        # replace for node 1, delete node 2 - use midpoint coordinates
-                        xm, ym, zm, rm = get_midpoint_coords(xyzr_coords)
-                        node1 = node_idx[0]
-                        node2 = node_idx[1]
-                        subGraph.nodes[node1]['xyzr'] = (xm, ym, zm, rm)
-                        subGraph.nodes[node1]['xy'] = (xm, ym)
-                        subGraph.nodes[node1]['zr'] = (zm, rm)
-                        subGraph.nodes[node1]['GNN_Measurement'].x = xm
-                        subGraph.nodes[node1]['GNN_Measurement'].y = ym
-                        subGraph.nodes[node1]['GNN_Measurement'].z = zm
-                        subGraph.nodes[node1]['GNN_Measurement'].r = rm
-                        # merge module ids
-                        node1_module_id = subGraph.nodes[node1]['module_id']
-                        node2_module_id = subGraph.nodes[node2]['module_id']
-                        subGraph.nodes[node1]['module_id'] = np.concatenate((node1_module_id, node2_module_id))
-                        # merge particle & hit ids
-                        dict1 = subGraph.nodes[node1]['hit_dissociation']
-                        dict2 = subGraph.nodes[node2]['hit_dissociation']
-                        new_hit_ids = np.concatenate((dict1['hit_id'], dict2['hit_id']))
-                        new_particle_ids = dict1['particle_id'] + dict2['particle_id']
-                        subGraph.nodes[node1]['hit_dissociation'] = {'hit_id' : new_hit_ids,
-                                                                     'particle_id' : new_particle_ids}
-                        subGraph.remove_node(node2)
-    return subGraph
+#                     # node merging if separation is below threhold
+#                     if all(i <= separation_3d_threshold for i in separation):
+#                         # replace for node 1, delete node 2 - use midpoint coordinates
+#                         xm, ym, zm, rm = get_midpoint_coords(xyzr_coords)
+#                         node1 = node_idx[0]
+#                         node2 = node_idx[1]
+#                         subGraph.nodes[node1]['xyzr'] = (xm, ym, zm, rm)
+#                         subGraph.nodes[node1]['xy'] = (xm, ym)
+#                         subGraph.nodes[node1]['zr'] = (zm, rm)
+#                         subGraph.nodes[node1]['GNN_Measurement'].x = xm
+#                         subGraph.nodes[node1]['GNN_Measurement'].y = ym
+#                         subGraph.nodes[node1]['GNN_Measurement'].z = zm
+#                         subGraph.nodes[node1]['GNN_Measurement'].r = rm
+#                         # merge module ids
+#                         node1_module_id = subGraph.nodes[node1]['module_id']
+#                         node2_module_id = subGraph.nodes[node2]['module_id']
+#                         subGraph.nodes[node1]['module_id'] = np.concatenate((node1_module_id, node2_module_id))
+#                         # merge particle & hit ids
+#                         dict1 = subGraph.nodes[node1]['hit_dissociation']
+#                         dict2 = subGraph.nodes[node2]['hit_dissociation']
+#                         new_hit_ids = np.concatenate((dict1['hit_id'], dict2['hit_id']))
+#                         new_particle_ids = dict1['particle_id'] + dict2['particle_id']
+#                         subGraph.nodes[node1]['hit_dissociation'] = {'hit_id' : new_hit_ids,
+#                                                                      'particle_id' : new_particle_ids}
+#                         subGraph.remove_node(node2)
+#     return subGraph
 
 
 def angle_trunc(a):
@@ -151,20 +151,20 @@ def rotate_track(coords, separation_3d_threshold):
     return rotated_coords
 
 
-def KF_track_fit(sigma0, sigma_ms, coords):
+def KF_track_fit(sigma_ms, coords):
     obs_x = [c[0] for c in coords]
     obs_y = [c[1] for c in coords]
     yf = obs_y[0]
     dx = coords[1][0] - coords[0][0]
 
     # variables for F; state transition matrix
-    alpha = 0.1                                                    # OU parameter
+    alpha = 1                                                    # OU parameter
     e1 = np.exp(-np.abs(dx) * alpha)
     f1 = (1.0 - e1) / alpha
     g1 = (np.abs(dx) - f1) / alpha
     
     # variables for Q process noise matrix
-    # sigma_ou = 0.0001                                               # 10^-4: TODO needs tuning
+    sigma0 = 0.1                                                    # IMPORTANT This is different in model setup!
     sigma_ou = 0.00001
     sw2 = sigma_ou**2                                               # OU parameter 
     st2 = sigma_ms**2                                               # process noise representing multiple scattering
@@ -245,7 +245,7 @@ def main():
     parser.add_argument('-r', '--remain', help='output directory to save remaining network')
     parser.add_argument('-p', '--pval', help='chi-squared track candidate acceptance level')
     parser.add_argument('-s', '--separation_3d_threshold', help="3d distance cut between close proximity nodes, used in node merging")
-    parser.add_argument('-e', '--error', help="rms of track position measurements")
+    # parser.add_argument('-e', '--error', help="rms of track position measurements")
     parser.add_argument('-m', '--sigma_ms', help="uncertainty due to multiple scattering, process noise")
     parser.add_argument('-n', '--numhits', help="minimum number of hits for good track candidate")
     args = parser.parse_args()
@@ -255,7 +255,7 @@ def main():
     candidatesDir = args.candidates
     remainingDir = args.remain
     track_acceptance = float(args.pval)
-    sigma0 = float(args.error)
+    # sigma0 = float(args.error)
     sigma_ms = float(args.sigma_ms)
     subgraph_path = "_subgraph.gpickle"
     pvalsfile_path = "_pvals.csv"
@@ -294,9 +294,13 @@ def main():
             #TODO: need to check for holes?
 
             # check for track fragments
-            if len(candidate.nodes()) >= fragment:
+            # if len(candidate.nodes()) >= fragment:
+            if candidate.number_of_nodes() >= fragment:
+                
                 # check for close proximity nodes - merge where appropriate
-                candidate = check_close_proximity_nodes(candidate, separation_3d_threshold)
+                # this was done for the 2D toy Model - not needed for TrackML as hits are merged appropriately to nodes
+                # candidate = check_close_proximity_nodes(candidate, separation_3d_threshold)
+                
                 # check for 1 hit per layer - use volume_id & in_volume_layer_id
                 vivl_id_values = nx.get_node_attributes(candidate,'vivl_id').values()
                 if len(vivl_id_values) == len(set(vivl_id_values)): 
@@ -307,7 +311,7 @@ def main():
                     coords = sorted(coords, reverse=True, key=lambda xyzr: xyzr[3])
                     coords = rotate_track(coords, separation_3d_threshold)
                     # apply KF track fit
-                    pval = KF_track_fit(sigma0, sigma_ms, coords)
+                    pval = KF_track_fit(sigma_ms, coords)
                     if pval >= track_acceptance:
                         print("Good KF fit, p-value:", pval, "\n(x,y,z,r):", coords)
                         extracted.append(candidate)

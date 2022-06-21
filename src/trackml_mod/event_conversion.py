@@ -34,7 +34,7 @@ def main():
     # TODO: command line args, change these into command line arguments with full path directory
     parser = argparse.ArgumentParser(description='Convert trackml csv to GNN')
     parser.add_argument('-o', '--outputDir', help="Full directory path of where to save graph networks")
-    parser.add_argument('-e', '--error', help="rms of track position measurements")
+    # parser.add_argument('-e', '--error', help="rms of track position measurements")
     parser.add_argument('-m', '--sigma_ms', help="uncertainty due to multiple scattering, process noise")
     parser.add_argument('-n', '--eventNetwork', help="Full directory path to event nodes, edges & nodes-to-hits")
     parser.add_argument('-t', '--eventTruth', help="Full directory path to event truth from TrackML")
@@ -43,7 +43,7 @@ def main():
 
     args = parser.parse_args()
     outputDir = args.outputDir
-    sigma0 = float(args.error)         # r.m.s measurement error
+    # sigma0 = float(args.error)         # r.m.s measurement error
     sigma_ms = float(args.sigma_ms)                # process error - due to multiple scattering
     
     # TODO: the following will get moved to .sh file
@@ -59,7 +59,7 @@ def main():
 
     # create a graph network
     endcap_graph = nx.DiGraph()
-    h.construct_graph(endcap_graph, nodes, edges, truth, sigma0, sigma_ms)
+    h.construct_graph(endcap_graph, nodes, edges, truth, sigma_ms)
 
 
     # plot the network
@@ -68,11 +68,11 @@ def main():
     print("Number of nodes:", endcap_graph.number_of_nodes())
 
     # compute track state estimates, extract subgraphs: out-of-the-box CCA
-    endcap_graph = h.compute_track_state_estimates([endcap_graph], sigma0)
+    endcap_graph = h.compute_track_state_estimates([endcap_graph])
     endcap_graph = nx.Graph(endcap_graph[0])
     endcap_graph = nx.to_directed(endcap_graph)
     subGraphs = [endcap_graph.subgraph(c).copy() for c in nx.weakly_connected_components(endcap_graph)]
-    subGraphs = h.compute_track_state_estimates(subGraphs, sigma0)
+    subGraphs = h.compute_track_state_estimates(subGraphs)
     h.initialize_edge_activation(subGraphs)
     h.compute_prior_probabilities(subGraphs, 'track_state_estimates')
     h.compute_mixture_weights(subGraphs)

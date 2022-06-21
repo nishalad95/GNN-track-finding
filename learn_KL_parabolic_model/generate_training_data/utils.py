@@ -218,7 +218,7 @@ def rotate_track(coords, separation_3d_threshold=None):
     return rotated_coords
 
 
-def compute_track_state_estimates(GraphList, sigma0):
+def compute_track_state_estimates(GraphList):
     sigma0 = 4.0        # 4.0mm larger error in m_0 due to beamspot error
     sigmaA = 0.1        # 0.1mm
     sigmaB = 0.1        # 0.1mm
@@ -308,7 +308,7 @@ def __get_particle_id(row, df):
 
 
 
-def construct_graph(graph, nodes, edges, truth, sigma0, mu):
+def construct_graph(graph, nodes, edges, truth, mu):
     # TODO: 'truth_particle' attribute needs to be updated - clustering calculation uses 1 particle id, currently needs updating
     # group truth particle ids to node index
     group = truth.groupby('node_idx')
@@ -325,6 +325,7 @@ def construct_graph(graph, nodes, edges, truth, sigma0, mu):
     grouped_module_ids = group['module_id'].unique()
 
     # add nodes
+    sigma0 = 0.1
     for i in range(len(nodes)):
         row = nodes.iloc[i]
         node_idx = int(row.node_idx)

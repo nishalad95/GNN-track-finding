@@ -66,7 +66,7 @@ def get_KL_upper_threshold(empvar_feature, distance, mapping):
         else: return 0
     return 0
 
-def reset_reactivate(subGraphs, sigma0):
+def reset_reactivate(subGraphs):
     reset_subGraphs = []
     for subGraph in subGraphs:
 
@@ -81,7 +81,7 @@ def reset_reactivate(subGraphs, sigma0):
         for component in nx.weakly_connected_components(subGraph):
             reset_subGraphs.append(subGraph.subgraph(component).copy())
     
-    subGraphs = h.compute_track_state_estimates(reset_subGraphs, sigma0)
+    subGraphs = h.compute_track_state_estimates(reset_subGraphs)
     h.initialize_edge_activation(subGraphs)
     h.compute_prior_probabilities(subGraphs, 'track_state_estimates')
     h.compute_mixture_weights(subGraphs)
@@ -89,7 +89,7 @@ def reset_reactivate(subGraphs, sigma0):
     return subGraphs
 
 
-def cluster(inputDir, outputDir, track_state_key, KL_lut, sigma0, reactivate):
+def cluster(inputDir, outputDir, track_state_key, KL_lut, reactivate):
 
     # variable names
     subgraph_path = "_subgraph.gpickle"
@@ -115,7 +115,7 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, sigma0, reactivate):
     # brute force approach to reset remaining network
     if reactivate:
         print("Resetting & reactivating all edges in remaining network")
-        subGraphs = reset_reactivate(subGraphs, sigma0)
+        subGraphs = reset_reactivate(subGraphs)
 
 
     # clustering on edges using KL-distance threshold
@@ -273,7 +273,7 @@ def main():
     parser.add_argument('-o', '--output', help='output directory to save remaining network & track candidates')
     parser.add_argument('-d', '--dict', help='dictionary of track state estimates to use')
     parser.add_argument('-l', '--lut', help='lut file for KL distance acceptance region')
-    parser.add_argument('-e', '--error', help="rms of track position measurements")
+    # parser.add_argument('-e', '--error', help="rms of track position measurements")
     parser.add_argument('-r', '--reactivateall', default=False, type=bool)
     args = parser.parse_args()
 
@@ -281,10 +281,10 @@ def main():
     outputDir = args.output
     track_states_key = args.dict
     KL_lut = args.lut
-    sigma0 = float(args.error)
+    # sigma0 = float(args.error)
     reactivate = args.reactivateall
 
-    cluster(inputDir, outputDir, track_states_key, KL_lut, sigma0, reactivate)
+    cluster(inputDir, outputDir, track_states_key, KL_lut, reactivate)
 
 
 

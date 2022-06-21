@@ -18,10 +18,8 @@ args = parser.parse_args()
 outputDir = args.output
 event_truth = args.eventTruth
 # for evaluating the GNN algorithm
-# TODO: will change in future
-# inputDir = "src/output/iteration_1/candidates/"
-# TODO: for endcap only
-inputDir = "outputs/output_rotated_tracks/iteration_1/candidates/"
+# TODO: will change in future - for endcap only & currently only for iteration1
+inputDir = outputDir + "/iteration_1/candidates/"
 
 
 # every hit has an associated particle id: from the truth information file for hits

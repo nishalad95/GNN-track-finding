@@ -120,7 +120,7 @@ def simulate_event(threshold, sigma0, outputDir):
     plt.savefig(outputDir + 'simulated_tracks_hit_pairs.png', dpi=300)
 
     # compute track state estimates
-    Graphs = compute_track_state_estimates([G], sigma0)
+    Graphs = compute_track_state_estimates([G])
     G = nx.to_directed(Graphs[0])
 
     # remove all nodes with mean edge orientation above threshold
@@ -133,7 +133,7 @@ def simulate_event(threshold, sigma0, outputDir):
     subGraphs = [G.subgraph(c).copy() for c in nx.weakly_connected_components(G)]
 
     # compute track state estimates, priors and assign initial edge weightings
-    subGraphs = compute_track_state_estimates(subGraphs, sigma0)
+    subGraphs = compute_track_state_estimates(subGraphs)
     initialize_edge_activation(subGraphs)
     compute_prior_probabilities(subGraphs, 'track_state_estimates')
     compute_mixture_weights(subGraphs)
