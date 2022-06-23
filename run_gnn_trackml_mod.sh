@@ -5,7 +5,7 @@
 # ---------------------------------------------------------------------------------------------
 
 # track sim
-# SIGMA0=0.1              # IMPORTANT: sigma0 is used in the extraction KF only, r.m.s measurement error in xy plane
+# SIGMA0=0.1            # IMPORTANT: sigma0 is used in the extraction KF only, r.m.s measurement error in xy plane
 SIGMA_MS=0.0001         # 10^-4 multiple scattering error
 ROOTDIR=src/output      # output directory to store GNN algorithm output
 
@@ -28,9 +28,9 @@ s=10                    # 3d distance threshold for close proximity nodes, used 
 # ----------------------------------------------------------------------------------------------
 # this section is commented out during debugging - no need to regenerate the event conversion into graph network
 # ----------------------------------------------------------------------------------------------
-# # -----------------------------
-# # Track conversion
-# # -----------------------------
+# -----------------------------
+# Track conversion
+# -----------------------------
 # mkdir -p $ROOTDIR
 # echo "-------------------------------------------------"
 # echo "Running conversion of generated events to GNN..."
@@ -40,12 +40,14 @@ s=10                    # 3d distance threshold for close proximity nodes, used 
 # mkdir -p $INPUT
 # EVENT_NETWORK=src/trackml_mod/event_network/minCurv_0.3_134
 EVENT_TRUTH=src/trackml_mod/event_truth
+# python particleid_nhits_endcap.py
+# python particleid_ndistinct_layers_endcap.py
 # python src/trackml_mod/event_conversion.py -o $INPUT -m $SIGMA_MS -n $EVENT_NETWORK -t $EVENT_TRUTH
 # conversion_duration=$(( SECONDS - start_conversion ))
 # echo "Execution time event_conversion.py: $conversion_duration seconds"
 
 
-# copy the first 100 files over - DEVELOPMENT ONLY
+# # copy the first 100 files over - DEVELOPMENT ONLY
 # mkdir $ROOTDIR/track_sim/network_100/
 # ls $ROOTDIR/track_sim/network/* | head -2000 | xargs -I{} cp {} $ROOTDIR/track_sim/network_100/
 # ----------------------------------------------------------------------------------------------
@@ -131,8 +133,6 @@ for i in {1..1};
             stages+=("clustering_updated_states.py")
         fi
         
-        # TODO: Run shared_hit_identification here!
-
 
 
         echo "---------------------------------"

@@ -17,7 +17,7 @@ parser.add_argument('-o', '--output', help='output directory to save data')
 args = parser.parse_args()
 outputDir = args.output
 event_truth = args.eventTruth
-# for evaluating the GNN algorithm
+
 # TODO: will change in future - for endcap only & currently only for iteration1
 inputDir = outputDir + "/iteration_1/candidates/"
 
@@ -31,48 +31,72 @@ inputDir = outputDir + "/iteration_1/candidates/"
 
 reference_path = event_truth + "/event000001000-"
 
-# identify the ids of particles that have pT > 150MeV, units GeV/c
+# identify the ids of particles that have pT > 1GeV, units GeV/c
 particles = pd.read_csv(reference_path + "particles.csv", sep=',')
 particles = particles.assign(pT=lambda row: (np.sqrt(row.px**2 + row.py**2)))
 pt_cut = 1.0  # units of momentum GeV/c
 particles = particles.loc[particles.pT >= pt_cut]
 particle_ids = particles.particle_id.to_list()
 
-# go through the truth file for hits & identify hits cooresponding to each particle_id
+# go through the truth file for hits & identify hits corresponding to each particle_id
 truth = pd.read_csv(reference_path + "truth.csv", sep=',')
 hit_ids = truth.loc[truth.particle_id.isin(particle_ids)]
 hit_ids = hit_ids.hit_id.to_list()
 
 # extract the subset of hits contained in the volume of interest (i.e. only endcap for now)
-hits = pd.read_csv(reference_path + "hits.csv", sep=',')
-hits['particle_id'] = truth['particle_id']
+hits = pd.read_csv(reference_path + "full-mapping-num-distinct-layers-endcap.csv", sep=',')
+# hits = pd.read_csv(reference_path + "hits.csv", sep=',')
+# hits['particle_id'] = truth['particle_id']
 left_endcap_hits = hits.loc[(hits.hit_id.isin(hit_ids)) & (hits.volume_id == 7)]
-print("Number of left endcap hits > 1 GeV:", len(left_endcap_hits))
-
-# plot
-left_endcap_hits = left_endcap_hits.assign(r=lambda row: (np.sqrt(row.x**2 + row.y**2)))
-# x = left_endcap_hits.x.to_list()
-# y = left_endcap_hits.y.to_list()
-# z = left_endcap_hits.z.to_list()
-# r = left_endcap_hits.r.to_list()
-# plt.scatter(x, y)
-# plt.show()
-# plt.scatter(z, r)
-# plt.show()
 
 
-# Compute number of reference tracks: Apply a cut on the num of hits
-# require >= 4 hits per track (in the volume of interest) to be a reference track
-num_hits = 13
+# --------------------------------------------------------------------------------------------
+# # OLD WAY
+# # # require >= 4 hits per track (in the volume of interest) to be a reference track
+# num_hits = 13
+# unique_particle_ids = left_endcap_hits.particle_id.unique()
+# num_reference_tracks = 0
+# reference_tracks_dict = {}          # key:value particle_id:[hit_ids]
+# for i, p in enumerate(unique_particle_ids):
+#     ref_track = left_endcap_hits.loc[left_endcap_hits.particle_id == p]
+#     if len(ref_track) >= num_hits:
+        
+#         # check the "one-hit-per-module" constraint
+#         #TODO: need to check for same volume too here!!
+#         one_hit_per_module = ref_track[ref_track.duplicated(['layer_id','module_id'], keep=False)]
+#         if len(one_hit_per_module) == 0:
+#             # good reference track found
+#             num_reference_tracks += 1
+#             reference_tracks_dict[p] = ref_track.hit_id.to_list()   # add to dictionary
+#         else:
+#             # TODO: handle this case
+#             print(">1 hit per module!! TODO: will need to handle this case!")
+#             print("need to check for same volume id & layer id, but one-hit-per-module")
+#             print(one_hit_per_module)
+
+# print("Number of reference tracks old way:", num_reference_tracks)
+# # print("reference tracks:", reference_tracks_dict)
+# # print("reference tracks particle ids:\n", reference_tracks_dict.keys())
+# --------------------------------------------------------------------------------------------
+
+
+
+# NEW WAY
+# Compute number of reference tracks: Apply a cut on the num of distinct layers for all the hits of a particle
+# due to the many-to-1 hits-to-node mapping, we require a cut on the number of distinct layers
+# require >= 4 distinct layers per track (in the volume of interest) to be classed as a reference track
+num_distinct_layers_required = 4
 unique_particle_ids = left_endcap_hits.particle_id.unique()
 num_reference_tracks = 0
-reference_tracks_dict = {}          # key:value particle_id:[hit_ids]
+reference_tracks_dict = {}          # key:value particle_id:num_distinct_layers_endcap
 for i, p in enumerate(unique_particle_ids):
     ref_track = left_endcap_hits.loc[left_endcap_hits.particle_id == p]
-    if len(ref_track) >= num_hits:
+    num_layers_queried = ref_track.iloc[0].num_distinct_layers_endcap.item()
+    if num_layers_queried >= num_distinct_layers_required:
+        # good reference track
         
-        # check the "one-hit-per-module" constraint
-        #TODO: need to check for same volume too here!!
+        # check 'one-hit-per-module' constraint
+        #TODO: need to check for same volume too here when we extend to the barrel
         one_hit_per_module = ref_track[ref_track.duplicated(['layer_id','module_id'], keep=False)]
         if len(one_hit_per_module) == 0:
             # good reference track found
@@ -81,19 +105,19 @@ for i, p in enumerate(unique_particle_ids):
         else:
             # TODO: handle this case
             print(">1 hit per module!! TODO: will need to handle this case!")
-            print("need to check for same volume id & layer id, but one-hit-per-module")
+            print("Need to check for same volume id & layer id, but one-hit-per-module")
             print(one_hit_per_module)
 
 print("Number of reference tracks:", num_reference_tracks)
-# print("reference tracks:", reference_tracks_dict)
-# print("reference tracks particle ids:\n", reference_tracks_dict.keys())
+print("reference tracks:", reference_tracks_dict)
+print("reference tracks particle ids:\n", reference_tracks_dict.keys())
+
+
 
 # #########################################################
-# # Look at what tracks have been succesfully reconstructed
+# # Look at what tracks have been successfully reconstructed
 # #########################################################
 
-
-# TODO
 track_candidates = []
 i = 0
 subgraph_path = "_subgraph.gpickle"
@@ -112,8 +136,7 @@ print("number of track candidates to process:", len(track_candidates))
 num_reconstructed_tracks = 0
 track_purities = np.array([])
 particle_purities = np.array([])
-truth_num_hits = pd.read_csv(reference_path + "nodes-particles-id-endcap-volume7.csv", sep=',')
-# truth_num_hits = pd.read_csv(reference_path + "nodes-particles-id.csv", sep=',')
+truth_num_hits = hits
 print("reference_path: \n", reference_path)
 
 for i, track in enumerate(track_candidates):
@@ -132,21 +155,24 @@ for i, track in enumerate(track_candidates):
     reconstructed_particle_id = max(freq_dist, key=freq_dist.get)
     n_good = freq_dist[reconstructed_particle_id]
     
+
     # compute track purity and particle purity
     track_purity = n_good / len(gnn_particle_ids)
-    track_purities = np.append(track_purities, track_purity)
     # nhits = truth_num_hits.loc[truth_num_hits.particle_id == reconstructed_particle_id]['nhits'].iloc[0]
     # TODO: the following line is temporary for the endcap volume region 7 only! Will need changing later
     nhits = truth_num_hits.loc[truth_num_hits.particle_id == reconstructed_particle_id]['nhits_endcap_volume7'].iloc[0]
     nhits = nhits * 1.0
-    print("nhits: ", nhits)
     particle_purity = n_good / nhits
-    particle_purities = np.append(particle_purities, particle_purity)
-    print("Track purity:", track_purity)
-    print("Particle purity:", particle_purity)
+
 
     # compute number of reconstructed tracks
     if (track_purity >= 0.5) and (particle_purity >= 0.5):     # good reconstructed track
+        
+        track_purities = np.append(track_purities, track_purity)
+        particle_purities = np.append(particle_purities, particle_purity)
+        print("Track purity:", track_purity)
+        print("Particle purity:", particle_purity)
+
         # check if reconstructed track particle_id appears in reference tracks
         if reconstructed_particle_id in reference_tracks_dict.keys():
             print("HURRAY! Reconstructed particle id exists in reference tracks particles!")
@@ -160,6 +186,10 @@ for i, track in enumerate(track_candidates):
         else:
             print("OH NO! Reconstructed particle id does not exist in reference tracks particles!")
             print("Particle id:", reconstructed_particle_id)
+    
+    else:
+        print("purity not high enough\n particle purity: ", particle_purity, " track purity: ", track_purity)
+
 
 np.savetxt(outputDir + "/extracted_track_purities.csv", track_purities, delimiter=",")
 np.savetxt(outputDir + "/extracted_particle_purities.csv", particle_purities, delimiter=",")

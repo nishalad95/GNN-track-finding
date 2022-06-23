@@ -158,14 +158,14 @@ def KF_track_fit(sigma_ms, coords):
     dx = coords[1][0] - coords[0][0]
 
     # variables for F; state transition matrix
-    alpha = 1                                                    # OU parameter
+    alpha = 1.                                                   # OU parameter
     e1 = np.exp(-np.abs(dx) * alpha)
     f1 = (1.0 - e1) / alpha
     g1 = (np.abs(dx) - f1) / alpha
     
     # variables for Q process noise matrix
     sigma0 = 0.1                                                    # IMPORTANT This is different in model setup!
-    sigma_ou = 0.00001
+    sigma_ou = 0.00001                                              # 10^-5
     sw2 = sigma_ou**2                                               # OU parameter 
     st2 = sigma_ms**2                                               # process noise representing multiple scattering
     dx2 = dx**2
@@ -294,7 +294,6 @@ def main():
             #TODO: need to check for holes?
 
             # check for track fragments
-            # if len(candidate.nodes()) >= fragment:
             if candidate.number_of_nodes() >= fragment:
                 
                 # check for close proximity nodes - merge where appropriate
@@ -306,19 +305,36 @@ def main():
                 if len(vivl_id_values) == len(set(vivl_id_values)): 
                     # good candidate
                     print("no duplicates volume_ids & in_volume_layer_ids for this candidate")
-                    # rotate the track such that innermost edge parallel to x-axis
-                    coords = list(nx.get_node_attributes(candidate, 'xyzr').values())
-                    coords = sorted(coords, reverse=True, key=lambda xyzr: xyzr[3])
-                    coords = rotate_track(coords, separation_3d_threshold)
-                    # apply KF track fit
-                    pval = KF_track_fit(sigma_ms, coords)
-                    if pval >= track_acceptance:
-                        print("Good KF fit, p-value:", pval, "\n(x,y,z,r):", coords)
-                        extracted.append(candidate)
-                        extracted_pvals.append(pval)
-                        candidate_to_remove_from_subGraph.append(candidate)
+
+                    # coords = list(nx.get_node_attributes(candidate, 'xyzr').values())
+                    # coords = sorted(coords, reverse=True, key=lambda xyzr: xyzr[3])
+                    # sort the candidates by radius r (4th element in this tuple of tuples: (node_num, (x,y,z,r)) )
+                    nodes_coords_tuples = list(nx.get_node_attributes(candidate, 'xyzr').items())
+                    sorted_nodes_coords_tuples = sorted(nodes_coords_tuples, reverse=True, key=lambda item: item[1][3])
+                    # check if the sorted nodes are connected
+                    all_connected = True
+                    for j in range(len(sorted_nodes_coords_tuples) - 1):
+                        node1 = sorted_nodes_coords_tuples[j][0]
+                        node2 = sorted_nodes_coords_tuples[j+1][0]
+                        if not candidate.has_edge(node1, node2) and not candidate.had_edge(node2, node1):
+                            all_connected = False
+                    
+                    if all_connected:
+                        coords = [element[1] for element in sorted_nodes_coords_tuples]
+                        # rotate the track such that innermost edge parallel to x-axis
+                        coords = rotate_track(coords, separation_3d_threshold)
+                        # apply KF track fit
+                        pval = KF_track_fit(sigma_ms, coords)
+                        if pval >= track_acceptance:
+                            print("Good KF fit, p-value:", pval, "\n(x,y,z,r):", coords)
+                            extracted.append(candidate)
+                            extracted_pvals.append(pval)
+                            candidate_to_remove_from_subGraph.append(candidate)
+                        else:
+                            print("p-value too small:", pval, "leave for further processing")
                     else:
-                        print("p-value too small:", pval, "leave for further processing")
+                        print("Candidate not accepted, not connceted in order")
+
                 else: 
                     print("Bad candidate, > 1 hit per layer, will pass through community detection")
                     # TODO: community detection?

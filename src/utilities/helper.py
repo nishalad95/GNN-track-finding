@@ -212,14 +212,14 @@ def rotate_track(coords, separation_3d_threshold=None):
     return rotated_coords
 
 def compute_track_state_estimates(GraphList):
-    sigma0 = 4.0        # 4.0mm larger error in m_0 due to beamspot error
+    sigmaO = 4.0        # 4.0mm larger error in m_O due to beamspot error and error at the origin
     sigmaA = 0.1        # 0.1mm
     sigmaB = 0.1        # 0.1mm
-    S = np.array([  [sigma0**2,         0,                  0], 
+    S = np.array([  [sigmaO**2,         0,                  0], 
                     [0,                 sigmaA**2,          0], 
                     [0,                 0,                  sigmaB**2]])        # edge covariance matrix
     
-    m_0 = 0.0   # measurements for parabolic model
+    m_O = 0.0   # measurements for parabolic model
     m_A = 0.0
     for i, G in enumerate(GraphList):
         for node in G.nodes():
@@ -269,7 +269,7 @@ def compute_track_state_estimates(GraphList):
             for tnc, key in zip(transformed_neighbour_coords, keys):
                 x_B = tnc[0]
                 m_B = tnc[1]
-                measurement_vector = [m_0, m_A, m_B]
+                measurement_vector = [m_O, m_A, m_B]
                 H = np.array([  [x_0**2,         x_0,          1], 
                                 [0,                0,          1], 
                                 [x_B**2,         x_B,          1]])
@@ -302,7 +302,7 @@ def __get_particle_id(row, df):
 
 
 
-def construct_graph(graph, nodes, edges, truth, mu):
+def construct_graph(graph, nodes, edges, truth, sigma_ms):
     # TODO: 'truth_particle' attribute needs to be updated - clustering calculation uses 1 particle id, currently needs updating
     # group truth particle ids to node index
     group = truth.groupby('node_idx')
@@ -334,7 +334,7 @@ def construct_graph(graph, nodes, edges, truth, mu):
         
         hit_dissociation = grouped_hit_id.loc[grouped_hit_id['node_idx'] == node_idx]['hit_dissociation'].item()
         
-        gm = gnn.GNN_Measurement(x, y, z, r, sigma0, mu, label=label, n=node_idx)
+        gm = gnn.GNN_Measurement(x, y, z, r, sigma0, sigma_ms, label=label, n=node_idx)
         graph.add_node(node_idx, GNN_Measurement=gm, 
                             xy=(x, y),                              # all attributes here for development only - can be abstracted away in GNN_Measurement
                             zr=(z, r),
@@ -343,34 +343,36 @@ def construct_graph(graph, nodes, edges, truth, mu):
                             in_volume_layer_id = in_volume_layer_id,
                             vivl_id = (volume_id, in_volume_layer_id),
                             module_id = module_id,
-                            truth_particle=label,   # TODO: update the following
+                            truth_particle=label,                   # TODO: update the following
                             hit_dissociation=hit_dissociation)
     
     # add bidirectional edges
+    graph_nodes = graph.nodes()
     for i in range(len(edges)):
         row = edges.iloc[i]
         node1, node2 = row.node1, row.node2
         # if both nodes in network, add edge
-        if (node1 in graph.nodes()) and (node2 in graph.nodes()):
+        if (int(node1) in graph_nodes) and (int(node2) in graph_nodes):
             graph.add_edge(node1, node2)
             graph.add_edge(node2, node1)
+    
+    return graph
 
 
 
-# TODO: rename to load_nodes_edges
-def load_metadata(event_path, max_volume_region):
-    # graph nodes
+def load_nodes_edges(event_path, max_volume_region):
+    # TODO: temporary select nodes in region of interest
+    
+    # nodes dataframe: node_idx,layer_id,x,y,z, r, volume_id, in_volume_layer_id
     nodes = pd.read_csv(event_path + "nodes.csv")
-    # select nodes in region of interest
     nodes = nodes.loc[nodes['layer_id'] <= max_volume_region]
     nodes['r'] = nodes.apply(lambda row: edge_length_xy(row), axis=1)
     nodes['volume_id'] = nodes.apply(lambda row: get_volume_id(row.layer_id), axis=1) 
     nodes['in_volume_layer_id'] = nodes.apply(lambda row: get_in_volume_layer_id(row.layer_id), axis=1)
     # nodes['module_id'] = nodes.apply(lambda row: get_module_id(), axis=1)
+    # print("nodes:\n", nodes)
 
-    # graph edges
-    # select all edges - TODO: select only edges where node1 and node2 contained in nodes df (above)
-    # TODO: much faster way of doing this
+    # edges dataframe: node2, node1, weight
     edges = pd.read_csv(event_path + "edges.csv")
     new_header = edges.iloc[0] #grab the first row for the header
     edges = edges[1:] #take the data less the header row
@@ -378,27 +380,30 @@ def load_metadata(event_path, max_volume_region):
     edges['node2'] = edges.apply(lambda row: row.name[0], axis=1)
     edges['node1'] = edges.apply(lambda row: row.name[1], axis=1)
     edges = edges.astype({'node2': 'int32', 'node1': 'int32'})
+    # print("edges:\n", edges)
 
-    # return as dataframes
     return nodes, edges
 
 
 def load_save_truth(event_path, truth_event_path, truth_event_file):
-    # truth event
+    # truth
     hits_particles = pd.read_csv(truth_event_path + "truth.csv")
     particles_nhits = pd.read_csv(truth_event_path + "particles.csv")
     hits_module_id = pd.read_csv(truth_event_path + "hits.csv")
 
-    # nodes to hits
+    # nodes to hits mapping
     nodes_hits = pd.read_csv(event_path + "nodes_to_hits.csv")
  
-    # for every node and hit_id mapping, get the particle_id & module_id
-    truth = pd.DataFrame(columns = ['node_idx', 'hit_id', 'particle_id', 'module_id', 'nhits'])
+    # for every node and hit_id mapping, get all metadata
+    truth = pd.DataFrame(columns = ['node_idx', 'hit_id', 'particle_id', 'volume_id', 'layer_id', 'module_id', 'nhits'])
     truth['node_idx'] = nodes_hits['node_idx']
     truth['hit_id'] = nodes_hits['hit_id']
+
     for index, row in truth.iterrows():
         hit_id = row.hit_id
         truth['particle_id'][index] = hits_particles.loc[hits_particles.hit_id == hit_id].particle_id.item()
+        truth['volume_id'][index] = hits_module_id.loc[hits_module_id.hit_id == hit_id].volume_id.item()
+        truth['layer_id'][index] = hits_module_id.loc[hits_module_id.hit_id == hit_id].layer_id.item()
         truth['module_id'][index] = hits_module_id.loc[hits_module_id.hit_id == hit_id].module_id.item()
 
     # number of hits for each truth particle

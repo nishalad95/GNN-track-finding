@@ -39,6 +39,7 @@ def main():
     parser.add_argument('-n', '--eventNetwork', help="Full directory path to event nodes, edges & nodes-to-hits")
     parser.add_argument('-t', '--eventTruth', help="Full directory path to event truth from TrackML")
     
+    # TODO: temporary, only considering endcap volume 7
     max_volume_region = 8000 # first consider endcap volume 7 only
 
     args = parser.parse_args()
@@ -50,19 +51,27 @@ def main():
     # event_1 network corresponds to event000001000 truth
     event_network = args.eventNetwork + "/event_1_filtered_graph_"
     event_truth = args.eventTruth + "/event000001000-"
-    event_truth_file = event_truth + "nodes-particles-id.csv"
+    event_truth_file = event_truth + "full-mapping.csv"
 
     # load truth information & metadata on events
-    nodes, edges = h.load_metadata(event_network, max_volume_region)
+    nodes, edges = h.load_nodes_edges(event_network, max_volume_region)
     # h.load_save_truth(event_network, event_truth, event_truth_file) #  only need to execute once
     truth = pd.read_csv(event_truth_file)
 
     # create a graph network
     endcap_graph = nx.DiGraph()
-    h.construct_graph(endcap_graph, nodes, edges, truth, sigma_ms)
+    endcap_graph = h.construct_graph(endcap_graph, nodes, edges, truth, sigma_ms)
 
+    # debugging
+    # print("-----------------------------------------")
+    # print("ENDCAP GRAPH:")
+    # print("-----------------------------------------")
+    # for node in endcap_graph.nodes(data=True):
+    #     pprint.pprint(node)
+    # print("-----------------------------------------")
+    # print("EDGE DATA:", endcap_graph.edges.data(), "\n")
+    # print("-----------------------------------------")
 
-    # plot the network
     print("Endcap volume 7 graph network:")
     print("Number of edges:", endcap_graph.number_of_edges())
     print("Number of nodes:", endcap_graph.number_of_nodes())
@@ -78,8 +87,8 @@ def main():
     h.compute_mixture_weights(subGraphs)
 
     print("Number of subgraphs..", len(subGraphs))
-    # uncomment the next line for plotting
-    h.plot_subgraphs(subGraphs, outputDir, title="Nodes & Edges extracted from TrackML generated data")
+    h.plot_subgraphs(subGraphs, outputDir, title="Nodes & Edges subgraphs from TrackML generated data")
+    
     # save the subgraphs
     for i, sub in enumerate(subGraphs):
         h.save_network(outputDir, i, sub)
