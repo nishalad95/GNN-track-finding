@@ -51,7 +51,7 @@ def main():
     # event_1 network corresponds to event000001000 truth
     event_network = args.eventNetwork + "/event_1_filtered_graph_"
     event_truth = args.eventTruth + "/event000001000-"
-    event_truth_file = event_truth + "full-mapping.csv"
+    event_truth_file = event_truth + "full-mapping-minCurv-0.3-800.csv"
 
     # load truth information & metadata on events
     nodes, edges = h.load_nodes_edges(event_network, max_volume_region)
@@ -76,11 +76,27 @@ def main():
     print("Number of edges:", endcap_graph.number_of_edges())
     print("Number of nodes:", endcap_graph.number_of_nodes())
 
+    # temporary: can remove after
+    f = open("parabolic_param_a.txt", "w")
+    f.write("Before CCA \n")
+    f.close()
+
     # compute track state estimates, extract subgraphs: out-of-the-box CCA
     endcap_graph = h.compute_track_state_estimates([endcap_graph])
     endcap_graph = nx.Graph(endcap_graph[0])
     endcap_graph = nx.to_directed(endcap_graph)
+
+    # temporary: can remove later
+    print("Number of edges again:", endcap_graph.number_of_edges())
+    print("Number of nodes again:", endcap_graph.number_of_nodes())
+
     subGraphs = [endcap_graph.subgraph(c).copy() for c in nx.weakly_connected_components(endcap_graph)]
+    
+    # temporary: can remove after
+    f = open("parabolic_param_a.txt", "a")
+    f.write("After CCA \n")
+    f.close()
+    
     subGraphs = h.compute_track_state_estimates(subGraphs)
     h.initialize_edge_activation(subGraphs)
     h.compute_prior_probabilities(subGraphs, 'track_state_estimates')

@@ -6,7 +6,7 @@ import pandas as pd
 # and add it to the csv file
 
 # load in the file
-df = pd.read_csv('src/trackml_mod/event_truth/event000001000-full-mapping.csv')
+df = pd.read_csv('src/trackml_mod/event_truth/event000001000-full-mapping-minCurv-0.3-800.csv')
 
 # identify rows with hits in volume 7
 volume7_particle_list = df.loc[df.volume_id == 7].particle_id.to_list()
@@ -19,4 +19,4 @@ for i, p in enumerate(unique_volume7_particle_list):
     df.loc[df.particle_id == p, 'num_distinct_layers_endcap'] = num_distinct_layers
     
 print(df)
-df.to_csv('src/trackml_mod/event_truth/event000001000-full-mapping-num-distinct-layers-endcap.csv')
+df.to_csv('src/trackml_mod/event_truth/event000001000-full-mapping-minCurv-0.3-800.csv')

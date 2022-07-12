@@ -276,10 +276,19 @@ def compute_track_state_estimates(GraphList):
 
                 # compute track state parameters & covariance
                 H_inv = np.linalg.inv(H)    # invert H matrix to obtain measurement matrix
-                track_state_vector = H_inv.dot(measurement_vector)
+                track_state_vector = H_inv.dot(measurement_vector)  # parabolic parameters: a, b, c
                 covariance = H_inv.dot(S).dot(H_inv.T)
                 track_state_estimates[key] = {  'edge_state_vector': track_state_vector, 
                                                 'edge_covariance': covariance }
+
+                # Temporary - can remove after
+                # Screening procedure - save parameter a: indicates curvature of the track
+                # Preliminary masking based on a cut, a linked to curvature, linked to track pT
+                f = open("parabolic_param_a.txt", "a")
+                param_a = str(track_state_vector[0]) + "\n"
+                f.write(param_a)
+                f.close()
+
 
             # TODO: debugging
             # if i == 0:

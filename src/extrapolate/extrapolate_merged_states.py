@@ -18,6 +18,7 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     neighbour_y = neighbour_attr['GNN_Measurement'].y
     merged_state = node_attr['merged_state']
     merged_cov = node_attr['merged_cov']
+    # TODO: pass this in as hyperparameter
     sigma0 = node_attr['GNN_Measurement'].sigma0
 
     # extrapolate the merged state from the central node to the neighbour node & storing at the neighbur node

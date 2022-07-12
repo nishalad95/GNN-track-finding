@@ -15,26 +15,27 @@ from collections import Counter
 from itertools import combinations
 import itertools
 from math import *
+from more_itertools import locate
 
 
 COMMUNITY_DETECTION = False
 
-# def run_community_detection():
+def run_community_detection(candidate, fragment):
     # when == 1 potential, need to remember to append the graph to the 'remaining' list
     # > 1 potential track
-    #     #TODO: coordinates & community detection method needs to be updated
-    #     valid_communities, vc_coords = community_detection(candidate, fragment)
-    #     if len(valid_communities) > 0:
-    #         print("found communities via community detection")
-    #         for vc, vcc in zip(valid_communities, vc_coords):
-    #             pval = KF_track_fit(sigma0, sigma_ms, vcc)
-    #             if pval >= track_acceptance:
-    #                 print("Good KF fit, P value:", pval, "(x,y,z,r):", vcc)
-    #                 extracted.append(vc)
-    #                 extracted_pvals.append(pval)
-    #                 candidate_to_remove_from_subGraph.append(vc)
-    #             else:
-    #                 print("pval too small,", pval, "leave for further processing")
+    #TODO: coordinates & community detection method needs to be updated
+    valid_communities, vc_coords = community_detection(candidate, fragment)
+    if len(valid_communities) > 0:
+        print("found communities via community detection")
+        for vc, vcc in zip(valid_communities, vc_coords):
+            pval = KF_track_fit(sigma0, sigma_ms, vcc)
+            if pval >= track_acceptance:
+                print("Good KF fit, P value:", pval, "(x,y,z,r):", vcc)
+                extracted.append(vc)
+                extracted_pvals.append(pval)
+                candidate_to_remove_from_subGraph.append(vc)
+            else:
+                print("pval too small,", pval, "leave for further processing")
 
 
 def compute_3d_distance(coord1, coord2):
@@ -43,76 +44,108 @@ def compute_3d_distance(coord1, coord2):
     return np.sqrt( (x1 - x2)**2 + (y1 - y2)**2 + (z1 - z2)**2 )
 
 
-# def get_midpoint_coords(xyzr_coords):
-#     x1, y1, z1 = xyzr_coords[0][0], xyzr_coords[0][1], xyzr_coords[0][2]
-#     x2, y2, z2 = xyzr_coords[1][0], xyzr_coords[1][1], xyzr_coords[1][2]
-#     xm = (x1 + x2) / 2
-#     ym = (y1 + y2) / 2
-#     zm = (z1 + z2) / 2
-#     rm = np.sqrt(xm**2 + ym**2)
-#     return xm, ym, zm, rm
+def get_midpoint_coords(xyzr_coords):
+    x1, y1, z1 = xyzr_coords[0][0], xyzr_coords[0][1], xyzr_coords[0][2]
+    x2, y2, z2 = xyzr_coords[1][0], xyzr_coords[1][1], xyzr_coords[1][2]
+    xm = (x1 + x2) / 2
+    ym = (y1 + y2) / 2
+    zm = (z1 + z2) / 2
+    rm = np.sqrt(xm**2 + ym**2)
+    return xm, ym, zm, rm
 
 
-# def check_close_proximity_nodes(subGraph, separation_3d_threshold):
-#     # determine if a subgraph contains between 1 - 3 layers with 2 close nodes
-#     node_in_volume_layer_id_dict = nx.get_node_attributes(subGraph, 'in_volume_layer_id')
-#     # node_module_id_dict = nx.get_node_attributes(subGraph, 'module_id')
-#     counts = Counter(node_in_volume_layer_id_dict.values())
-#     num_nodes_in_same_layer = 2
-#     layer_counts_dict = dict((k, v) for k, v in dict(counts).items() if int(v) == num_nodes_in_same_layer)
-#     num_layers_with_multiple_nodes = len(layer_counts_dict)     # currently every layer with 2 nodes in it (num_nodes_in_same_layer)
+def check_close_proximity_nodes(subgraph):
+    threshold_distance = 4.0
 
-#     if 1 <= num_layers_with_multiple_nodes <= 3:
-#         # get node indexes which are in the same layer
-#         for layer_id, count in layer_counts_dict.items():
-#             node_idx = [node for node in node_in_volume_layer_id_dict.keys() if layer_id == node_in_volume_layer_id_dict[node]]
-#             print("nodes that are close together:\n", node_idx)
-            
-#             # currently only merging with 2 nodes in close proximity
-#             if len(node_idx) == num_nodes_in_same_layer:
+    # get the freq distribution of the vivl_ids
+    vivl_id_dict = nx.get_node_attributes(subgraph, "vivl_id")
+    module_id_dict = nx.get_node_attributes(subgraph, "module_id")
+    node_nums = list(vivl_id_dict.keys())
+    vivl_ids = list(vivl_id_dict.values())
+    vivl_ids_freq = {x:vivl_ids.count(x) for x in vivl_ids}
+    freq_count = list(vivl_ids_freq.values())
 
-#                 # check that these 2 nodes have a common node in their neighbourhood
-#                 node1 = node_idx[0]
-#                 node2 = node_idx[1]
-#                 node1_edges = subGraph.edges(node1)
-#                 node2_edges = subGraph.edges(node2)
-#                 node1_edges = list(itertools.chain.from_iterable(node1_edges))
-#                 node2_edges = list(itertools.chain.from_iterable(node2_edges))
-#                 node1_edges = filter(lambda val: val != node1, node1_edges)
-#                 node2_edges = filter(lambda val: val != node2, node2_edges)
-#                 common_nodes = list(set(node1_edges).intersection(node2_edges))
+    copied_subgraph = None
+    # TODO:
+    # # scenario 1)
+    # # check that there are exactly 2 nodes per layer in all layers
+    # if not any(count != 2 for count in freq_count):
+    #     # print("Expect 2 nodes in each layer")
+    #     # print("Here! subgraph: ",str(i))
+    #     # TODO: execute track splitting
+    #     print("TODO: execute track splitting")
 
-#                 if len(common_nodes) != 0:
-#                     # compute pairwise separation in 3D space of all nodes in close proximity in this layer
-#                     xyzr_coords = [subGraph.nodes[n]['xyzr'] for n in node_idx]
-#                     separation = [compute_3d_distance(a, b) for a, b in combinations(xyzr_coords, 2)]
+    # scenario 2)
+    # check there is 1 node per layer in all layers, apart from 2 or fewer layers with 2 nodes
+    if 2 in freq_count:
+        # check there were only 2 or fewer occurences of the frequency '2' (2 nodes per layer)
+        freq_count_remove_2 = list(filter(lambda x: x!= 2, freq_count))
+        if len(freq_count) - len(freq_count_remove_2) <= 2:
+            # check that all other values are equal to 1
+            if not any(count != 1 for count in freq_count_remove_2):
+                # Get duplicate nodes in same layer & compute their 3d separation distance
+                duplicated_vivl_ids = list(set([tup for tup in vivl_ids if vivl_ids.count(tup) > 1]))
+                
+                # there could be more than 1 duplicated element
+                copied_subgraph = subgraph.copy()
+                for dup in duplicated_vivl_ids:
+                    # get the indexes which they appear at, and hence get the node numbers
+                    indexes_of_repeated_items = list(locate(vivl_ids, lambda x: x == dup))
+                    nodes_of_interest = [node_nums[idx] for idx in indexes_of_repeated_items]
+                    # check if only 2 nodes are presented for each duplicated item
+                    if len(nodes_of_interest) == 2:
+                        # compute the distance between the nodes
+                        node1 = nodes_of_interest[0]
+                        node2 = nodes_of_interest[1]
+                        node1_coords = copied_subgraph.nodes[node1]['xyzr']
+                        node2_coords = copied_subgraph.nodes[node2]['xyzr']
+                        distance = np.sqrt( (node1_coords[0] - node2_coords[0])**2 +
+                                            (node1_coords[1] - node2_coords[1])**2 +
+                                            (node1_coords[2] - node2_coords[2])**2 )
+                        if distance <= threshold_distance:
+                            # merge the 2 nodes together and update the copied_subgraph
+                            # the copied_subgraph contains the candidate with the merged nodes - only to be used in the KF
+                            nodes_to_merge = (node1_coords, node2_coords)
+                            xm, ym, zm, rm = get_midpoint_coords(nodes_to_merge)
+                            print("merging of nodes possible")
+                            
+                            # change subgraph attributes
+                            copied_subgraph.nodes[node1]['GNN_Measurement'].x = xm
+                            copied_subgraph.nodes[node1]['GNN_Measurement'].y = ym
+                            copied_subgraph.nodes[node1]['GNN_Measurement'].z = zm
+                            copied_subgraph.nodes[node1]['GNN_Measurement'].r = rm
+                            copied_subgraph.nodes[node1]['xy'] = (xm, ym)
+                            copied_subgraph.nodes[node1]['zr'] = (zm, rm)
+                            copied_subgraph.nodes[node1]['xyzr'] = (xm, ym, zm, rm)
+                            node1_module_id = copied_subgraph.nodes[node1]['module_id']
+                            node2_module_id = copied_subgraph.nodes[node2]['module_id']
+                            copied_subgraph.nodes[node1]['module_id'] = np.concatenate((node1_module_id, node2_module_id))
+                            dict1 = copied_subgraph.nodes[node1]['hit_dissociation']
+                            dict2 = copied_subgraph.nodes[node2]['hit_dissociation']
+                            new_hit_ids = np.concatenate((dict1['hit_id'], dict2['hit_id']))
+                            new_particle_ids = dict1['particle_id'] + dict2['particle_id']
+                            copied_subgraph.nodes[node1]['hit_dissociation'] = {'hit_id' : new_hit_ids,
+                                                                                'particle_id' : new_particle_ids}
+                            # remove the other node
+                            copied_subgraph.remove_node(node2)
 
-#                     # node merging if separation is below threhold
-#                     if all(i <= separation_3d_threshold for i in separation):
-#                         # replace for node 1, delete node 2 - use midpoint coordinates
-#                         xm, ym, zm, rm = get_midpoint_coords(xyzr_coords)
-#                         node1 = node_idx[0]
-#                         node2 = node_idx[1]
-#                         subGraph.nodes[node1]['xyzr'] = (xm, ym, zm, rm)
-#                         subGraph.nodes[node1]['xy'] = (xm, ym)
-#                         subGraph.nodes[node1]['zr'] = (zm, rm)
-#                         subGraph.nodes[node1]['GNN_Measurement'].x = xm
-#                         subGraph.nodes[node1]['GNN_Measurement'].y = ym
-#                         subGraph.nodes[node1]['GNN_Measurement'].z = zm
-#                         subGraph.nodes[node1]['GNN_Measurement'].r = rm
-#                         # merge module ids
-#                         node1_module_id = subGraph.nodes[node1]['module_id']
-#                         node2_module_id = subGraph.nodes[node2]['module_id']
-#                         subGraph.nodes[node1]['module_id'] = np.concatenate((node1_module_id, node2_module_id))
-#                         # merge particle & hit ids
-#                         dict1 = subGraph.nodes[node1]['hit_dissociation']
-#                         dict2 = subGraph.nodes[node2]['hit_dissociation']
-#                         new_hit_ids = np.concatenate((dict1['hit_id'], dict2['hit_id']))
-#                         new_particle_ids = dict1['particle_id'] + dict2['particle_id']
-#                         subGraph.nodes[node1]['hit_dissociation'] = {'hit_id' : new_hit_ids,
-#                                                                      'particle_id' : new_particle_ids}
-#                         subGraph.remove_node(node2)
-#     return subGraph
+                        else:
+                            print("merging of nodes nodes not possible, too large distance between them")
+                            copied_subgraph = None
+                            break
+                    else:
+                        print("merging not possible, more than 2 nodes close together")
+                        copied_subgraph = None
+                        break
+            else:
+                print("More than 1 node per layer, cannot process subgraph")
+        else:
+            print("More than 1 layer with 2 nodes, cannot process subgraph")
+    else:
+        print("Cannot process subgraph, leaving for further iterations")
+    
+    return subgraph, copied_subgraph
+
 
 
 def angle_trunc(a):
@@ -158,7 +191,7 @@ def KF_track_fit(sigma_ms, coords):
     dx = coords[1][0] - coords[0][0]
 
     # variables for F; state transition matrix
-    alpha = 1.                                                   # OU parameter
+    alpha = 0.1 #1.0                                                   # OU parameter
     e1 = np.exp(-np.abs(dx) * alpha)
     f1 = (1.0 - e1) / alpha
     g1 = (np.abs(dx) - f1) / alpha
@@ -243,6 +276,7 @@ def main():
     parser.add_argument('-i', '--input', help='input directory of outlier removal')
     parser.add_argument('-c', '--candidates', help='output directory to save track candidates')
     parser.add_argument('-r', '--remain', help='output directory to save remaining network')
+    parser.add_argument('-f', '--fragments', help='output directory to save track fragments')
     parser.add_argument('-p', '--pval', help='chi-squared track candidate acceptance level')
     parser.add_argument('-s', '--separation_3d_threshold', help="3d distance cut between close proximity nodes, used in node merging")
     # parser.add_argument('-e', '--error', help="rms of track position measurements")
@@ -254,6 +288,7 @@ def main():
     inputDir = args.input
     candidatesDir = args.candidates
     remainingDir = args.remain
+    fragmentsDir = args.fragments
     track_acceptance = float(args.pval)
     # sigma0 = float(args.error)
     sigma_ms = float(args.sigma_ms)
@@ -281,6 +316,7 @@ def main():
     extracted = []
     extracted_pvals = []
     remaining = []
+    fragments = []
     for i, subGraph in enumerate(subGraphs):
         
         subCopy = subGraph.copy()
@@ -296,27 +332,29 @@ def main():
             # check for track fragments
             if candidate.number_of_nodes() >= fragment:
                 
-                # check for close proximity nodes - merge where appropriate
-                # this was done for the 2D toy Model - not needed for TrackML as hits are merged appropriately to nodes
-                # candidate = check_close_proximity_nodes(candidate, separation_3d_threshold)
+                # check for close proximity nodes based on their distance & common module_id values - merge where appropriate
+                # if merged_candidate is not None, then we need to use merged_candidate's coords in the KF, but extract the original candidate
+                candidate, merged_candidate = check_close_proximity_nodes(candidate)
                 
+                candidate_to_assess = candidate
+                if merged_candidate is not None: candidate_to_assess = merged_candidate
+
                 # check for 1 hit per layer - use volume_id & in_volume_layer_id
-                vivl_id_values = nx.get_node_attributes(candidate,'vivl_id').values()
+                vivl_id_values = nx.get_node_attributes(candidate_to_assess,'vivl_id').values()
+
                 if len(vivl_id_values) == len(set(vivl_id_values)): 
                     # good candidate
                     print("no duplicates volume_ids & in_volume_layer_ids for this candidate")
 
-                    # coords = list(nx.get_node_attributes(candidate, 'xyzr').values())
-                    # coords = sorted(coords, reverse=True, key=lambda xyzr: xyzr[3])
                     # sort the candidates by radius r (4th element in this tuple of tuples: (node_num, (x,y,z,r)) )
-                    nodes_coords_tuples = list(nx.get_node_attributes(candidate, 'xyzr').items())
+                    nodes_coords_tuples = list(nx.get_node_attributes(candidate_to_assess, 'xyzr').items())
                     sorted_nodes_coords_tuples = sorted(nodes_coords_tuples, reverse=True, key=lambda item: item[1][3])
                     # check if the sorted nodes are connected
                     all_connected = True
                     for j in range(len(sorted_nodes_coords_tuples) - 1):
                         node1 = sorted_nodes_coords_tuples[j][0]
                         node2 = sorted_nodes_coords_tuples[j+1][0]
-                        if not candidate.has_edge(node1, node2) and not candidate.had_edge(node2, node1):
+                        if not candidate_to_assess.has_edge(node1, node2) and not candidate_to_assess.has_edge(node2, node1):
                             all_connected = False
                     
                     if all_connected:
@@ -338,8 +376,8 @@ def main():
                 else: 
                     print("Bad candidate, > 1 hit per layer, will pass through community detection")
                     # TODO: community detection?
-                    # if COMMUNITY_DETECTION:
-                    #     run_community_detection()
+                    if COMMUNITY_DETECTION:
+                        run_community_detection(candidate, fragment)
             else:
                 print("Too few nodes, track fragment")
 
@@ -347,7 +385,10 @@ def main():
         for good_candidate in candidate_to_remove_from_subGraph:
             nodes = good_candidate.nodes()
             subGraph.remove_nodes_from(nodes)
-        if len(subGraph.nodes()) > 0: remaining.append(subGraph)
+        if (len(subGraph.nodes()) <= 3) and (len(subGraph.nodes()) > 0): 
+            fragments.append(subGraph)
+        elif len(subGraph.nodes()) >= 4:
+            remaining.append(subGraph)
 
     
     # attach iteration number & color to good extracted tracks
@@ -358,6 +399,7 @@ def main():
 
     print("\nNumber of extracted candidates during this iteration:", len(extracted))
     print("Number of remaining subGraphs to be further processed:", len(remaining))
+    print("Number of track fragments found:", len(fragments))
     # load all extracted candidates, from previous iterations
     i = 0
     path = candidatesDir + str(i) + subgraph_path
@@ -373,8 +415,11 @@ def main():
     h.plot_save_subgraphs_iterations(extracted, extracted_pvals, candidatesDir, "Extracted candidates", node_labels=True, save_plot=True)
     # plot and save the remaining subgraphs to be further processed
     h.plot_subgraphs(remaining, remainingDir, node_labels=True, save_plot=True, title="Remaining candidates")
+    # save remaining and track fragments
     for i, sub in enumerate(remaining):
         h.save_network(remainingDir, i, sub)
+    for i, sub in enumerate(fragments):
+        h.save_network(fragmentsDir, i, sub)
 
     # TODO: plot the distribution of edge weightings within the extracted candidates
 

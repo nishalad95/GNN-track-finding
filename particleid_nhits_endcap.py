@@ -10,7 +10,7 @@ volume7_hits = volume7_hits.hit_id.to_list()
 # print(volume7_hits)
 
 # add the hits which are in volume 7 as a column in the main dataframe used in recon. eff calculations
-df_nodes_particles_ids = pd.read_csv('src/trackml_mod/event_truth/event000001000-full-mapping.csv')
+df_nodes_particles_ids = pd.read_csv('src/trackml_mod/event_truth/event000001000-full-mapping-minCurv-0.3-800.csv')
 df_nodes_particles_ids["endcap_volume7_binary"] = 0
 for hit in volume7_hits:
     df_nodes_particles_ids.loc[df_nodes_particles_ids.hit_id == hit, 'endcap_volume7_binary'] = 1
@@ -28,4 +28,4 @@ for p in particles_ids_endcap_volume7:
     df_nodes_particles_ids.loc[df_nodes_particles_ids.particle_id == p, "nhits_endcap_volume7"] = total_volume7_hits
 
 print(df_nodes_particles_ids)
-df_nodes_particles_ids.to_csv('src/trackml_mod/event_truth/event000001000-full-mapping.csv', index=False)
+df_nodes_particles_ids.to_csv('src/trackml_mod/event_truth/event000001000-full-mapping-minCurv-0.3-800.csv', index=False)

@@ -31,25 +31,25 @@ s=10                    # 3d distance threshold for close proximity nodes, used 
 # -----------------------------
 # Track conversion
 # -----------------------------
-# mkdir -p $ROOTDIR
-# echo "-------------------------------------------------"
-# echo "Running conversion of generated events to GNN..."
-# echo "-------------------------------------------------"
-# start_conversion=$SECONDS
-# INPUT=$ROOTDIR/track_sim/network/
-# mkdir -p $INPUT
-# EVENT_NETWORK=src/trackml_mod/event_network/minCurv_0.3_134
+mkdir -p $ROOTDIR
+echo "-------------------------------------------------"
+echo "Running conversion of generated events to GNN..."
+echo "-------------------------------------------------"
+start_conversion=$SECONDS
+INPUT=$ROOTDIR/track_sim/network/
+mkdir -p $INPUT
+EVENT_NETWORK=src/trackml_mod/event_network/minCurv_0.3_800
 EVENT_TRUTH=src/trackml_mod/event_truth
+python src/trackml_mod/event_conversion.py -o $INPUT -m $SIGMA_MS -n $EVENT_NETWORK -t $EVENT_TRUTH
 # python particleid_nhits_endcap.py
 # python particleid_ndistinct_layers_endcap.py
-# python src/trackml_mod/event_conversion.py -o $INPUT -m $SIGMA_MS -n $EVENT_NETWORK -t $EVENT_TRUTH
-# conversion_duration=$(( SECONDS - start_conversion ))
-# echo "Execution time event_conversion.py: $conversion_duration seconds"
+conversion_duration=$(( SECONDS - start_conversion ))
+echo "Execution time event_conversion.py: $conversion_duration seconds"
 
 
-# # copy the first 100 files over - DEVELOPMENT ONLY
-# mkdir $ROOTDIR/track_sim/network_100/
-# ls $ROOTDIR/track_sim/network/* | head -2000 | xargs -I{} cp {} $ROOTDIR/track_sim/network_100/
+# copy the first 100 files over - DEVELOPMENT ONLY
+mkdir $ROOTDIR/track_sim/network_100/
+ls $ROOTDIR/track_sim/network/* | head -2000 | xargs -I{} cp {} $ROOTDIR/track_sim/network_100/
 # ----------------------------------------------------------------------------------------------
 
 
@@ -141,15 +141,17 @@ for i in {1..1};
         INPUT=$OUTPUT
         CANDIDATES=$ROOTDIR/iteration_$i/candidates/
         REMAINING=$ROOTDIR/iteration_$i/remaining/
+        FRAGMENTS=$ROOTDIR/iteration_$i/fragments/
         mkdir -p $CANDIDATES
         mkdir -p $REMAINING
+        mkdir -p $FRAGMENTS
         if (( $i > 1 ))
         then
             let num=$i-1
             cp -r $ROOTDIR/iteration_$num/candidates/ $CANDIDATES
         fi
         prev_duration=$SECONDS
-        python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -p $p -m $SIGMA_MS -n $n -s $s
+        python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -m $SIGMA_MS -n $n -s $s
         INPUT=$REMAINING
 
         # time it!
