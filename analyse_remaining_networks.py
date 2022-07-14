@@ -52,6 +52,7 @@ def plot_subgraphs_zr(graph):
 
 # read in remaining
 subGraphs = []
+filenames = []
 inputDir = "src/output/iteration_1/remaining/"
 subgraph_path = "_subgraph.gpickle"
 i = 0
@@ -59,6 +60,8 @@ path = inputDir + str(i) + subgraph_path
 while os.path.isfile(path):
     sub = nx.read_gpickle(path)
     subGraphs.append(sub)
+    # print("path: ", path)
+    filenames.append(path)
     i += 1
     path = inputDir + str(i) + subgraph_path
 print("Intial total no. of subgraphs:", len(subGraphs))
@@ -87,7 +90,8 @@ print("Intial total no. of subgraphs:", len(subGraphs))
 # 2) extract tracks with 1 node per layer in all layers and 2 nodes per layer in 1 layer
 tracks_with_node_splitting = []
 tracks_with_node_merging = []
-remaining_track_candidates= []
+remaining_track_candidates = []
+tracks_with_node_splitting_filenames = []
 for i, s in enumerate(subGraphs):
     
     # only execute on non-track-fragments
@@ -116,6 +120,7 @@ for i, s in enumerate(subGraphs):
             # print("Expect 2 nodes in each layer")
             # print("Here! subgraph: ",str(i))
             tracks_with_node_splitting.append(s)
+            tracks_with_node_splitting_filenames.append(filenames[i])
 
         # scenario 2)
         # check there is 1 node per layer in all layers, apart from 1 layer with 2 nodes
@@ -200,21 +205,20 @@ for i, s in enumerate(tracks_with_node_merging):
             coords_to_plot.append(s.nodes[node1]['zr'])
             coords_to_plot.append(s.nodes[node2]['zr'])
 
-plt.hist(distances_close_proximity_nodes, density=False, bins=50)
-plt.xlabel("3d distance of close proximity nodes")
-plt.ylabel("Frequency")
-plt.show()
+# plt.hist(distances_close_proximity_nodes, density=False, bins=50)
+# plt.xlabel("3d distance of close proximity nodes")
+# plt.ylabel("Frequency")
+# plt.show()
 
-print(coords_to_plot)
+# print(coords_to_plot)
 zip(*coords_to_plot)
-
-plt.scatter(*zip(*coords_to_plot))
-plt.show()
-
+# plt.scatter(*zip(*coords_to_plot))
+# plt.show()
 
 
 
 
+# number 1 : 
 # check the extracted subgraphs and see how many have 2 nodes in 2 or fewer layers and 1 node in the rest of the layers
 # read in remaining
 subGraphs = []
@@ -227,7 +231,7 @@ while os.path.isfile(path):
     subGraphs.append(sub)
     i += 1
     path = inputDir + str(i) + subgraph_path
-print("Intial total no. of extracted candidates subgraphs:", len(subGraphs))
+# print("Intial total no. of extracted candidates subgraphs:", len(subGraphs))
 
 tracks_with_node_merging = []
 for i, s in enumerate(subGraphs):
@@ -238,10 +242,10 @@ for i, s in enumerate(subGraphs):
     # get the freq distribution of the vivl_ids
     vivl_ids_freq = {x:vivl_ids.count(x) for x in vivl_ids}
     freq_count = list(vivl_ids_freq.values())
-    
+
 
     if 2 in freq_count:
-        print("2 frequency exists")
+        # print("2 frequency exists")
         # check there was only 1 occurence of '2'
         freq_count_remove_2 = list(filter(lambda x: x!= 2, freq_count))
         if len(freq_count) - len(freq_count_remove_2) <= 2:
@@ -253,8 +257,23 @@ for i, s in enumerate(subGraphs):
                 tracks_with_node_merging.append(s)
 
 
-print("total number of tracks extracted which had node merging: ", len(tracks_with_node_merging))
-print("plotting tracks where node merging possible:")
-for i, s in enumerate(tracks_with_node_merging):
-    if i % 5 == 0:
-        plot_subgraphs([s])
+# print("total number of tracks extracted which had node merging: ", len(tracks_with_node_merging))
+# print("plotting tracks where node merging possible:")
+# for i, s in enumerate(tracks_with_node_merging):
+#     if i % 5 == 0:
+#         plot_subgraphs([s])
+
+
+
+
+
+# number 2 : 
+# now handle the case where we have exactly 2 nodes in each layer
+print("plotting tracks where track splitting is possible possible:")
+for i, s in enumerate(tracks_with_node_splitting):
+    print("subgraph: ", s )
+    print("filename: ", filenames[i])
+    plot_subgraphs([s])
+    plot_subgraphs_zr([s])
+    # for each track candidate, compute the 3d distance between each pair of nodes in the same layer
+    # maybe we don't handle this case - leave it for further iterations

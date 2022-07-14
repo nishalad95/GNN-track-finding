@@ -196,6 +196,7 @@ plt.hist(pT_dist_before, bins=100)
 plt.ylabel("Frequency")
 plt.xlabel("pT (GeV)")
 plt.title("pT distribution of all extracted candidates")
+plt.savefig(outputDir + "/pt_distribution_extracted_candidates.png", dpi=300)
 plt.show()
 
 

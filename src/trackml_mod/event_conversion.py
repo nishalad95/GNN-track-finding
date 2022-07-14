@@ -49,13 +49,13 @@ def main():
     
     # TODO: the following will get moved to .sh file
     # event_1 network corresponds to event000001000 truth
-    event_network = args.eventNetwork + "/event_1_filtered_graph_"
-    event_truth = args.eventTruth + "/event000001000-"
+    event_network = args.eventNetwork + "/event_3_filtered_graph_"
+    event_truth = args.eventTruth + "/event000001002-"
     event_truth_file = event_truth + "full-mapping-minCurv-0.3-800.csv"
 
     # load truth information & metadata on events
     nodes, edges = h.load_nodes_edges(event_network, max_volume_region)
-    # h.load_save_truth(event_network, event_truth, event_truth_file) #  only need to execute once
+    h.load_save_truth(event_network, event_truth, event_truth_file) #  only need to execute once
     truth = pd.read_csv(event_truth_file)
 
     # create a graph network
