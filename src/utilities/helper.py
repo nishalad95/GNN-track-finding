@@ -281,15 +281,6 @@ def compute_track_state_estimates(GraphList):
                 track_state_estimates[key] = {  'edge_state_vector': track_state_vector, 
                                                 'edge_covariance': covariance }
 
-                # Temporary - can remove after
-                # Screening procedure - save parameter a: indicates curvature of the track
-                # Preliminary masking based on a cut, a linked to curvature, linked to track pT
-                f = open("parabolic_param_a.txt", "a")
-                param_a = str(track_state_vector[0]) + "\n"
-                f.write(param_a)
-                f.close()
-
-
             # TODO: debugging
             # if i == 0:
             #     print("track state estimates:\n", track_state_estimates)
@@ -353,7 +344,8 @@ def construct_graph(graph, nodes, edges, truth, sigma_ms):
                             vivl_id = (volume_id, in_volume_layer_id),
                             module_id = module_id,
                             truth_particle=label,                   # TODO: update the following
-                            hit_dissociation=hit_dissociation)
+                            hit_dissociation=hit_dissociation,
+                            tags=[node_idx])                           # used in custom CCA
     
     # add bidirectional edges
     graph_nodes = graph.nodes()

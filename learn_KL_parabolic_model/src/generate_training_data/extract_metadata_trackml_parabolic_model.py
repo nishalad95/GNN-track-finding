@@ -26,9 +26,9 @@ def calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs):
 
 
 
-inputDir = "output/track_sim_trackml_parabolic_model/minCurv_0.3_800/event_graph_data/"
+inputDir = "output/track_sim_trackml_parabolic_model/minCurv_0.3_134/event_graph_data/"
 outputDir = inputDir
-num_events = 3
+num_events = 1
 
 header = ['kl_dist', 'emp_var', 'truth']
 outputFile = outputDir + str(num_events) + '_events_training_data.csv'
@@ -43,8 +43,6 @@ with open(outputFile, 'w+', encoding='UTF8') as f:
         networkFile = inputDir + "event_" + str(e+1)
         os.chdir(".")
         for i, file in enumerate(glob.glob(networkFile + "_network/*_subgraph.gpickle")):
-            # print("i: ", i)
-            # print("FILE: ", file)
             # network = nx.read_gpickle(file)
             network = pickle.load(open(file, 'rb'))
             subgraphs.append(network)

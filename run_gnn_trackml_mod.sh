@@ -10,7 +10,7 @@ SIGMA_MS=0.0001         # 10^-4 multiple scattering error
 ROOTDIR=src/output      # output directory to store GNN algorithm output
 
 # clustering
-LUT=learn_KL_linear_model/output/empvar/empvar.lut   # LUT file for KL distance calibration
+LUT=learn_KL_linear_model/output/empvar/empvar_relaxed.lut   # LUT file for KL distance calibration
 
 # extrapolation
 c=2                     # initial chi2 distance acceptance threshold for extrapolated states
@@ -41,8 +41,8 @@ mkdir -p $INPUT
 EVENT_NETWORK=src/trackml_mod/event_network/minCurv_0.3_800
 EVENT_TRUTH=src/trackml_mod/event_truth
 python src/trackml_mod/event_conversion.py -o $INPUT -m $SIGMA_MS -n $EVENT_NETWORK -t $EVENT_TRUTH
-python particleid_nhits_endcap.py
-python particleid_ndistinct_layers_endcap.py
+# python particleid_nhits_endcap.py
+# python particleid_ndistinct_layers_endcap.py
 conversion_duration=$(( SECONDS - start_conversion ))
 echo "Execution time event_conversion.py: $conversion_duration seconds"
 
@@ -50,19 +50,19 @@ echo "Execution time event_conversion.py: $conversion_duration seconds"
 # # copy the first 100 files over - DEVELOPMENT ONLY
 # mkdir $ROOTDIR/track_sim/network_100/
 # ls $ROOTDIR/track_sim/network/* | head -2000 | xargs -I{} cp {} $ROOTDIR/track_sim/network_100/
-# # ----------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------
 
 
-# INPUT=$ROOTDIR/track_sim/network_100/
-# # time it!
-# start=$SECONDS
-# execution_times=($start)
-# stages=("start")
+INPUT=$ROOTDIR/track_sim/network/
+# time it!
+start=$SECONDS
+execution_times=($start)
+stages=("start")
 
 
-# # TESTING FOR ITERATION 2 ONLY
-# # INPUT=$ROOTDIR/iteration_1/remaining/       # THIS LINE CAN BE REMOVED
-# # for i in {2..2};                            # THIS LINE CAN BE REMOVED
+# TESTING FOR ITERATION 2 ONLY
+# INPUT=$ROOTDIR/iteration_1/remaining/       # THIS LINE CAN BE REMOVED
+# for i in {2..2};                            # THIS LINE CAN BE REMOVED
 
 # for i in {1..1};
 #     do

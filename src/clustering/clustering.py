@@ -66,6 +66,7 @@ def get_KL_upper_threshold(empvar_feature, distance, mapping):
         else: return 0
     return 0
 
+
 def reset_reactivate(subGraphs):
     reset_subGraphs = []
     for subGraph in subGraphs:

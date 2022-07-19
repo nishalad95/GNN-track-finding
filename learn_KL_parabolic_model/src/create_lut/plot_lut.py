@@ -24,7 +24,7 @@ def plot_lut_from_file(filename):
 
     # create dataframe 'matrix' of bins equivalent to lut
     for i in range(len(lut)):        
-        df.iloc[lut[i][1]:lut[i][2], lut[i][0]] = 1
+        df.loc[lut[i][1]:lut[i][2], lut[i][0]] = 1
 
     df = df.fillna(0)
     df = df.iloc[::-1]
@@ -32,7 +32,7 @@ def plot_lut_from_file(filename):
 
     # Plot frequency dataframe with seaborn heatmap
     flatui = ["#3d77d4", "#f0b05d"]
-    fig, ax = plt.subplots(figsize=(18,10))
+    fig, ax = plt.subplots(figsize=(15,9))
     p = sns.heatmap(df, linewidths=0.1, annot=False, cbar=True, 
                     ax=ax, cmap=sns.color_palette(flatui), 
                     cbar_kws={'orientation': 'vertical'})
@@ -43,11 +43,11 @@ def plot_lut_from_file(filename):
     colorbar.set_ticklabels(['0', '1'])
 
     plt.title('2D Look-Up Table')
-    plt.xlabel('degree of node')
-    # plt.xlabel('binned empirical variance of edge orientation')
+    # plt.xlabel('degree of node')
+    plt.xlabel('binned empirical variance of edge orientation')
     plt.ylabel('binned pairwise KL distance')
     plt.show()
 
 
-plot_lut_from_file("output/kl_dist_degree/kl_degree.lut")
-# plot_lut_from_file("output/kl_dist_vs_emp_var/kl_empvar.lut")
+# plot_lut_from_file("output/kl_dist_degree/kl_degree.lut")
+plot_lut_from_file("learn_KL_linear_model/output/empvar/empvar_relaxed.lut")

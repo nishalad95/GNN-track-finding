@@ -49,13 +49,13 @@ def main():
     
     # TODO: the following will get moved to .sh file
     # event_1 network corresponds to event000001000 truth
-    event_network = args.eventNetwork + "/event_3_filtered_graph_"
-    event_truth = args.eventTruth + "/event000001002-"
+    event_network = args.eventNetwork + "/event_1_filtered_graph_"
+    event_truth = args.eventTruth + "/event000001000-"
     event_truth_file = event_truth + "full-mapping-minCurv-0.3-800.csv"
 
     # load truth information & metadata on events
     nodes, edges = h.load_nodes_edges(event_network, max_volume_region)
-    h.load_save_truth(event_network, event_truth, event_truth_file) #  only need to execute once
+    # h.load_save_truth(event_network, event_truth, event_truth_file) #  only need to execute once
     truth = pd.read_csv(event_truth_file)
 
     # create a graph network
@@ -76,40 +76,38 @@ def main():
     print("Number of edges:", endcap_graph.number_of_edges())
     print("Number of nodes:", endcap_graph.number_of_nodes())
 
-    # temporary: can remove after
-    f = open("parabolic_param_a.txt", "w")
-    f.write("Before CCA \n")
-    f.close()
-
     # compute track state estimates, extract subgraphs: out-of-the-box CCA
     endcap_graph = h.compute_track_state_estimates([endcap_graph])
     endcap_graph = nx.Graph(endcap_graph[0])
     endcap_graph = nx.to_directed(endcap_graph)
 
-    # temporary: can remove later
-    print("Number of edges again:", endcap_graph.number_of_edges())
-    print("Number of nodes again:", endcap_graph.number_of_nodes())
+    # Temporary: can remove later
+    # save and plot the graph before any CCA is done
+    print("saving network before CCA")
+    h.initialize_edge_activation([endcap_graph])
+    h.save_network("beforeCCA/", 0, endcap_graph)
+    print("plotting network before CCA")
+    h.plot_subgraphs([endcap_graph], "beforeCCA/", save_plot=True, node_labels=True)
 
-    subGraphs = [endcap_graph.subgraph(c).copy() for c in nx.weakly_connected_components(endcap_graph)]
-    
-    # temporary: can remove after
-    f = open("parabolic_param_a.txt", "a")
-    f.write("After CCA \n")
-    f.close()
-    
-    subGraphs = h.compute_track_state_estimates(subGraphs)
-    h.initialize_edge_activation(subGraphs)
-    h.compute_prior_probabilities(subGraphs, 'track_state_estimates')
-    h.compute_mixture_weights(subGraphs)
+    # # temporary: can remove later
+    # print("Number of edges again:", endcap_graph.number_of_edges())
+    # print("Number of nodes again:", endcap_graph.number_of_nodes())
 
-    print("Number of subgraphs..", len(subGraphs))
-    h.plot_subgraphs(subGraphs, outputDir, title="Nodes & Edges subgraphs from TrackML generated data")
+    # subGraphs = [endcap_graph.subgraph(c).copy() for c in nx.weakly_connected_components(endcap_graph)]
     
-    # save the subgraphs
-    for i, sub in enumerate(subGraphs):
-        h.save_network(outputDir, i, sub)
+    # subGraphs = h.compute_track_state_estimates(subGraphs)
+    # h.initialize_edge_activation(subGraphs)
+    # h.compute_prior_probabilities(subGraphs, 'track_state_estimates')
+    # h.compute_mixture_weights(subGraphs)
 
-    print_graph_stats(outputDir)
+    # print("Number of subgraphs..", len(subGraphs))
+    # h.plot_subgraphs(subGraphs, outputDir, title="Nodes & Edges subgraphs from TrackML generated data")
+    
+    # # save the subgraphs
+    # for i, sub in enumerate(subGraphs):
+    #     h.save_network(outputDir, i, sub)
+
+    # print_graph_stats(outputDir)
 
 
 
