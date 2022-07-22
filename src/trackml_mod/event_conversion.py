@@ -83,31 +83,32 @@ def main():
 
     # Temporary: can remove later
     # save and plot the graph before any CCA is done
-    print("saving network before CCA")
-    h.initialize_edge_activation([endcap_graph])
-    h.save_network("beforeCCA/", 0, endcap_graph)
-    print("plotting network before CCA")
-    h.plot_subgraphs([endcap_graph], "beforeCCA/", save_plot=True, node_labels=True)
+    # print("saving network before CCA")
+    # h.initialize_edge_activation([endcap_graph])
+    # h.save_network("tag_propagation/", 0, endcap_graph)
+    # print("plotting network before CCA")
+    # h.plot_subgraphs([endcap_graph], "tag_propagation/", save_plot=True, node_labels=True)
 
-    # # temporary: can remove later
-    # print("Number of edges again:", endcap_graph.number_of_edges())
-    # print("Number of nodes again:", endcap_graph.number_of_nodes())
 
-    # subGraphs = [endcap_graph.subgraph(c).copy() for c in nx.weakly_connected_components(endcap_graph)]
+    # temporary: can remove later
+    print("Number of edges again:", endcap_graph.number_of_edges())
+    print("Number of nodes again:", endcap_graph.number_of_nodes())
+
+    subGraphs = [endcap_graph.subgraph(c).copy() for c in nx.weakly_connected_components(endcap_graph)]
     
-    # subGraphs = h.compute_track_state_estimates(subGraphs)
-    # h.initialize_edge_activation(subGraphs)
-    # h.compute_prior_probabilities(subGraphs, 'track_state_estimates')
-    # h.compute_mixture_weights(subGraphs)
+    subGraphs = h.compute_track_state_estimates(subGraphs)
+    h.initialize_edge_activation(subGraphs)
+    h.compute_prior_probabilities(subGraphs, 'track_state_estimates')
+    h.compute_mixture_weights(subGraphs)
 
-    # print("Number of subgraphs..", len(subGraphs))
-    # h.plot_subgraphs(subGraphs, outputDir, title="Nodes & Edges subgraphs from TrackML generated data")
+    print("Number of subgraphs..", len(subGraphs))
+    h.plot_subgraphs(subGraphs, outputDir, title="Nodes & Edges subgraphs from TrackML generated data")
     
-    # # save the subgraphs
-    # for i, sub in enumerate(subGraphs):
-    #     h.save_network(outputDir, i, sub)
+    # save the subgraphs
+    for i, sub in enumerate(subGraphs):
+        h.save_network(outputDir, i, sub)
 
-    # print_graph_stats(outputDir)
+    print_graph_stats(outputDir)
 
 
 

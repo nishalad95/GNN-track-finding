@@ -286,7 +286,7 @@ def compute_track_state_estimates(GraphList):
             #     print("track state estimates:\n", track_state_estimates)
             # store all track state estimates at the node
             G.nodes[node]['track_state_estimates'] = track_state_estimates
-            # (mean, variance) of edge orientation - needed for KL distance in clustering
+            # (mean, variance) of edge orientation in xy plane - needed for KL distance in clustering
             G.nodes[node]['edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
 
     return GraphList
@@ -461,8 +461,8 @@ def plot_subgraphs(GraphList, outputDir, node_labels=False, save_plot=False, tit
 
 
 # private function
-def __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, outputFile, title,
-                                                    key, axis1, axis2, node_labels, save_plot):
+def __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, extracted_pvals_zr, outputFile, 
+                                                title, key, axis1, axis2, node_labels, save_plot):
 
     _, ax = plt.subplots(figsize=(12,10))
     for subGraph in GraphList:
@@ -493,16 +493,13 @@ def __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, output
     for i, sub in enumerate(GraphList):
         save_network(outputFile, i, sub) # save network to serialized form
 
-    f = open(outputFile + "pvals.csv", 'w')
-    writer = csv.writer(f)
-    for pval in extracted_pvals:
-        writer.writerow([pval])
-    f.close()
+    pvals_df = pd.DataFrame({'pvals_xy' : extracted_pvals, 'pvals_zr' : extracted_pvals_zr}) 
+    pvals_df.to_csv(outputFile + 'pvals.csv')
 
 
 # used for visualising the good extracted candidates & iteration num
-def plot_save_subgraphs_iterations(GraphList, extracted_pvals, outputFile, title, node_labels=True, save_plot=True):
+def plot_save_subgraphs_iterations(GraphList, extracted_pvals, extracted_pvals_zr, outputFile, title, node_labels=True, save_plot=True):
     #xy plane
-    __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, outputFile, title, 'xy', "x", "y", node_labels, save_plot)
+    __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, extracted_pvals_zr, outputFile, title, 'xy', "x", "y", node_labels, save_plot)
     #zr plane
-    __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, outputFile, title, 'zr', "z", "r", node_labels, save_plot)
+    __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, extracted_pvals_zr, outputFile, title, 'zr', "z", "r", node_labels, save_plot)

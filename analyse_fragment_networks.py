@@ -20,6 +20,22 @@ while os.path.isfile(path):
     path = inputDir + str(i) + subgraph_path
 print("Intial total no. of subgraphs:", len(subGraphs))
 
+fragments = []
+isolated_nodes = []
+for s in subGraphs:
+    if s.number_of_nodes() == 1:
+        isolated_nodes.append(s)
+    elif s.number_of_nodes() < 4:
+        fragments.append(s)
+
+print("number of isolated nodes: ", len(isolated_nodes))
+percentage = len(isolated_nodes) * 100 / len(subGraphs)
+print("percentage: ", percentage)
+print("number of subgraphs with 2 or 3 nodes: ", len(fragments))
+percentage = len(fragments) * 100 / len(subGraphs)
+print("percentage: ", percentage)
+
+
 # calculate the proportion of subgraphs that are track fragments
 fragments = []
 particle_ids = []
