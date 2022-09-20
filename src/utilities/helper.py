@@ -209,7 +209,7 @@ def rotate_track(coords, separation_3d_threshold=None):
         x_new = x * np.cos(angle) - y * np.sin(angle)    # x_new = xcos(angle) - ysin(angle)
         y_new = x * np.sin(angle) + y * np.cos(angle)    # y_new = xsin(angle) + ycos(angle) 
         rotated_coords.append((x_new, y_new)) 
-    return rotated_coords
+    return rotated_coords, angle
 
 def compute_track_state_estimates(GraphList):
     sigmaO = 4.0        # 4.0mm larger error in m_O due to beamspot error and error at the origin
@@ -248,7 +248,7 @@ def compute_track_state_estimates(GraphList):
             keys.reverse()
 
             # rotate the node & its neighbours to local node-specific coordinate system
-            rotated_coords = rotate_track(coords)
+            rotated_coords, angle_of_rotation = rotate_track(coords)
 
             # translate all coords such that the node in question becomes the new origin
             x_trans = rotated_coords[-2][0]
@@ -259,7 +259,11 @@ def compute_track_state_estimates(GraphList):
                 ty = rc[1] - y_trans
                 tc = (tx, ty)
                 transformed_coords.append(tc)
-            # print("TRANSLATED COORDS:\n", transformed_coords)
+            # print("Transformation:")
+            # print("angle of rotation in radians: ", angle_of_rotation)
+            # angle_of_rotation_degrees = (180 * angle_of_rotation) / np.pi
+            # print("angle of rotation in degrees: ", angle_of_rotation_degrees)
+            # print("translation: ", x_trans, y_trans)
 
             # for each neighbour connection obtain the measurement vector in the new axis
             # [m_0, m_A, m_B] m_0 the old origin, m_A the new origin, m_B the neighbour
@@ -274,12 +278,19 @@ def compute_track_state_estimates(GraphList):
                                 [0,                0,          1], 
                                 [x_B**2,         x_B,          1]])
 
-                # compute track state parameters & covariance
+                # compute track state parameters, covariance and t_vector for parametric representation
                 H_inv = np.linalg.inv(H)    # invert H matrix to obtain measurement matrix
                 track_state_vector = H_inv.dot(measurement_vector)  # parabolic parameters: a, b, c
+                a = track_state_vector[0]
+                b = track_state_vector[1]
+                c = track_state_vector[2]
+                norm_factor = 1/(np.sqrt(1 + b**2))
+                t_vector = np.array([0, c, norm_factor, b*norm_factor, 0, a])
                 covariance = H_inv.dot(S).dot(H_inv.T)
                 track_state_estimates[key] = {  'edge_state_vector': track_state_vector, 
-                                                'edge_covariance': covariance }
+                                                'edge_covariance': covariance,
+                                                't_vector': t_vector }
+
 
             # TODO: debugging
             # if i == 0:
@@ -288,6 +299,9 @@ def compute_track_state_estimates(GraphList):
             G.nodes[node]['track_state_estimates'] = track_state_estimates
             # (mean, variance) of edge orientation in xy plane - needed for KL distance in clustering
             G.nodes[node]['edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
+            # store the transformation information - used in extrapolation
+            G.nodes[node]['angle_of_rotation'] = angle_of_rotation
+            G.nodes[node]['translation'] = (x_trans, y_trans)
 
     return GraphList
 

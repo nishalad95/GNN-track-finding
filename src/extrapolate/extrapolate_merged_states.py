@@ -12,6 +12,24 @@ import pprint
 
 
 def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour_attr, chi2CutFactor, sigma_ms):
+    # transform the t_vector from the node coord sys to its neighbour node coord sys
+    # first undo the translation of the node's t_vector
+    node_angle_of_rotation = node_attr['angle_of_rotation']
+    node_translation = node_attr['translation']
+    node_translation_x = node_translation[0]
+    node_translation_y = node_translation[1]
+    node_t_vector = node_attr['track_state_estimates'][neighbour_num]['t_vector']
+    node_t_vector[0] = node_t_vector[0] + node_translation_x
+    node_t_vector[1] = node_t_vector[1] + node_translation_y
+    # next undo the rotation of the node's t_vector
+    neighbour_angle_of_rotation = neighbour_attr['angle_of_rotation']
+    neighbour_translation = neighbour_attr['translation']
+    # ....
+    # apply the new rotation and translation
+    # ....
+
+
+    
     node_x = node_attr['GNN_Measurement'].x
     node_y = node_attr['GNN_Measurement'].y
     neighbour_x = neighbour_attr['GNN_Measurement'].x
