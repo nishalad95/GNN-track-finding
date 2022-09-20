@@ -12,50 +12,58 @@ import pprint
 
 
 def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour_attr, chi2CutFactor, sigma_ms):
+    # 1) transformation of parametric t_vector from surface bound to surface free plane
+    # 2) extrapolation of the tvector 
+    # 3) calculation of new extrapolated parabolic parameters
     # transform the t_vector from the node coord sys to its neighbour node coord sys
-    node_angle_of_rotation = node_attr['angle_of_rotation']
-    node_translation = node_attr['translation']
-    node_translation_x = node_translation[0]
-    node_translation_y = node_translation[1]
-    node_t_vector = node_attr['track_state_estimates'][neighbour_num]['t_vector']
-    neighbour_angle_of_rotation = neighbour_attr['angle_of_rotation']
-    neighbour_translation = neighbour_attr['translation']
-    neighbour_translation_x = neighbour_translation[0]
-    neighbour_translation_y = neighbour_translation[1]
-    # first undo the tranformation of the node's t_vector - affects only the first 2 components
-    x = node_t_vector[0] + node_translation_x
-    y = node_t_vector[1] + node_translation_y
-    # next undo the rotation of the node's t_vector - rotate clockwise - apply to the entire vector    
-    angle = node_angle_of_rotation
-    x_new = x * np.cos(angle) + y * np.sin(angle)    # x_new = xcos(angle) + ysin(angle)
-    y_new = y * np.cos(angle) - x * np.sin(angle)    # y_new = - xsin(angle) + ycos(angle)
-    Vx = node_t_vector[2]
-    Vy = node_t_vector[3]
-    Vx_new = Vx * np.cos(angle) + Vy * np.sin(angle)
-    Vy_new = Vy * np.cos(angle) - Vx * np.sin(angle)
-    Ax = node_t_vector[4]
-    Ay = node_t_vector[5]
-    Ax_new = Ax * np.cos(angle) + Ay * np.sin(angle)
-    Ay_new = Ay * np.cos(angle) - Ax * np.sin(angle)
-    # apply the new rotation and translation
-    # first apply the rotation using the neighbour's angle of rotation - rotate anticlockwise
-    angle = neighbour_angle_of_rotation
-    x_new = x_new * np.cos(angle) - y_new * np.sin(angle)    # x_new = xcos(angle) - ysin(angle)
-    y_new = x_new * np.sin(angle) + y_new * np.cos(angle)    # y_new = xsin(angle) + ycos(angle)
-    Vx_new = Vx_new * np.cos(angle) + Vy_new * np.sin(angle)
-    Vy_new = Vy_new * np.cos(angle) - Vx_new * np.sin(angle)
-    Ax_new = Ax_new * np.cos(angle) + Ay_new * np.sin(angle)
-    Ay_new = Ay_new * np.cos(angle) - Ax_new * np.sin(angle)
-    # next apply the translation using the neighbour's translation
-    x_new = x_new - neighbour_translation_x
-    y_new = y_new - neighbour_translation_y
+    nodeA_angle = node_attr['angle_of_rotation']
+    nodeA_trans = node_attr['translation']
+    tvector = node_attr['track_state_estimates'][neighbour_num]['t_vector']
+    nodeB_angle = neighbour_attr['angle_of_rotation']
+    nodeB_trans = neighbour_attr['translation']
+    print("6 component tvector: ", tvector)
+    tvector_coords = tvector[:2]
+    tvector_vel = tvector[2:4]
+    tvector_acc = tvector[4:]
+    # convert node coord sys to global
+    # undo the translation of nodeA's tvector - affects only the first 2 components
+    print("translation to apply: ", nodeA_trans)
+    print("tvector_coords: ", tvector_coords)
+    print("tvector_vel: ", tvector_vel)
+    print("tvector_acc: ", tvector_acc)
+    nodeA_trans = np.array([nodeA_trans[0], nodeA_trans[1]]) # x and y components of translation
+    tvector_coords = tvector_coords + nodeA_trans
+    print("translated coordinates: ", tvector_coords)
+    # undo the rotation from nodeA's coord sys back to global, rotate clockwise
+    # ( x_new = xcos(angle) + ysin(angle) and y_new = -xsin(angle) + ycos(angle) )
+    rotation_matrix_to_global = np.array([[np.cos(nodeA_angle), np.sin(nodeA_angle)], 
+                                          [-1*np.sin(nodeA_angle), np.cos(nodeA_angle)]])
+    tvector_coords = rotation_matrix_to_global.dot(tvector_coords)
+    tvector_vel = rotation_matrix_to_global.dot(tvector_vel)
+    tvector_acc = rotation_matrix_to_global.dot(tvector_acc)
+    # convert from global coord system to nodeB coord sys
+    # apply the rotation from global coord system to nodeB
+    # ( x_new = xcos(angle) - ysin(angle) and y_new = xsin(angle) + ycos(angle) )
+    rotation_matrix_to_nodeB = np.array([[np.cos(nodeB_angle), -1*np.sin(nodeB_angle)], 
+                                          [np.sin(nodeB_angle), np.cos(nodeB_angle)]])
+    tvector_coords = rotation_matrix_to_nodeB.dot(tvector_coords)
+    tvector_vel = rotation_matrix_to_nodeB.dot(tvector_vel)
+    tvector_acc = rotation_matrix_to_nodeB.dot(tvector_acc)
+    print("transformed vel: ", tvector_vel)
+    print("transformed acc: ", tvector_acc)
+    # apply the translation - affects only the first 2 components
+    nodeB_trans = np.array([nodeB_trans[0], nodeB_trans[1]]) # x and y components of translation
+    tvector_coords = tvector_coords - nodeB_trans
     # now the node's t_vector will be in the neighbour's coordinate system
-    transformed_vector = np.array([x_new, y_new, Vx_new, Vy_new, Ax_new, Ay_new])
-    # debugging - need to check that the acceleration of the transformed vector not equal to 0
-    print("New acceleration: ", Ax_new)
-
+    transformed_vector = np.array([tvector_coords[0], tvector_coords[1], 
+                                   tvector_vel[0], tvector_vel[1], 
+                                   tvector_acc[0], tvector_acc[1]])
+    print("transformed vector 1: ", transformed_vector)
 
     
+
+
+    # OLD extrapolation technique...
     node_x = node_attr['GNN_Measurement'].x
     node_y = node_attr['GNN_Measurement'].y
     neighbour_x = neighbour_attr['GNN_Measurement'].x
