@@ -60,6 +60,26 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
                                    tvector_acc[0], tvector_acc[1]])
     print("transformed vector 1: ", transformed_vector)
 
+    # compute the step size for extrapolation - calculated from solving quadratic equation
+    xt = transformed_vector[0]
+    Vxt = transformed_vector[2]
+    Axt = transformed_vector[4]
+    print("transformed xt, Vxt and Axt: ", xt, Vxt, Axt)
+    step1 = (-1 * xt) / Vxt
+    step2 = (xt / Vxt) - (2 * Vxt / Axt)
+    print("step1: ", step1)
+    print("step2: ", step2)
+
+    # extrapolation jacobian
+    yt = transformed_vector[1]
+    Vyt = transformed_vector[3]
+    Ayt = transformed_vector[5]
+    xc = 0
+    yc = yt + (Vyt * step1) + (0.5 * Ayt * step1**2)
+    bc = (Vyt + (step1 * Ayt)) / (Vxt + (step1 * Axt))
+    ac = Ayt
+
+
     
 
 
