@@ -181,7 +181,7 @@ def angle_trunc(a):
     return a
 
 
-# get angle to the positive x axis in radians
+# get angle to the positive x axis in radians - measured clockwise
 def getAngleBetweenPoints(p1, p2):
     deltaY = p2[1] - p1[1]
     deltaX = p2[0] - p1[0]

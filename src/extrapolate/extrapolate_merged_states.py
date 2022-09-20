@@ -13,20 +13,46 @@ import pprint
 
 def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour_attr, chi2CutFactor, sigma_ms):
     # transform the t_vector from the node coord sys to its neighbour node coord sys
-    # first undo the translation of the node's t_vector
     node_angle_of_rotation = node_attr['angle_of_rotation']
     node_translation = node_attr['translation']
     node_translation_x = node_translation[0]
     node_translation_y = node_translation[1]
     node_t_vector = node_attr['track_state_estimates'][neighbour_num]['t_vector']
-    node_t_vector[0] = node_t_vector[0] + node_translation_x
-    node_t_vector[1] = node_t_vector[1] + node_translation_y
-    # next undo the rotation of the node's t_vector
     neighbour_angle_of_rotation = neighbour_attr['angle_of_rotation']
     neighbour_translation = neighbour_attr['translation']
-    # ....
+    neighbour_translation_x = neighbour_translation[0]
+    neighbour_translation_y = neighbour_translation[1]
+    # first undo the tranformation of the node's t_vector - affects only the first 2 components
+    x = node_t_vector[0] + node_translation_x
+    y = node_t_vector[1] + node_translation_y
+    # next undo the rotation of the node's t_vector - rotate clockwise - apply to the entire vector    
+    angle = node_angle_of_rotation
+    x_new = x * np.cos(angle) + y * np.sin(angle)    # x_new = xcos(angle) + ysin(angle)
+    y_new = y * np.cos(angle) - x * np.sin(angle)    # y_new = - xsin(angle) + ycos(angle)
+    Vx = node_t_vector[2]
+    Vy = node_t_vector[3]
+    Vx_new = Vx * np.cos(angle) + Vy * np.sin(angle)
+    Vy_new = Vy * np.cos(angle) - Vx * np.sin(angle)
+    Ax = node_t_vector[4]
+    Ay = node_t_vector[5]
+    Ax_new = Ax * np.cos(angle) + Ay * np.sin(angle)
+    Ay_new = Ay * np.cos(angle) - Ax * np.sin(angle)
     # apply the new rotation and translation
-    # ....
+    # first apply the rotation using the neighbour's angle of rotation - rotate anticlockwise
+    angle = neighbour_angle_of_rotation
+    x_new = x_new * np.cos(angle) - y_new * np.sin(angle)    # x_new = xcos(angle) - ysin(angle)
+    y_new = x_new * np.sin(angle) + y_new * np.cos(angle)    # y_new = xsin(angle) + ycos(angle)
+    Vx_new = Vx_new * np.cos(angle) + Vy_new * np.sin(angle)
+    Vy_new = Vy_new * np.cos(angle) - Vx_new * np.sin(angle)
+    Ax_new = Ax_new * np.cos(angle) + Ay_new * np.sin(angle)
+    Ay_new = Ay_new * np.cos(angle) - Ax_new * np.sin(angle)
+    # next apply the translation using the neighbour's translation
+    x_new = x_new - neighbour_translation_x
+    y_new = y_new - neighbour_translation_y
+    # now the node's t_vector will be in the neighbour's coordinate system
+    transformed_vector = np.array([x_new, y_new, Vx_new, Vy_new, Ax_new, Ay_new])
+    # debugging - need to check that the acceleration of the transformed vector not equal to 0
+    print("New acceleration: ", Ax_new)
 
 
     
