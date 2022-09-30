@@ -283,7 +283,7 @@ def compute_track_state_estimates(GraphList):
                 track_state_vector = H_inv.dot(measurement_vector)  # parabolic parameters: a, b, c
                 a = track_state_vector[0]
                 b = track_state_vector[1]
-                c = track_state_vector[2]
+                c = track_state_vector[2]   # the measurement y = c
                 norm_factor = 1/(np.sqrt(1 + b**2))
                 t_vector = np.array([0, c, norm_factor, b*norm_factor, 0, a])
                 covariance = H_inv.dot(S).dot(H_inv.T)
