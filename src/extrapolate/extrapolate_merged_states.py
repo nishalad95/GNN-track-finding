@@ -23,6 +23,7 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     nodeB_trans = neighbour_attr['translation']
     print("6 component tvector: ", tvector)
     tvector_coords = tvector[:2]
+    x_a = tvector_coords[0]
     tvector_vel = tvector[2:4]
     tvector_acc = tvector[4:]
     # convert node coord sys to global
@@ -58,26 +59,61 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     transformed_vector = np.array([tvector_coords[0], tvector_coords[1], 
                                    tvector_vel[0], tvector_vel[1], 
                                    tvector_acc[0], tvector_acc[1]])
-    print("transformed vector 1: ", transformed_vector)
+    print("transformed vector: ", transformed_vector)
 
     # compute the step size for extrapolation - calculated from solving quadratic equation
     xt = transformed_vector[0]
     Vxt = transformed_vector[2]
     Axt = transformed_vector[4]
     print("transformed xt, Vxt and Axt: ", xt, Vxt, Axt)
-    step1 = (-1 * xt) / Vxt
-    step2 = (xt / Vxt) - (2 * Vxt / Axt)
-    print("step1: ", step1)
-    print("step2: ", step2)
+    step = (-xt / Vxt) - ( (Axt * xt**2) / (2 * Vxt**3) )
+    
+    print("step: ", step)
+    # temporary - for checking the step size
+    with open('step.txt', 'a') as the_file:
+        the_file.write(str(step) + '\n')
 
-    # extrapolation jacobian
+    # compute parabolic parameters
     yt = transformed_vector[1]
     Vyt = transformed_vector[3]
     Ayt = transformed_vector[5]
     xc = 0
-    yc = yt + (Vyt * step1) + (0.5 * Ayt * step1**2)
-    bc = (Vyt + (step1 * Ayt)) / (Vxt + (step1 * Axt))
+    yc = yt + (Vyt * step) + (0.5 * Ayt * step**2)
+    bc = (Vyt + (step * Ayt)) / (Vxt + (step * Axt))
     ac = Ayt
+
+    # parabolic track state
+    merged_state = node_attr['merged_state']
+    a, b, c = merged_state[0], merged_state[1], merged_state[2]
+
+    # partial s* as a function of parabolic parameters a, b, c
+    theta = # TODO : calculate new theta angle between nodeA and nodeC
+    numer = x_a + c*np.sin(theta)
+    denom = np.cos(theta) + b*np.sin(theta)
+    ds_da = - (np.sin(theta) * numer**2 ) / denom**3
+    ds_db = ((np.sin(theta) * numer) * (1 + ((3 * a * np.sin(theta) * numer) / denom**2))) / denom**2
+    ds_dc = - np.sin(theta) * (1 + ((2 * a * np.sin(theta) * numer) / denom**2)) / denom
+
+    # partial a' : da'/da, da'/db, da'dc
+    denom = np.cos(theta) + ((2*a + b) * np.sin(theta))
+    da_da = (1 / denom**3) * (1 - ((6 * a * np.sin(theta)) * (step + a * ds_da) / denom))
+    da_db = (-3 * a * np.sin(theta) * ((2 * a * ds_db) + 1)) / denom**4
+    da_dc = (-6 * np.sin(theta) * ds_dc * a**2) / denom**4
+
+    # partial b' : db'/da, db'/db, db'dc
+
+
+    # partial c' : dc'/da, dc'/db, dc'dc
+
+
+    # extrapolation jacobian
+    F = np.array([[da_da,    da_db,     da_dc], 
+                  [db_da,    db_db,     db_dc],
+                  [dc_da,    dc_db,     dc_dc]])      # F state transition matrix, extrapolation Jacobian
+
+
+
+
 
 
     
