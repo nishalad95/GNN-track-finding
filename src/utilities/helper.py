@@ -185,7 +185,10 @@ def angle_trunc(a):
 def getAngleBetweenPoints(p1, p2):
     deltaY = p2[1] - p1[1]
     deltaX = p2[0] - p1[0]
-    return angle_trunc(atan2(deltaY, deltaX))
+    print("initialization: ")
+    angle = angle_trunc(atan2(deltaY, deltaX))
+    print("angle: ", angle)
+    return angle
 
 
 def rotate_track(coords, separation_3d_threshold=None):
@@ -200,15 +203,17 @@ def rotate_track(coords, separation_3d_threshold=None):
             p2 = coords[-3]
 
     # rotate counter clockwise, first edge to be parallel with x axis
-    angle = 2*pi - getAngleBetweenPoints(p1, p2)
-    cos_angle = np.cos(angle)
-    sin_angle = np.sin(angle)
+    angle = getAngleBetweenPoints(p1, p2)
+    # angle = 2*pi - getAngleBetweenPoints(p1, p2)
     rotated_coords = []
     for c in coords:
         x, y = c[0], c[1]
-        x_new = x * np.cos(angle) - y * np.sin(angle)    # x_new = xcos(angle) - ysin(angle)
-        y_new = x * np.sin(angle) + y * np.cos(angle)    # y_new = xsin(angle) + ycos(angle) 
+        x_new = (x * np.cos(angle)) - (y * np.sin(angle))    # x_new = xcos(angle) - ysin(angle)
+        y_new = (x * np.sin(angle)) + (y * np.cos(angle))    # y_new = xsin(angle) + ycos(angle) 
         rotated_coords.append((x_new, y_new)) 
+        print("rotate track: ")
+        print("original coordinates: ", x, y)
+        print("x_new, y_new:", x_new, y_new)
     return rotated_coords, angle
 
 def compute_track_state_estimates(GraphList):

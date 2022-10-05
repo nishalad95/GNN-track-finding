@@ -13,7 +13,7 @@ ROOTDIR=src/output      # output directory to store GNN algorithm output
 LUT=learn_KL_linear_model/output/empvar/empvar_relaxed.lut   # LUT file for KL distance calibration
 
 # extrapolation
-c=200000.0                     #  initial chi2 distance acceptance threshold for extrapolated states
+c=500                     #  initial chi2 distance acceptance threshold for extrapolated states
 
 # extracting track candidates
 p=0.01                  # p-value acceptance level for good track candidate extraction - currently applied in xy plane

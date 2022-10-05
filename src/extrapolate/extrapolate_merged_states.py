@@ -12,26 +12,35 @@ import pprint
 
 def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour_attr, chi2CutFactor, sigma_ms):
     # Compute the angle between nodeA (central node) and nodeC (neighbour to extrapolate to) using global c.s.
-    node_x = node_attr['GNN_Measurement'].x
+    node_x = node_attr['GNN_Measurement'].x     # global coordinates
     node_y = node_attr['GNN_Measurement'].y
-    neighbour_x = neighbour_attr['GNN_Measurement'].x
+    neighbour_x = neighbour_attr['GNN_Measurement'].x       # global coordinates
     neighbour_y = neighbour_attr['GNN_Measurement'].y
     phi = np.arccos(((node_x * neighbour_x) + (node_y * neighbour_y)) / (np.sqrt(node_x**2 + node_y**2) * np.sqrt(neighbour_x**2 + neighbour_y**2)))
     print("phi between node A and node C:")
-    print("phi is radians:", phi)
     phi_deg = phi * 180 / np.pi
     print("phi is deg:", phi_deg)
 
     # parabolic track state (and parameteres) at node A
     merged_state = node_attr['merged_state']
     a, b, c = merged_state[0], merged_state[1], merged_state[2]
+    print("original parabolic parameters: ", a, b, c)
 
+    # Change coordinate systems! Transform nodeA into coord system of nodeC
     # calculation of x_A and y_A (coordinates x and y of node A in c.s. of node C)
     # apply the translation of nodeC to the global of nodeA
     nodeC_trans_x = neighbour_attr['translation'][0]
     nodeC_trans_y = neighbour_attr['translation'][1]
-    x_A = node_x - nodeC_trans_x    # nodeA x coords in c.s. of nodeC
-    y_A = node_y - nodeC_trans_y    # nodeA y coords in c.s. of nodeC
+    print("original coordinates of nodeA - global (x,y): ", node_x, node_y)
+    print("original coordinates of nodeC - global (x,y): ", neighbour_x, neighbour_y)
+    print("translation x: ", nodeC_trans_x)
+    print("translation y: ", nodeC_trans_y)
+    # Apply both translation and rotation in order to change coordinate systems!
+    x_A = (node_x * np.cos(phi)) - (node_y * np.sin(phi)) - nodeC_trans_x    # nodeA x coord in c.s. of nodeC
+    y_A = (node_x * np.sin(phi)) + (node_y * np.cos(phi)) - nodeC_trans_y    # nodeA y coord in c.s. of nodeC
+    # x_A = node_x - nodeC_trans_x    # nodeA x coord in c.s. of nodeC
+    # y_A = node_y - nodeC_trans_y    # nodeA y coord in c.s. of nodeC
+    print("transformed coordinates of nodeA in c.s. of nodeC (x,y): ", x_A, y_A)
 
     # calculation of track position/parameters in the target c.s. (nodeC)
     x_prime = x_A + c * np.sin(phi)     # x_prime = x_A + scos(phi) + (as**2 + bs + c)*sin(phi), when s=0
@@ -40,17 +49,19 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
 
     # s* substitution
     s_star = - ((2 * Vx_prime**2 * x_prime) + (Ax_prime * x_prime**2)) / (2 * Vx_prime**3)
+    print("step size: ", s_star)
 
     # compute y'
-    y_prime = y_A - (s_star * np.sin(phi)) + ((a*s**2 + b*s + c)*np.cos(phi))
+    y_prime = y_A - (s_star * np.sin(phi)) + ((a*s_star**2 + b*s_star + c)*np.cos(phi))
     # now x and y are in the c.s. of nodeC --> transformed: x_prime (x') and y_prime (y')
 
-    # transformed Vy_prime and Ay_prime in the c.s. of nodeC
-    Vy_prime = 
-    Ay_prime =
+    # Calculate Vy_prime and Ay_prime (transformed parameters in the c.s. of nodeC)
+    # TODO check this stage:
+    Vy_prime = - np.sin(phi) + b * np.cos(phi)      # taking the terms with s from y_prime equation
+    Ay_prime = a * np.cos(phi)                      # taking the terms with s**2 from y_prime equation
 
     # compute new (extrapolated) parabolic parameters at nodeC
-    x_c = 0
+    x_c = 0     # condition
     y_c = y_prime + (Vy_prime * s_star) + (0.5 * Ay_prime * s_star**2)  # y_c = parabolic parmeter c and nodeC
     b_c = (Vy_prime + (s_star * Ay_prime)) / (Vx_prime + (s_star * Ax_prime))
     a_c = Ay_prime
@@ -91,124 +102,15 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     extrp_state = F.dot(merged_state)
     extrp_cov = F.dot(merged_cov).dot(F.T)
 
-    print("extrapolated ac, bc, yc from computation: ", ac, bc, yc)
-    print("extrapolated track state from F matrix (derivations): ", extrp_state)
-
-
-
-    
-    
-
-
-
-
-
-
-
-
-    #########################
-    
-    # 1) transformation of parametric t_vector from surface bound to surface free plane
-    # 2) extrapolation of the tvector 
-    # 3) calculation of new extrapolated parabolic parameters
-    # transform the t_vector from the node coord sys to its neighbour node coord sys
-    nodeA_angle = node_attr['angle_of_rotation']
-    nodeA_trans = node_attr['translation']
-    tvector = node_attr['track_state_estimates'][neighbour_num]['t_vector']
-    nodeB_angle = neighbour_attr['angle_of_rotation']
-    nodeB_trans = neighbour_attr['translation']
-    print("6 component tvector: ", tvector)
-    tvector_coords = tvector[:2]
-    x_a = tvector_coords[0]
-    tvector_vel = tvector[2:4]
-    tvector_acc = tvector[4:]
-    # convert node coord sys to global
-    # undo the translation of nodeA's tvector - affects only the first 2 components
-    nodeA_trans = np.array([nodeA_trans[0], nodeA_trans[1]]) # x and y components of translation
-    tvector_coords = tvector_coords + nodeA_trans
-    # undo the rotation from nodeA's coord sys back to global, rotate clockwise
-    # ( x_new = xcos(angle) + ysin(angle) and y_new = -xsin(angle) + ycos(angle) )
-    rotation_matrix_to_global = np.array([[np.cos(nodeA_angle), np.sin(nodeA_angle)], 
-                                          [-1*np.sin(nodeA_angle), np.cos(nodeA_angle)]])
-    tvector_coords = rotation_matrix_to_global.dot(tvector_coords)
-    tvector_vel = rotation_matrix_to_global.dot(tvector_vel)
-    tvector_acc = rotation_matrix_to_global.dot(tvector_acc)
-    # convert from global coord system to nodeB coord sys
-    # apply the rotation from global coord system to nodeB
-    # ( x_new = xcos(angle) - ysin(angle) and y_new = xsin(angle) + ycos(angle) )
-    rotation_matrix_to_nodeB = np.array([[np.cos(nodeB_angle), -1*np.sin(nodeB_angle)], 
-                                          [np.sin(nodeB_angle), np.cos(nodeB_angle)]])
-    tvector_coords = rotation_matrix_to_nodeB.dot(tvector_coords)
-    tvector_vel = rotation_matrix_to_nodeB.dot(tvector_vel)
-    tvector_acc = rotation_matrix_to_nodeB.dot(tvector_acc)
-    # apply the translation - affects only the first 2 components
-    nodeB_trans = np.array([nodeB_trans[0], nodeB_trans[1]]) # x and y components of translation
-    tvector_coords = tvector_coords - nodeB_trans
-    # now the node's t_vector will be in the neighbour's coordinate system
-    transformed_vector = np.array([tvector_coords[0], tvector_coords[1], 
-                                   tvector_vel[0], tvector_vel[1], 
-                                   tvector_acc[0], tvector_acc[1]])
-
-    # compute the step size for extrapolation - calculated from solving quadratic equation
-    xt = transformed_vector[0]
-    Vxt = transformed_vector[2]
-    Axt = transformed_vector[4]
-    print("transformed xt, Vxt and Axt: ", xt, Vxt, Axt)
-    step = (-xt / Vxt) - ( (Axt * xt**2) / (2 * Vxt**3) )
-
-    # compute parabolic parameters
-    yt = transformed_vector[1]
-    Vyt = transformed_vector[3]
-    Ayt = transformed_vector[5]
-    # new parabolic parameters at node C
-    xc = 0
-    yc = yt + (Vyt * step) + (0.5 * Ayt * step**2)
-    bc = (Vyt + (step * Ayt)) / (Vxt + (step * Axt))
-    ac = Ayt
-
-    # partial s* as a function of parabolic parameters a, b, c
-    numer = x_a + c*np.sin(theta)
-    denom = np.cos(theta) + b*np.sin(theta)
-    ds_da = - (np.sin(theta) * numer**2 ) / denom**3
-    ds_db = ((np.sin(theta) * numer) * (1 + ((3 * a * np.sin(theta) * numer) / denom**2))) / denom**2
-    ds_dc = - np.sin(theta) * (1 + ((2 * a * np.sin(theta) * numer) / denom**2)) / denom
-
-    # partial a' : da'/da, da'/db, da'dc
-    denom = np.cos(theta) + ((2*a + b) * np.sin(theta))
-    da_da = (1 / denom**3) * (1 - ((6 * a * np.sin(theta)) * (step + a * ds_da) / denom))
-    da_db = (-3 * a * np.sin(theta) * ((2 * a * ds_db) + 1)) / denom**4
-    da_dc = (-6 * np.sin(theta) * ds_dc * a**2) / denom**4
-
-    # partial b' : db'/da, db'/db, db'dc
-    denom = np.cos(theta) + ((2*a*step + b) * np.sin(theta))
-    bracket = np.cos(theta) - ((np.sin(theta) * (-np.sin(theta) + ((2*a*step + b)*np.cos(theta))) ) / denom )
-    db_da = (2 * (step + a * ds_da) * bracket) / denom
-    db_db = ((1 + (2 * a * ds_da)) * bracket) / denom
-    db_dc = (2 * a * ds_dc * bracket) / denom
-
-    # partial c' : dc'/da, dc'/db, dc'dc
-    bracket = (np.cos(theta) * (2*a + b)) - np.sin(theta)
-    dc_da = (ds_da * bracket) + (step**2 * np.cos(theta))
-    dc_db = (ds_db * bracket) + (step * np.cos(theta))
-    dc_dc = (ds_dc * bracket) + np.cos(theta)
-
-    # extrapolation jacobian
-    F = np.array([[da_da,    da_db,     da_dc], 
-                  [db_da,    db_db,     db_dc],
-                  [dc_da,    dc_db,     dc_dc]])      # F state transition matrix, extrapolation Jacobian
-
-    merged_cov = node_attr['merged_cov']
-    sigma0 = node_attr['GNN_Measurement'].sigma0
-    extrp_state = F.dot(merged_state)
-    extrp_cov = F.dot(merged_cov).dot(F.T)
-
-    print("extrapolated ac, bc, yc from computation: ", ac, bc, yc)
+    print("extrapolated ac, bc, yc from computation: ", a_c, b_c, y_c)
     print("extrapolated track state from F matrix (derivations): ", extrp_state)
 
     # validate the extrapolated state against the measurement at the neighbour node
     # calc chi2 distance between measurement at neighbour node and extrapolated track state
     H = np.array([[0., 0., 1.]])
-    residual = neighbour_y - H.dot(extrp_state)     # compute the residual
+    # residual = neighbour_y - H.dot(extrp_state)     # compute the residual
+    neighbour_y_in_cs_nodeC = .0
+    residual = neighbour_y_in_cs_nodeC - H.dot(extrp_state)              # compute the residual
     S = H.dot(extrp_cov).dot(H.T) + sigma0**2       # covariance of residual (denominator of kalman gain)
     inv_S = np.linalg.inv(S)
     chi2 = residual.T.dot(inv_S).dot(residual)
@@ -244,10 +146,11 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
         f.H = H                             # H measurement matrix
         f.P = extrp_cov
         f.R = sigma0**2
-        f.Q = np.array([[0.,     0.,       0.], 
-                        [0.,     sigma_ms, 0.],
-                        [0.,     0.,       0.]])      # Q process uncertainty/noise
-        z = neighbour_y                     # "sensor reading"
+        f.Q = np.array([[0.,     0.,            0.], 
+                        [0.,     sigma_ms**2,   0.],
+                        [0.,     0.,            0.]])      # Q process uncertainty/noise
+        # z = neighbour_y                     # "sensor reading"
+        z = neighbour_y_in_cs_nodeC         # "sensor reading"
 
         # perform KF update & save data
         f.predict()
