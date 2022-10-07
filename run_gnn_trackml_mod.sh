@@ -13,12 +13,13 @@ ROOTDIR=src/output      # output directory to store GNN algorithm output
 LUT=learn_KL_linear_model/output/empvar/empvar_relaxed.lut   # LUT file for KL distance calibration
 
 # extrapolation
-c=500                     #  initial chi2 distance acceptance threshold for extrapolated states
+c=20                     #  initial chi2 distance acceptance threshold for extrapolated states
 
 # extracting track candidates
 p=0.01                  # p-value acceptance level for good track candidate extraction - currently applied in xy plane
 n=4                     # minimum number of hits for good track candidate acceptance (>=n)
 s=10                    # 3d distance threshold for close proximity nodes, used in KF rotatation if nodes too close together
+t=4.0                   # threshold distance node merging in extraction
 
 # ----------------------------------------------------------------------------------------------
 
@@ -147,11 +148,12 @@ for i in {1..2};
         mkdir -p $FRAGMENTS
         if (( $i > 1 ))
         then
+            t=5.1  # threshold distance for node merging has been increased
             let num=$i-1
             cp -r $ROOTDIR/iteration_$num/candidates/ $CANDIDATES
         fi
         prev_duration=$SECONDS
-        python src/extract/extract_track_candidates_parallel.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -m $SIGMA_MS -n $n -s $s
+        python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -m $SIGMA_MS -n $n -s $s -t $t
         INPUT=$REMAINING
 
         # time it!

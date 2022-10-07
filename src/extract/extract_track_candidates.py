@@ -55,8 +55,9 @@ def get_midpoint_coords(xyzr_coords):
     return xm, ym, zm, rm
 
 
-def check_close_proximity_nodes(subgraph):
-    threshold_distance = 4.0
+def check_close_proximity_nodes(subgraph, threshold_distance):
+    # threshold_distance = 4.0        # distance between nodes used for close proximity node merging
+    print("Threshold distance for node merging: ", threshold_distance)
 
     # get the freq distribution of the vivl_ids
     vivl_id_dict = nx.get_node_attributes(subgraph, "vivl_id")
@@ -109,6 +110,7 @@ def check_close_proximity_nodes(subgraph):
                             nodes_to_merge = (node1_coords, node2_coords)
                             xm, ym, zm, rm = get_midpoint_coords(nodes_to_merge)
                             print("merging of nodes possible")
+                            print("distance separation of close proximity nodes: ", distance)
                             
                             # change subgraph attributes
                             copied_subgraph.nodes[node1]['GNN_Measurement'].x = xm
@@ -131,7 +133,7 @@ def check_close_proximity_nodes(subgraph):
                             copied_subgraph.remove_node(node2)
 
                         else:
-                            print("merging of nodes nodes not possible, too large distance between them")
+                            print("merging of nodes nodes not possible, too large distance between them, distance: ", distance)
                             copied_subgraph = None
                             break
                     else:
@@ -149,17 +151,21 @@ def check_close_proximity_nodes(subgraph):
 
 
 
-def angle_trunc(a):
-    while a < 0.0:
-        a += pi * 2
+def angle_trunc(a, p2):
+    if p2[1] > 0.0:
+        a = (2*np.pi) - a
     return a
+    # while a < 0.0:
+    #     a += pi * 2
+    # return a
 
 
 # get angle to the positive x axis in radians
 def getAngleBetweenPoints(p1, p2):
     deltaY = p2[1] - p1[1]
     deltaX = p2[0] - p1[0]
-    return angle_trunc(atan2(deltaY, deltaX))
+    angle = np.abs(atan2(deltaY, deltaX))
+    return angle_trunc(angle, p2)
 
 
 def rotate_track(coords, separation_3d_threshold):
@@ -173,9 +179,7 @@ def rotate_track(coords, separation_3d_threshold):
         p2 = coords[-3]
 
     # rotate counter clockwise, first edge to be parallel with x axis
-    angle = 2*pi - getAngleBetweenPoints(p1, p2)
-    cos_angle = np.cos(angle)
-    sin_angle = np.sin(angle)
+    angle = getAngleBetweenPoints(p1, p2)
     rotated_coords = []
     for c in coords:
         x, y, z, r = c[0], c[1], c[2], c[3]
@@ -312,6 +316,7 @@ def main():
     parser.add_argument('-f', '--fragments', help='output directory to save track fragments')
     parser.add_argument('-p', '--pval', help='chi-squared track candidate acceptance level')
     parser.add_argument('-s', '--separation_3d_threshold', help="3d distance cut between close proximity nodes, used in node merging")
+    parser.add_argument('-t', '--threshold_distance_node_merging', help="threshold_distance_node_merging")
     # parser.add_argument('-e', '--error', help="rms of track position measurements")
     parser.add_argument('-m', '--sigma_ms', help="uncertainty due to multiple scattering, process noise")
     parser.add_argument('-n', '--numhits', help="minimum number of hits for good track candidate")
@@ -328,6 +333,7 @@ def main():
     subgraph_path = "_subgraph.gpickle"
     fragment = int(args.numhits)
     separation_3d_threshold = float(args.separation_3d_threshold)
+    threshold_distance_node_merging = float(args.threshold_distance_node_merging)
     # get iteration num
     inputDir_list = inputDir.split("/")
     iterationDir = filter(lambda x: x.startswith('iteration_'), inputDir_list)
@@ -367,7 +373,7 @@ def main():
                 
                 # check for close proximity nodes based on their distance & common module_id values - merge where appropriate
                 # if merged_candidate is not None, then we need to use merged_candidate's coords in the KF, but extract the original candidate
-                candidate, merged_candidate = check_close_proximity_nodes(candidate)
+                candidate, merged_candidate = check_close_proximity_nodes(candidate, threshold_distance_node_merging)
                 
                 candidate_to_assess = candidate
                 if merged_candidate is not None: candidate_to_assess = merged_candidate
@@ -405,7 +411,7 @@ def main():
                             candidate_to_remove_from_subGraph.append(candidate)
                             
                         else:
-                            print("p-value too small, leave for further processing, pval_xy: " + pval + " pval_zr: "+ pval_zr)
+                            print("p-value too small, leave for further processing, pval_xy: " + str(pval) + " pval_zr: " + str(pval_zr))
                     else:
                         print("Candidate not accepted, not connceted in order")
 

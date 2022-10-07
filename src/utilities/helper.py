@@ -175,9 +175,9 @@ def compute_3d_distance(coord1, coord2):
     return np.sqrt( (x1 - x2)**2 + (y1 - y2)**2 + (z1 - z2)**2 )
 
 
-def angle_trunc(a):
-    while a < 0.0:
-        a += pi * 2
+def angle_trunc(a, p2):
+    if p2[1] > 0.0:
+        a = (2*np.pi) - a
     return a
 
 
@@ -185,9 +185,12 @@ def angle_trunc(a):
 def getAngleBetweenPoints(p1, p2):
     deltaY = p2[1] - p1[1]
     deltaX = p2[0] - p1[0]
-    print("initialization: ")
-    angle = angle_trunc(atan2(deltaY, deltaX))
-    print("angle: ", angle)
+    angle = np.abs(atan2(deltaY, deltaX))
+    angle = angle_trunc(angle, p2)
+    angle_deg = angle * 180/np.pi
+    print("calculating angle of rotation....")
+    print("coordinates p1 and p2: ", p1[0], p1[1], p2[0], p2[1])
+    print("angle_trunc_deg: ", angle_deg)
     return angle
 
 
@@ -202,18 +205,19 @@ def rotate_track(coords, separation_3d_threshold=None):
         if distance < separation_3d_threshold:
             p2 = coords[-3]
 
-    # rotate counter clockwise, first edge to be parallel with x axis
+    # rotate counter clockwise, first edge (origin-node edge) to be parallel with x axis
     angle = getAngleBetweenPoints(p1, p2)
-    # angle = 2*pi - getAngleBetweenPoints(p1, p2)
+    angle_deg = angle * 180/np.pi
     rotated_coords = []
     for c in coords:
         x, y = c[0], c[1]
         x_new = (x * np.cos(angle)) - (y * np.sin(angle))    # x_new = xcos(angle) - ysin(angle)
         y_new = (x * np.sin(angle)) + (y * np.cos(angle))    # y_new = xsin(angle) + ycos(angle) 
         rotated_coords.append((x_new, y_new)) 
-        print("rotate track: ")
+        print("Rotating track anticlockwise.... ")
         print("original coordinates: ", x, y)
         print("x_new, y_new:", x_new, y_new)
+        print("angle of rotation in degrees: ", angle_deg)
     return rotated_coords, angle
 
 def compute_track_state_estimates(GraphList):
@@ -254,10 +258,13 @@ def compute_track_state_estimates(GraphList):
 
             # rotate the node & its neighbours to local node-specific coordinate system
             rotated_coords, angle_of_rotation = rotate_track(coords)
+            print("all rotated coordinates: \n", rotated_coords)
+            print("angle of rotation: ", angle_of_rotation)
 
             # translate all coords such that the node in question becomes the new origin
             x_trans = rotated_coords[-2][0]
             y_trans = rotated_coords[-2][1]
+            print("x_trans, y_trans: ", x_trans, y_trans)
             transformed_coords = []
             for rc in rotated_coords:
                 tx = rc[0] - x_trans
@@ -306,6 +313,7 @@ def compute_track_state_estimates(GraphList):
             G.nodes[node]['edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
             # store the transformation information - used in extrapolation
             G.nodes[node]['angle_of_rotation'] = angle_of_rotation
+            print("storing x_trans, y_trans: ", x_trans, y_trans)
             G.nodes[node]['translation'] = (x_trans, y_trans)
 
     return GraphList
@@ -484,7 +492,14 @@ def __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, extrac
                                                 title, key, axis1, axis2, node_labels, save_plot):
 
     _, ax = plt.subplots(figsize=(12,10))
+    iteration_1=[]
+    other_iterations=[]
     for subGraph in GraphList:
+        iteration = int(subGraph.graph["iteration"])
+        if iteration == 1: iteration_1.append(subGraph)
+        else: other_iterations.append(subGraph)
+
+    for subGraph in iteration_1:
         iteration = int(subGraph.graph["iteration"])
         color = subGraph.graph["color"]
         pos=nx.get_node_attributes(subGraph, key)
@@ -496,6 +511,20 @@ def __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, extrac
         nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=50, label=iteration)
         if node_labels:
             nx.draw_networkx_labels(subGraph, pos, font_size=4)
+    
+    for subGraph in other_iterations:
+        iteration = int(subGraph.graph["iteration"])
+        color = subGraph.graph["color"]
+        pos=nx.get_node_attributes(subGraph, key)
+        edge_colors = []
+        for u, v in subGraph.edges():
+            if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
+            else: edge_colors.append("#f2f2f2")
+        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
+        nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=50, label=iteration)
+        if node_labels:
+            nx.draw_networkx_labels(subGraph, pos, font_size=4)
+    
     ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
     plt.xlabel(axis1)
     plt.ylabel(axis2)

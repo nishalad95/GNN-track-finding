@@ -38,8 +38,6 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     # Apply both translation and rotation in order to change coordinate systems!
     x_A = (node_x * np.cos(phi)) - (node_y * np.sin(phi)) - nodeC_trans_x    # nodeA x coord in c.s. of nodeC
     y_A = (node_x * np.sin(phi)) + (node_y * np.cos(phi)) - nodeC_trans_y    # nodeA y coord in c.s. of nodeC
-    # x_A = node_x - nodeC_trans_x    # nodeA x coord in c.s. of nodeC
-    # y_A = node_y - nodeC_trans_y    # nodeA y coord in c.s. of nodeC
     print("transformed coordinates of nodeA in c.s. of nodeC (x,y): ", x_A, y_A)
 
     # calculation of track position/parameters in the target c.s. (nodeC)
@@ -47,9 +45,19 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     Vx_prime = np.cos(phi) + b * np.sin(phi)
     Ax_prime = a * np.sin(phi)
 
-    # s* substitution
+    # s* substitution - from solution of quadratic equation
     s_star = - ((2 * Vx_prime**2 * x_prime) + (Ax_prime * x_prime**2)) / (2 * Vx_prime**3)
     print("step size: ", s_star)
+    with open('s_star.csv', 'a') as f:
+        f.write(str(s_star) + "\n")
+    
+    # TEMPORARY checking the negative value of s* step
+    if s_star < 0.0:
+        with open('s_star_negative.csv', 'a') as f:
+            f.write(str(node_x) + " " + str(node_y) + str(neighbour_x) + " " + str(neighbour_y) + "\n" )
+    else:
+        with open('s_star_positive.csv', 'a') as f:
+            f.write(str(node_x) + " " + str(node_y) + str(neighbour_x) + " " + str(neighbour_y) + "\n" )
 
     # compute y'
     y_prime = y_A - (s_star * np.sin(phi)) + ((a*s_star**2 + b*s_star + c)*np.cos(phi))
@@ -109,7 +117,7 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     # calc chi2 distance between measurement at neighbour node and extrapolated track state
     H = np.array([[0., 0., 1.]])
     # residual = neighbour_y - H.dot(extrp_state)     # compute the residual
-    neighbour_y_in_cs_nodeC = .0
+    neighbour_y_in_cs_nodeC = .0                      # measurement is always zero in c.s. of neighbour
     residual = neighbour_y_in_cs_nodeC - H.dot(extrp_state)              # compute the residual
     S = H.dot(extrp_cov).dot(H.T) + sigma0**2       # covariance of residual (denominator of kalman gain)
     inv_S = np.linalg.inv(S)

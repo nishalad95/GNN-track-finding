@@ -20,7 +20,7 @@ outputDir = args.output
 event_truth = args.eventTruth
 
 # TODO: will change in future - for endcap only & currently only for iteration1
-inputDir = outputDir + "/iteration_1/candidates/"
+inputDir = outputDir + "/iteration_2/candidates/"
 
 
 # every hit has an associated particle id: from the truth information file for hits
