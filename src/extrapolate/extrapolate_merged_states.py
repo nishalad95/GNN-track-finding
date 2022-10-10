@@ -54,10 +54,10 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     # TEMPORARY checking the negative value of s* step
     if s_star < 0.0:
         with open('s_star_negative.csv', 'a') as f:
-            f.write(str(node_x) + " " + str(node_y) + str(neighbour_x) + " " + str(neighbour_y) + "\n" )
+            f.write(str(node_x) + " " + str(node_y) + " " + str(neighbour_x) + " " + str(neighbour_y) + "\n" )
     else:
         with open('s_star_positive.csv', 'a') as f:
-            f.write(str(node_x) + " " + str(node_y) + str(neighbour_x) + " " + str(neighbour_y) + "\n" )
+            f.write(str(node_x) + " " + str(node_y) + " " + str(neighbour_x) + " " + str(neighbour_y) + "\n" )
 
     # compute y'
     y_prime = y_A - (s_star * np.sin(phi)) + ((a*s_star**2 + b*s_star + c)*np.cos(phi))

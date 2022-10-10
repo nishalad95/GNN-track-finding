@@ -188,9 +188,9 @@ def getAngleBetweenPoints(p1, p2):
     angle = np.abs(atan2(deltaY, deltaX))
     angle = angle_trunc(angle, p2)
     angle_deg = angle * 180/np.pi
-    print("calculating angle of rotation....")
-    print("coordinates p1 and p2: ", p1[0], p1[1], p2[0], p2[1])
-    print("angle_trunc_deg: ", angle_deg)
+    # print("calculating angle of rotation....")
+    # print("coordinates p1 and p2: ", p1[0], p1[1], p2[0], p2[1])
+    # print("angle_trunc_deg: ", angle_deg)
     return angle
 
 
@@ -199,25 +199,35 @@ def rotate_track(coords, separation_3d_threshold=None):
     p1 = coords[-1]
     p2 = coords[-2]
 
-    # if nodes p1 and p2 are too close, use the next node
-    if separation_3d_threshold is not None:    
-        distance = compute_3d_distance(p1, p2)
-        if distance < separation_3d_threshold:
-            p2 = coords[-3]
+    # # if nodes p1 and p2 are too close, use the next node
+    # if separation_3d_threshold is not None:    
+    #     distance = compute_3d_distance(p1, p2)
+    #     if distance < separation_3d_threshold:
+    #         p2 = coords[-3]
 
     # rotate counter clockwise, first edge (origin-node edge) to be parallel with x axis
     angle = getAngleBetweenPoints(p1, p2)
     angle_deg = angle * 180/np.pi
     rotated_coords = []
+    print("Coords before for loop: ", coords)
     for c in coords:
-        x, y = c[0], c[1]
-        x_new = (x * np.cos(angle)) - (y * np.sin(angle))    # x_new = xcos(angle) - ysin(angle)
-        y_new = (x * np.sin(angle)) + (y * np.cos(angle))    # y_new = xsin(angle) + ycos(angle) 
+        print("\nRotating coord c: ", c)
+        x = c[0]
+        y = c[1]
+        c_array = np.array([c[0], c[1]])
+        rotation_matrix = np.array([[np.cos(angle), -np.sin(angle)], 
+                                    [np.sin(angle), np.cos(angle)]])
+       
+        # matrix multiplcation
+        # x_new = xcos(angle) - ysin(angle)
+        # y_new = xsin(angle) + ycos(angle)
+        new_coords = rotation_matrix.dot(c_array)
+        x_new = new_coords[0]
+        y_new = new_coords[1]    
         rotated_coords.append((x_new, y_new)) 
-        print("Rotating track anticlockwise.... ")
-        print("original coordinates: ", x, y)
         print("x_new, y_new:", x_new, y_new)
-        print("angle of rotation in degrees: ", angle_deg)
+        print("")
+
     return rotated_coords, angle
 
 def compute_track_state_estimates(GraphList):
@@ -235,13 +245,15 @@ def compute_track_state_estimates(GraphList):
             gradients = []
             track_state_estimates = {}
             
+            print("\nProcessing node...", node)
+
             # create a list of node & neighbour coords including the origin
             node_gnn = G.nodes[node]["GNN_Measurement"]
             m_node = (node_gnn.x, node_gnn.y)
             coords = [(0.0, 0.0), m_node]
             keys = [-1, node]
 
-            for neighbor in nx.all_neighbors(G, node):
+            for neighbor in set(nx.all_neighbors(G, node)):
                 neighbour_gnn = G.nodes[neighbor]["GNN_Measurement"]
                 m_neighbour = (neighbour_gnn.x, neighbour_gnn.y)
                 coords.append(m_neighbour)
@@ -258,6 +270,8 @@ def compute_track_state_estimates(GraphList):
 
             # rotate the node & its neighbours to local node-specific coordinate system
             rotated_coords, angle_of_rotation = rotate_track(coords)
+            print("post rotation...")
+            print("all original coords list: ", coords)
             print("all rotated coordinates: \n", rotated_coords)
             print("angle of rotation: ", angle_of_rotation)
 
@@ -271,11 +285,12 @@ def compute_track_state_estimates(GraphList):
                 ty = rc[1] - y_trans
                 tc = (tx, ty)
                 transformed_coords.append(tc)
-            # print("Transformation:")
-            # print("angle of rotation in radians: ", angle_of_rotation)
-            # angle_of_rotation_degrees = (180 * angle_of_rotation) / np.pi
-            # print("angle of rotation in degrees: ", angle_of_rotation_degrees)
-            # print("translation: ", x_trans, y_trans)
+            print("Transformation:")
+            print("angle of rotation in radians: ", angle_of_rotation)
+            angle_of_rotation_degrees = (180 * angle_of_rotation) / np.pi
+            print("angle of rotation in degrees: ", angle_of_rotation_degrees)
+            print("translation: ", x_trans, y_trans)
+            print("transformed coords: ", transformed_coords)
 
             # for each neighbour connection obtain the measurement vector in the new axis
             # [m_0, m_A, m_B] m_0 the old origin, m_A the new origin, m_B the neighbour
