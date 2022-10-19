@@ -204,7 +204,7 @@ def compute_track_state_estimates(GraphList):
                 m_neighbour = (neighbour_gnn.x, neighbour_gnn.y)
                 coords.append(m_neighbour)
                 keys.append(neighbor)
-
+                # calculate gradient - used in clustering
                 dy = m_node[1] - m_neighbour[1]
                 dx = m_node[0] - m_neighbour[0]
                 grad = dy / dx
@@ -213,49 +213,29 @@ def compute_track_state_estimates(GraphList):
             # [neighbour1, neighbour2, ..., node, (0.0, 0.0)]
             coords.reverse()
             keys.reverse()
-
-            # get angle of rotation: first edge (origin-node edge) to be parallel with x axis
-            # coords are ordered from outermost to innermost -> use innermost edge
-            p1 = coords[-1]
-            p2 = coords[-2]
-            deltaY = p2[1] - p1[1]
-            deltaX = p2[0] - p1[0]
-            angle = atan2(deltaY, deltaX)
-            angle_deg = angle * 180/np.pi
-            print("All coordinates [neighbour1, neighbour2, ..., node, (0.0, 0.0)]: \n", coords)
-            print("Node0: ", p1, " nodeA: ", p2)
-            print("Angle between +ve x axis, global origin (node0) and central nodeA:")
-            print("This angle will be used in transforming to local coordinate system:")
-            print("Angle (rad): ", angle, "angle in (degrees): ", angle_deg)
-            
-            # if a neighbour exists
-            if len(coords) > 2:
-                p3 = coords[-3]
-                node_x = p2[0]
-                node_y = p2[1]
-                neighbour_x = p3[0]
-                neighbour_y = p3[1]
-                phi = np.arccos(((node_x * neighbour_x) + (node_y * neighbour_y)) / (np.sqrt(node_x**2 + node_y**2) * np.sqrt(neighbour_x**2 + neighbour_y**2)))
-                phi_deg = phi * 180/np.pi
-                print("This node has neighbours, calculating angle to neighbour node:")
-                print("Angle between nodeA and neighbour (nodeC):")
-                print("This angle should be of the order of parabolic parameter b, indicating the direction to the neighbour node")
-                print("Angle (rad): ", phi, "angle (degrees): ", phi_deg)
-                
+  
             # transform the coords: translate and rotate
-            # first translate the node to the global origin and then rotate all coordinates
-            # rotate counter clockwise, first edge (origin-node edge) to be parallel with x axis
-            # x_new = xcos(angle) - ysin(angle)
-            # y_new = xsin(angle) + ycos(angle)
+            # x_new = xcos(angle) + ysin(angle)
+            # y_new = -xsin(angle) + ycos(angle)
             print("Now transforming to local coordinate system:")
-            x_trans = coords[-2][0]
-            y_trans = coords[-2][1]
-            print("x_trans, y_trans:", x_trans, y_trans)
-            print("angle of rotation: ", angle)
+            x_A = m_node[0]
+            y_A = m_node[1]
+            print("NodeA coordinates: we want to move into this local c.s.")
+            print("x_A: ", x_A, "y_A: ", y_A)
+        
+            # get the azimuth angle - angle of rotation (origin-node edge parallel with x axis):
+            azimuth_angle = atan2(y_A, x_A)
+            azimuth_angle_deg = azimuth_angle * 180 / np.pi
+            print("All coordinates [neighbour1, neighbour2, ..., node, (0.0, 0.0)]: \n", coords)
+            print("azimuth_angle: ", azimuth_angle)
+            print("azimuth angle in deg: ", azimuth_angle_deg)
+
             transformed_coords = []
             for c in coords:
-                x_new = (c[0] - x_trans)*np.cos(angle) - (c[1] - y_trans)*np.sin(angle)
-                y_new = (c[0] - x_trans)*np.sin(angle) + (c[1] - y_trans)*np.cos(angle)
+                x_P = c[0]
+                y_P = c[1]
+                x_new = (x_P - x_A)*np.cos(azimuth_angle) + (y_P - y_A)*np.sin(azimuth_angle)
+                y_new = -(x_P - x_A)*np.sin(azimuth_angle) + (y_P - y_A)*np.cos(azimuth_angle)
                 tc = (x_new, y_new)
                 transformed_coords.append(tc)
             print("All original coordinates: ", coords)
@@ -272,11 +252,10 @@ def compute_track_state_estimates(GraphList):
                 x_B = tnc[0]
                 m_B = tnc[1]
                 measurement_vector = [m_O, m_A, m_B]
-                H = np.array([  [x_0**2,         x_0,          1], 
-                                [0.0,            0.0,          1], 
-                                [x_B**2,         x_B,          1]])
-                print("transformed neighbour coord: ", tnc)
-                print("x_B: ", x_B, " m_B: ", m_B)
+                H = np.array([  [0.5*x_0**2,         x_0,          1], 
+                                [0.0,                0.0,          1], 
+                                [0.5*x_B**2,         x_B,          1]])
+                print("x_B: ", x_B, "\nm_B: ", m_B)
                 print("measurement vector: ", measurement_vector)
                 print("H matrix: \n", H)
 
@@ -290,13 +269,13 @@ def compute_track_state_estimates(GraphList):
                 b = track_state_vector[1]
                 c = track_state_vector[2]   # the measurement y = c
 
-                # print("saving parabolic parameters:")
-                # with open('parabolic_param_a.csv', 'a') as f:
-                #     f.write(str(a) + "\n")
-                # with open('parabolic_param_b.csv', 'a') as f:
-                #     f.write(str(b) + "\n")
-                # with open('parabolic_param_c.csv', 'a') as f:
-                #     f.write(str(c) + "\n")
+                print("saving parabolic parameters:")
+                with open('parabolic_param_a.csv', 'a') as f:
+                    f.write(str(a) + "\n")
+                with open('parabolic_param_b.csv', 'a') as f:
+                    f.write(str(b) + "\n")
+                with open('parabolic_param_c.csv', 'a') as f:
+                    f.write(str(c) + "\n")
 
                 norm_factor = 1/(np.sqrt(1 + b**2))
                 t_vector = np.array([0, c, norm_factor, b*norm_factor, 0, a])
@@ -312,10 +291,11 @@ def compute_track_state_estimates(GraphList):
             G.nodes[node]['track_state_estimates'] = track_state_estimates
             # (mean, variance) of edge orientation in xy plane - needed for KL distance in clustering
             G.nodes[node]['edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
+            
             # store the transformation information - used in extrapolation
-            G.nodes[node]['angle_of_rotation'] = angle
-            print("storing x_trans, y_trans: ", x_trans, y_trans)
-            G.nodes[node]['translation'] = (x_trans, y_trans)
+            # G.nodes[node]['angle_of_rotation'] = angle
+            # print("storing x_trans, y_trans: ", x_trans, y_trans)
+            # G.nodes[node]['translation'] = (x_trans, y_trans)
 
     return GraphList
 
