@@ -23,24 +23,11 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     print("global nodeA x,y: ", node_x, node_y)
     print("global target nodeC x,y: ", neighbour_x, neighbour_y)
 
-    # Compute the angle between nodeA (central node) and nodeC (neighbour to extrapolate to) using global c.s.
-    phi = np.arccos(((node_x * neighbour_x) + (node_y * neighbour_y)) / (np.sqrt(node_x**2 + node_y**2) * np.sqrt(neighbour_x**2 + neighbour_y**2)))
-    phi_deg = phi * 180 / np.pi
-    print("global phi between node A and node C (relative angle):")
-    print("phi in rad: ", phi)
-    print("phi in deg:", phi_deg)
-
-    # with open('phi_distribution.csv', 'a') as f:
-    #     f.write(str(phi_deg) + "\n")
-
-    phi_version_2 = atan2( (node_x*neighbour_y) - (node_y*neighbour_x), (node_x*neighbour_x) + (node_y*neighbour_y) )
-    phi_version_2_deg = phi_version_2 * 180 / np.pi
-    print("global phi version 2 between node A and node C (relative angle):")
-    print("phi_version_2 in rad: ", phi_version_2)
-    print("phi_version_2 in deg:", phi_version_2_deg)
-
-    # with open('phi_version_2_distribution.csv', 'a') as f:
-    #     f.write(str(phi_version_2_deg) + "\n")
+    # compute the angle of rotation
+    angle_of_rotation_C = atan2(node_y, node_x)
+    angle_of_rotation_C_deg = angle_of_rotation_C * 180 / np.pi
+    print("phi in rad: ", angle_of_rotation_C)
+    print("phi in deg:", angle_of_rotation_C_deg)
 
     # Change coordinate systems! Transform coordinate axis nodeA into coord axis of nodeC
     # calculation of x_A and y_A (coordinates x and y of node A in c.s. of node C)
@@ -50,17 +37,22 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     nodeA_y = node_attr['GNN_Measurement'].y
     nodeC_trans_x = neighbour_attr['translation'][0]    # global translation
     nodeC_trans_y = neighbour_attr['translation'][1]
- 
+    x_A = (neighbour_x - node_x)*np.cos(angle_of_rotation_C) + (neighbour_y - node_y)*np.sin(angle_of_rotation_C)
+    y_A = -(neighbour_x - node_x)*np.sin(angle_of_rotation_C) + (neighbour_y - node_y)*np.cos(angle_of_rotation_C)
     # x_A = (nodeA_trans_x - nodeC_trans_x)*np.cos(angle_of_rotation_C) + (nodeA_trans_y - nodeC_trans_y)*np.sin(angle_of_rotation_C)
     # y_A = -(nodeA_trans_x - nodeC_trans_x)*np.sin(angle_of_rotation_C) + (nodeA_trans_y - nodeC_trans_y)*np.cos(angle_of_rotation_C)
-    x_A = (nodeA_trans_x - nodeC_trans_x)*np.cos(phi_version_2) + (nodeA_trans_y - nodeC_trans_y)*np.sin(phi_version_2)
-    y_A = -(nodeA_trans_x - nodeC_trans_x)*np.sin(phi_version_2) + (nodeA_trans_y - nodeC_trans_y)*np.cos(phi_version_2)
     print("transformed coordinates of nodeA in c.s. of nodeC (x,y): ", x_A, y_A)
  
     # parabolic track state (and parameteres) at node A
     merged_state = node_attr['merged_state']
     a, b, c = merged_state[0], merged_state[1], merged_state[2]
     print("original parabolic parameters: ", a, b, c)
+
+    phi = atan2( (node_x*neighbour_y) - (node_y*neighbour_x), (node_x*neighbour_x) + (node_y*neighbour_y) )
+    phi_deg = phi * 180 / np.pi
+    print("global phi version 2 between node A and node C (relative angle):")
+    print("phi_version_2 in rad: ", phi)
+    print("phi_version_2 in deg:", phi_deg)
 
     # calculation of track position/parameters in the target c.s. (nodeC)
     x_prime = x_A + (c * np.sin(phi))     # x_prime = x_A + scos(phi) + (as**2 + bs + c)*sin(phi), when s=0

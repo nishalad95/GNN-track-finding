@@ -269,13 +269,13 @@ def compute_track_state_estimates(GraphList):
                 b = track_state_vector[1]
                 c = track_state_vector[2]   # the measurement y = c
 
-                print("saving parabolic parameters:")
-                with open('parabolic_param_a.csv', 'a') as f:
-                    f.write(str(a) + "\n")
-                with open('parabolic_param_b.csv', 'a') as f:
-                    f.write(str(b) + "\n")
-                with open('parabolic_param_c.csv', 'a') as f:
-                    f.write(str(c) + "\n")
+                # print("saving parabolic parameters:")
+                # with open('parabolic_param_a.csv', 'a') as f:
+                #     f.write(str(a) + "\n")
+                # with open('parabolic_param_b.csv', 'a') as f:
+                #     f.write(str(b) + "\n")
+                # with open('parabolic_param_c.csv', 'a') as f:
+                #     f.write(str(c) + "\n")
 
                 norm_factor = 1/(np.sqrt(1 + b**2))
                 t_vector = np.array([0, c, norm_factor, b*norm_factor, 0, a])
@@ -284,18 +284,14 @@ def compute_track_state_estimates(GraphList):
                                                 'edge_covariance': covariance,
                                                 't_vector': t_vector }
 
-            # TODO: debugging
-            # if i == 0:
-            #     print("track state estimates:\n", track_state_estimates)
             # store all track state estimates at the node
             G.nodes[node]['track_state_estimates'] = track_state_estimates
             # (mean, variance) of edge orientation in xy plane - needed for KL distance in clustering
             G.nodes[node]['edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
             
             # store the transformation information - used in extrapolation
-            # G.nodes[node]['angle_of_rotation'] = angle
-            # print("storing x_trans, y_trans: ", x_trans, y_trans)
-            # G.nodes[node]['translation'] = (x_trans, y_trans)
+            G.nodes[node]['angle_of_rotation'] = azimuth_angle
+            G.nodes[node]['translation'] = (x_A, y_A)
 
     return GraphList
 
