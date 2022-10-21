@@ -11,22 +11,22 @@ import os
 import glob
 
 
-def print_graph_stats(inputDir):
-    # read in subgraph data
-    subgraph_path = "_subgraph.gpickle"
-    subGraphs = []
-    os.chdir(".")
-    for file in glob.glob(inputDir + "*" + subgraph_path):
-        sub = nx.read_gpickle(file)
-        subGraphs.append(sub)
+# def print_graph_stats(inputDir):
+#     # read in subgraph data
+#     subgraph_path = "_subgraph.gpickle"
+#     subGraphs = []
+#     os.chdir(".")
+#     for file in glob.glob(inputDir + "*" + subgraph_path):
+#         sub = nx.read_gpickle(file)
+#         subGraphs.append(sub)
 
-    num_nodes = 0
-    num_edges = 0
-    for subGraph in subGraphs:
-        num_nodes += len(subGraph.nodes())
-        num_edges += len(subGraph.edges())
-    print("num_nodes: ", num_nodes)
-    print("node_edges: ", num_edges)
+#     num_nodes = 0
+#     num_edges = 0
+#     for subGraph in subGraphs:
+#         num_nodes += len(subGraph.nodes())
+#         num_edges += len(subGraph.edges())
+#     print("num_nodes: ", num_nodes)
+#     print("node_edges: ", num_edges)
 
 
 def main():
@@ -38,9 +38,6 @@ def main():
     parser.add_argument('-m', '--sigma_ms', help="uncertainty due to multiple scattering, process noise")
     parser.add_argument('-n', '--eventNetwork', help="Full directory path to event nodes, edges & nodes-to-hits")
     parser.add_argument('-t', '--eventTruth', help="Full directory path to event truth from TrackML")
-    
-    # TODO: temporary, only considering endcap volume 7
-    max_volume_region = 8000 # first consider endcap volume 7 only
 
     args = parser.parse_args()
     outputDir = args.outputDir
@@ -54,7 +51,7 @@ def main():
     event_truth_file = event_truth + "full-mapping-minCurv-0.3-800.csv"
 
     # load truth information & metadata on events
-    nodes, edges = h.load_nodes_edges(event_network, max_volume_region)
+    nodes, edges = h.load_nodes_edges(event_network)
     # h.load_save_truth(event_network, event_truth, event_truth_file) #  only need to execute once
     truth = pd.read_csv(event_truth_file)
 
@@ -71,12 +68,7 @@ def main():
     endcap_graph = nx.Graph(endcap_graph[0])
     endcap_graph = nx.to_directed(endcap_graph)
 
-    # temporary: can remove later
-    print("Number of edges again:", endcap_graph.number_of_edges())
-    print("Number of nodes again:", endcap_graph.number_of_nodes())
-
     subGraphs = [endcap_graph.subgraph(c).copy() for c in nx.weakly_connected_components(endcap_graph)]
-    
     subGraphs = h.compute_track_state_estimates(subGraphs)
     h.initialize_edge_activation(subGraphs)
     h.compute_prior_probabilities(subGraphs, 'track_state_estimates')
@@ -89,7 +81,7 @@ def main():
     for i, sub in enumerate(subGraphs):
         h.save_network(outputDir, i, sub)
 
-    print_graph_stats(outputDir)
+    # print_graph_stats(outputDir)
 
 
 

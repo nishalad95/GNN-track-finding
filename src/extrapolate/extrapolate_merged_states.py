@@ -16,32 +16,24 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     print("Processing node num: ", node_num)
 
     # global coordinates of node and neighbour
-    node_x = node_attr['GNN_Measurement'].x
+    node_x = node_attr['GNN_Measurement'].x             # nodeA
     node_y = node_attr['GNN_Measurement'].y
-    neighbour_x = neighbour_attr['GNN_Measurement'].x
+    neighbour_x = neighbour_attr['GNN_Measurement'].x   # nodeC
     neighbour_y = neighbour_attr['GNN_Measurement'].y
-    print("global nodeA x,y: ", node_x, node_y)
-    print("global target nodeC x,y: ", neighbour_x, neighbour_y)
+    # print("global nodeA x,y: ", node_x, node_y)
+    # print("global target nodeC x,y: ", neighbour_x, neighbour_y)
 
     # compute the angle of rotation
     angle_of_rotation_C = atan2(node_y, node_x)
-    angle_of_rotation_C_deg = angle_of_rotation_C * 180 / np.pi
-    print("phi in rad: ", angle_of_rotation_C)
-    print("phi in deg:", angle_of_rotation_C_deg)
+    # print("phi in rad: ", angle_of_rotation_C)
+    # angle_of_rotation_C_deg = angle_of_rotation_C * 180 / np.pi
+    # print("phi in deg:", angle_of_rotation_C_deg)
 
     # Change coordinate systems! Transform coordinate axis nodeA into coord axis of nodeC
     # calculation of x_A and y_A (coordinates x and y of node A in c.s. of node C)
-    nodeA_trans_x = node_attr['translation'][0]         # global translation
-    nodeA_trans_y = node_attr['translation'][1]
-    nodeA_x = node_attr['GNN_Measurement'].x        # global coordinates
-    nodeA_y = node_attr['GNN_Measurement'].y
-    nodeC_trans_x = neighbour_attr['translation'][0]    # global translation
-    nodeC_trans_y = neighbour_attr['translation'][1]
-    x_A = (neighbour_x - node_x)*np.cos(angle_of_rotation_C) + (neighbour_y - node_y)*np.sin(angle_of_rotation_C)
-    y_A = -(neighbour_x - node_x)*np.sin(angle_of_rotation_C) + (neighbour_y - node_y)*np.cos(angle_of_rotation_C)
-    # x_A = (nodeA_trans_x - nodeC_trans_x)*np.cos(angle_of_rotation_C) + (nodeA_trans_y - nodeC_trans_y)*np.sin(angle_of_rotation_C)
-    # y_A = -(nodeA_trans_x - nodeC_trans_x)*np.sin(angle_of_rotation_C) + (nodeA_trans_y - nodeC_trans_y)*np.cos(angle_of_rotation_C)
-    print("transformed coordinates of nodeA in c.s. of nodeC (x,y): ", x_A, y_A)
+    x_A = (node_x - neighbour_x)*np.cos(angle_of_rotation_C) + (node_y - neighbour_y)*np.sin(angle_of_rotation_C)
+    y_A = -(node_x - neighbour_x)*np.sin(angle_of_rotation_C) + (node_y - neighbour_y)*np.cos(angle_of_rotation_C)
+    # print("transformed coordinates of nodeA in c.s. of nodeC (x,y): ", x_A, y_A)
  
     # parabolic track state (and parameteres) at node A
     merged_state = node_attr['merged_state']
@@ -49,10 +41,10 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     print("original parabolic parameters: ", a, b, c)
 
     phi = atan2( (node_x*neighbour_y) - (node_y*neighbour_x), (node_x*neighbour_x) + (node_y*neighbour_y) )
-    phi_deg = phi * 180 / np.pi
-    print("global phi version 2 between node A and node C (relative angle):")
-    print("phi_version_2 in rad: ", phi)
-    print("phi_version_2 in deg:", phi_deg)
+    # print("global phi between node A and node C (relative angle):")
+    # print("phi in rad: ", phi)
+    # phi_deg = phi * 180 / np.pi
+    # print("phi in deg:", phi_deg)
 
     # calculation of track position/parameters in the target c.s. (nodeC)
     x_prime = x_A + (c * np.sin(phi))     # x_prime = x_A + scos(phi) + (as**2 + bs + c)*sin(phi), when s=0
@@ -68,11 +60,8 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
 
     # compute y', Vy' and Ay': transformed parameters in the c.s. of nodeC
     y_prime = y_A - (s_star * np.sin(phi)) + ((a*s_star**2 + b*s_star + c)*np.cos(phi))
-    # TODO check this stage:
     Vy_prime = - np.sin(phi) + (b * np.cos(phi))    # taking the terms with s from y_prime equation
     Ay_prime = a * np.cos(phi)                      # taking the terms with s**2 from y_prime equation
-    print("parameter a: ", a)
-    print("np.cos(phi): ", np.cos(phi))
     print("y_prime, Vy_prime, Ay_prime: ", y_prime, Vy_prime, Ay_prime)
 
     # compute new (extrapolated) parabolic parameters at nodeC
@@ -120,13 +109,12 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
 
     print("extrapolated ac, bc, yc from computation: ", a_c, b_c, y_c)
     print("extrapolated track state from F matrix (derivations): ", extrp_state)
-    print("extrapolated covariance: \n", extrp_cov)
-    print("Jacobian: \n", F)
+    # print("extrapolated covariance: \n", extrp_cov)
+    # print("Jacobian: \n", F)
 
     # validate the extrapolated state against the measurement at the neighbour node
     # calc chi2 distance between measurement at neighbour node and extrapolated track state
     H = np.array([[0., 0., 1.]])
-    print("H vector: ", H)
     # residual = neighbour_y - H.dot(extrp_state)     # compute the residual
     neighbour_y_in_cs_nodeC = .0                      # measurement is always zero in c.s. of neighbour
     residual = neighbour_y_in_cs_nodeC - H.dot(extrp_state)              # compute the residual
@@ -134,10 +122,6 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     inv_S = np.linalg.inv(S)
     chi2 = residual.T.dot(inv_S).dot(residual)
     chi2_cut = chi2CutFactor
-
-    print("residual: ", residual)
-    print("S matrix: ", S)
-    print("inverse S: ", inv_S)
 
     # save chi2 distance data - USED FOR TUNING THE CHI2 CUT FACTOR
     # truth, chi2 distance, chi2_cut

@@ -70,7 +70,7 @@ def check_close_proximity_nodes(subgraph, threshold_distance):
     copied_subgraph = None
     # TODO:
     # # scenario 1)
-    # # check that there are exactly 2 nodes per layer in all layers
+    # # check that there are exactly 2 nodes per layer in all layers for a particular subgraph
     # if not any(count != 2 for count in freq_count):
     #     # print("Expect 2 nodes in each layer")
     #     # print("Here! subgraph: ",str(i))

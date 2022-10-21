@@ -87,24 +87,31 @@ def compute_mixture_weights(GraphList):
 # used in extrapolate_merged_states
 def calculate_side_norm_factor(subGraph, node, updated_track_states):
     
-    # split track state estimates into LHS & RHS
+    # split track state estimates into LHS & RHS --> dummy variable names
+    # we use radius to calculate which side the neighbour is on 
     node_num = node[0]
     node_attr = node[1]
-    node_x_layer = node_attr['GNN_Measurement'].x
+    node_x = node_attr['GNN_Measurement'].x
+    node_y = node_attr['GNN_Measurement'].y
+    node_z = node_attr['GNN_Measurement'].z
+    node_radius = np.sqrt(node_x**2 + node_y**2 + node_z**2)
     left_nodes, right_nodes = [], []
     left_coords, right_coords = [], []
 
     for neighbour_num, _ in updated_track_states.items():
-        neighbour_x_layer = subGraph.nodes[neighbour_num]['GNN_Measurement'].x
+        neighbour_x = subGraph.nodes[neighbour_num]['GNN_Measurement'].x
+        neighbour_y = subGraph.nodes[neighbour_num]['GNN_Measurement'].y
+        neighbour_z = subGraph.nodes[neighbour_num]['GNN_Measurement'].z
+        neighbour_radius = np.sqrt(neighbour_x**2 + neighbour_y**2 + neighbour_z**2)
 
         # only calculate for activated edges
         if subGraph[neighbour_num][node_num]['activated'] == 1:
-            if neighbour_x_layer < node_x_layer: 
+            if neighbour_radius < node_radius: 
                 left_nodes.append(neighbour_num)
-                left_coords.append(neighbour_x_layer)
+                left_coords.append(neighbour_x)
             else: 
                 right_nodes.append(neighbour_num)
-                right_coords.append(neighbour_x_layer)
+                right_coords.append(neighbour_x)
     
     # store norm factor as node attribute
     left_norm = len(list(set(left_coords)))
@@ -152,7 +159,7 @@ def reweight(subGraphs, track_state_estimates_key):
                         reweight = (updated_state_dict['mixture_weight'] * updated_state_dict['likelihood'] * updated_state_dict['prior']) / reweight_denom
                         reweight /= updated_state_dict['lr_layer_norm']
                         print("REWEIGHT:", reweight)
-                        print("side:", updated_state_dict['side'])  
+                        # print("side:", updated_state_dict['side'])  
                         updated_state_dict['mixture_weight'] = reweight
 
                         # add as edge attribute
@@ -165,15 +172,6 @@ def reweight(subGraphs, track_state_estimates_key):
                         else:
                             subGraph[neighbour_num][node_num]['activated'] = 1
                             print("reactivating edge: (", neighbour_num, ",", node_num, ")")
-
-
-# TODO: some of these functions are in the rotation of a track during the extraction
-# they can be used from these functions instead - duplication of code
-def compute_3d_distance(coord1, coord2):
-    x1, y1, z1 = coord1[0], coord1[1], coord1[2]
-    x2, y2, z2 = coord2[0], coord2[1], coord2[2]
-    return np.sqrt( (x1 - x2)**2 + (y1 - y2)**2 + (z1 - z2)**2 )
-
 
 
 def compute_track_state_estimates(GraphList):
@@ -217,18 +215,18 @@ def compute_track_state_estimates(GraphList):
             # transform the coords: translate and rotate
             # x_new = xcos(angle) + ysin(angle)
             # y_new = -xsin(angle) + ycos(angle)
-            print("Now transforming to local coordinate system:")
+            # print("Now transforming to local coordinate system:")
             x_A = m_node[0]
             y_A = m_node[1]
-            print("NodeA coordinates: we want to move into this local c.s.")
-            print("x_A: ", x_A, "y_A: ", y_A)
+            # print("NodeA coordinates: we want to move into this local c.s.")
+            # print("x_A: ", x_A, "y_A: ", y_A)
         
             # get the azimuth angle - angle of rotation (origin-node edge parallel with x axis):
             azimuth_angle = atan2(y_A, x_A)
             azimuth_angle_deg = azimuth_angle * 180 / np.pi
-            print("All coordinates [neighbour1, neighbour2, ..., node, (0.0, 0.0)]: \n", coords)
-            print("azimuth_angle: ", azimuth_angle)
-            print("azimuth angle in deg: ", azimuth_angle_deg)
+            # print("All coordinates [neighbour1, neighbour2, ..., node, (0.0, 0.0)]: \n", coords)
+            # print("azimuth_angle: ", azimuth_angle)
+            # print("azimuth angle in deg: ", azimuth_angle_deg)
 
             transformed_coords = []
             for c in coords:
@@ -238,12 +236,12 @@ def compute_track_state_estimates(GraphList):
                 y_new = -(x_P - x_A)*np.sin(azimuth_angle) + (y_P - y_A)*np.cos(azimuth_angle)
                 tc = (x_new, y_new)
                 transformed_coords.append(tc)
-            print("All original coordinates: ", coords)
-            print("All transformed coordinates", transformed_coords)
+            # print("All original coordinates: ", coords)
+            # print("All transformed coordinates", transformed_coords)
 
             # for each neighbour connection obtain the measurement vector in the new axis
             # [m_0, m_A, m_B] m_0 the old origin, m_A the new origin, m_B the neighbour
-            print("Now compute track state estimates for every neighbour edge component:")
+            # print("Now compute track state estimates for every neighbour edge component:")
             x_0 = transformed_coords[-1][0]
             print("x0 (same for every neighbour): ", x_0)
             transformed_neighbour_coords = transformed_coords[:-2]
@@ -257,25 +255,16 @@ def compute_track_state_estimates(GraphList):
                                 [0.5*x_B**2,         x_B,          1]])
                 print("x_B: ", x_B, "\nm_B: ", m_B)
                 print("measurement vector: ", measurement_vector)
-                print("H matrix: \n", H)
+                # print("H matrix: \n", H)
 
                 # compute track state parameters, covariance and t_vector for parametric representation
                 H_inv = np.linalg.inv(H)    # invert H matrix to obtain measurement matrix
                 track_state_vector = H_inv.dot(measurement_vector)  # parabolic parameters: a, b, c
-                print("H_inv: \n", H_inv)
                 print("track_state_vector [a, b, c]: ", track_state_vector)
 
                 a = track_state_vector[0]
                 b = track_state_vector[1]
                 c = track_state_vector[2]   # the measurement y = c
-
-                # print("saving parabolic parameters:")
-                # with open('parabolic_param_a.csv', 'a') as f:
-                #     f.write(str(a) + "\n")
-                # with open('parabolic_param_b.csv', 'a') as f:
-                #     f.write(str(b) + "\n")
-                # with open('parabolic_param_c.csv', 'a') as f:
-                #     f.write(str(c) + "\n")
 
                 norm_factor = 1/(np.sqrt(1 + b**2))
                 t_vector = np.array([0, c, norm_factor, b*norm_factor, 0, a])
@@ -365,12 +354,20 @@ def construct_graph(graph, nodes, edges, truth, sigma_ms):
 
 
 
-def load_nodes_edges(event_path, max_volume_region):
+def load_nodes_edges(event_path):
     # TODO: temporary select nodes in region of interest
     
     # nodes dataframe: node_idx,layer_id,x,y,z, r, volume_id, in_volume_layer_id
     nodes = pd.read_csv(event_path + "nodes.csv")
-    nodes = nodes.loc[nodes['layer_id'] <= max_volume_region]
+    
+    nodes = nodes.loc[nodes['layer_id'].between(7000,7999)]
+    
+    # # # both endcaps:
+    # nodes_vol7 = nodes.loc[nodes['layer_id'].between(7000,7999)]
+    # nodes_vol9 = nodes.loc[nodes['layer_id'].between(9000,9999)]
+    # endcap_nodes = [nodes_vol7, nodes_vol9]
+    # nodes = pd.concat(endcap_nodes)
+
     nodes['r'] = nodes.apply(lambda row: edge_length_xy(row), axis=1)
     nodes['volume_id'] = nodes.apply(lambda row: get_volume_id(row.layer_id), axis=1) 
     nodes['in_volume_layer_id'] = nodes.apply(lambda row: get_in_volume_layer_id(row.layer_id), axis=1)
@@ -433,74 +430,86 @@ def save_network(directory, i, subGraph):
 
 
 # private function
-def __plot_subgraphs_in_plane(GraphList, outputDir, key, axis1, axis2, node_labels, save_plot, title):
-    _, ax = plt.subplots(figsize=(10,8))
+def __plot_subgraphs_in_plane(GraphList, outputDir, node_labels, save_plot, title):
+    fig, ax = plt.subplots(figsize=(10,8))
+    fig2, ax2 = plt.subplots(figsize=(10,8))
     for i, subGraph in enumerate(GraphList):
         color = ["#"+''.join([random.choice('0123456789ABCDEF') for _ in range(6) ])][0]
-        pos=nx.get_node_attributes(subGraph, key)
+        pos_xy=nx.get_node_attributes(subGraph, 'xy')
+        pos_zr=nx.get_node_attributes(subGraph, 'zr')
         nodes = subGraph.nodes()
         edge_colors = []
         for u, v in subGraph.edges():
             if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
             else: edge_colors.append("#f2f2f2")
-        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
-        nx.draw_networkx_nodes(subGraph, pos, nodelist=nodes, node_color=color, node_size=50)
+        nx.draw_networkx_edges(subGraph, pos_xy, edge_color=edge_colors, alpha=0.75, ax=ax)
+        nx.draw_networkx_nodes(subGraph, pos_xy, nodelist=nodes, node_color=color, node_size=50, ax=ax)
+        nx.draw_networkx_edges(subGraph, pos_zr, edge_color=edge_colors, alpha=0.75, ax=ax2)
+        nx.draw_networkx_nodes(subGraph, pos_zr, nodelist=nodes, node_color=color, node_size=50, ax=ax2)
         if node_labels:
-            nx.draw_networkx_labels(subGraph, pos, font_size=4)
+            nx.draw_networkx_labels(subGraph, pos_xy, font_size=4, ax=ax)
+            nx.draw_networkx_labels(subGraph, pos_zr, font_size=4, ax=ax2)
     ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
-    plt.xlabel(axis1)
-    plt.ylabel(axis2)
-    plt.title(title)
-    plt.axis('on')
+    ax2.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax2.set_xlabel("z")
+    ax2.set_ylabel("r")
+    ax.set_title(title)
+    ax2.set_title(title)
     if save_plot:
-        plt.savefig(outputDir + axis1 + axis2 + "_subgraphs_trackml_mod.png", dpi=300)
-
+        fig.savefig(outputDir + "xy_subgraphs_trackml_mod.png", dpi=300)
+        fig2.savefig(outputDir + "zr_subgraphs_trackml_mod.png", dpi=300)
 
 def plot_subgraphs(GraphList, outputDir, node_labels=False, save_plot=False, title=""):
     # xy plane
-    __plot_subgraphs_in_plane(GraphList, outputDir, 'xy', "x", "y", node_labels, save_plot, title)
+    __plot_subgraphs_in_plane(GraphList, outputDir, node_labels, save_plot, title)
     # zr plane
-    __plot_subgraphs_in_plane(GraphList, outputDir, 'zr', "z", "r", node_labels, save_plot, title)
+    __plot_subgraphs_in_plane(GraphList, outputDir, node_labels, save_plot, title)
 
+
+# private function
+def __colour_and_plot_subgraphs_at_iterations(subGraph, key, iteration, color, node_labels):
+    pos=nx.get_node_attributes(subGraph, key)
+    edge_colors = []
+    for u, v in subGraph.edges():
+        if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
+        else: edge_colors.append("#f2f2f2")
+    nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
+    nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=50, label=iteration)
+    if node_labels:
+        nx.draw_networkx_labels(subGraph, pos, font_size=4)
 
 
 # private function
 def __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, extracted_pvals_zr, outputFile, 
                                                 title, key, axis1, axis2, node_labels, save_plot):
 
+    colours = ["#faca64", "#594ccf", "#fa7399"]
+    
     _, ax = plt.subplots(figsize=(12,10))
     iteration_1=[]
+    iteration_2=[]
     other_iterations=[]
+
+    # TODO first identify number of unique iterations, then generate this number of lists on the fly to hold the subgraphs at each iteration
     for subGraph in GraphList:
         iteration = int(subGraph.graph["iteration"])
         if iteration == 1: iteration_1.append(subGraph)
+        elif iteration == 2: iteration_2.append(subGraph)
         else: other_iterations.append(subGraph)
 
     for subGraph in iteration_1:
-        iteration = int(subGraph.graph["iteration"])
-        color = subGraph.graph["color"]
-        pos=nx.get_node_attributes(subGraph, key)
-        edge_colors = []
-        for u, v in subGraph.edges():
-            if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
-            else: edge_colors.append("#f2f2f2")
-        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
-        nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=50, label=iteration)
-        if node_labels:
-            nx.draw_networkx_labels(subGraph, pos, font_size=4)
+        iteration = 1
+        __colour_and_plot_subgraphs_at_iterations(subGraph, key, iteration, colours[0], node_labels)
+    
+    for subGraph in iteration_2:
+        iteration = 2
+        __colour_and_plot_subgraphs_at_iterations(subGraph, key, iteration, colours[1], node_labels)
     
     for subGraph in other_iterations:
-        iteration = int(subGraph.graph["iteration"])
-        color = subGraph.graph["color"]
-        pos=nx.get_node_attributes(subGraph, key)
-        edge_colors = []
-        for u, v in subGraph.edges():
-            if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
-            else: edge_colors.append("#f2f2f2")
-        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
-        nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=50, label=iteration)
-        if node_labels:
-            nx.draw_networkx_labels(subGraph, pos, font_size=4)
+        iteration = 3
+        __colour_and_plot_subgraphs_at_iterations(subGraph, key, iteration, colours[2], node_labels)
     
     ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
     plt.xlabel(axis1)

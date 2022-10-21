@@ -54,7 +54,8 @@ hit_ids = hit_ids.hit_id.to_list()
 
 # extract the subset of hits contained in the volume of interest (i.e. only endcap for now)
 hits = pd.read_csv(reference_path + "full-mapping-minCurv-0.3-800.csv", sep=',')
-left_endcap_hits = hits.loc[(hits.hit_id.isin(hit_ids)) & (hits.volume_id == 7)]
+left_endcap_hits = hits.loc[(hits.hit_id.isin(hit_ids)) & ((hits.volume_id == 7))]
+# left_endcap_hits = hits.loc[(hits.hit_id.isin(hit_ids)) & ((hits.volume_id == 7) | (hits.volume_id == 9))]
 
 print("Number of reference tracks in left endcap volume7:", len(left_endcap_hits.particle_id.unique()))
 # print("left_endcap_hits: \n", left_endcap_hits)

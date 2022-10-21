@@ -13,7 +13,7 @@ ROOTDIR=src/output      # output directory to store GNN algorithm output
 LUT=learn_KL_linear_model/output/empvar/empvar_relaxed.lut   # LUT file for KL distance calibration
 
 # extrapolation
-c=20                     #  initial chi2 distance acceptance threshold for extrapolated states
+c=10                     #  initial chi2 distance acceptance threshold for extrapolated states
 
 # extracting track candidates
 p=0.01                  # p-value acceptance level for good track candidate extraction - currently applied in xy plane
@@ -109,7 +109,7 @@ for i in {1..2};
             echo "Iteration ${i}: Clusterization on remaining network, reactivating all edges"
             echo "----------------------------------------------------------------------------"
             prev_duration=$SECONDS
-            python src/clustering/clustering.py -i $INPUT -o $OUTPUT -d track_state_estimates -l $LUT -r True
+            python src/clustering/clustering.py -i $INPUT -o $OUTPUT -d track_state_estimates -l $LUT 
 
             # time it!
             prev_duration=$(( SECONDS - prev_duration ))
