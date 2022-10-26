@@ -243,7 +243,7 @@ def compute_track_state_estimates(GraphList):
             # [m_0, m_A, m_B] m_0 the old origin, m_A the new origin, m_B the neighbour
             # print("Now compute track state estimates for every neighbour edge component:")
             x_0 = transformed_coords[-1][0]
-            print("x0 (same for every neighbour): ", x_0)
+            # print("x0 (same for every neighbour): ", x_0)
             transformed_neighbour_coords = transformed_coords[:-2]
             keys = keys[:-2]
             for tnc, key in zip(transformed_neighbour_coords, keys):
@@ -253,8 +253,8 @@ def compute_track_state_estimates(GraphList):
                 H = np.array([  [0.5*x_0**2,         x_0,          1], 
                                 [0.0,                0.0,          1], 
                                 [0.5*x_B**2,         x_B,          1]])
-                print("x_B: ", x_B, "\nm_B: ", m_B)
-                print("measurement vector: ", measurement_vector)
+                # print("x_B: ", x_B, "\nm_B: ", m_B)
+                # print("measurement vector: ", measurement_vector)
                 # print("H matrix: \n", H)
 
                 # compute track state parameters, covariance and t_vector for parametric representation
@@ -360,13 +360,13 @@ def load_nodes_edges(event_path):
     # nodes dataframe: node_idx,layer_id,x,y,z, r, volume_id, in_volume_layer_id
     nodes = pd.read_csv(event_path + "nodes.csv")
     
-    nodes = nodes.loc[nodes['layer_id'].between(7000,7999)]
+    # nodes = nodes.loc[nodes['layer_id'].between(7000,7999)]
     
     # # # both endcaps:
-    # nodes_vol7 = nodes.loc[nodes['layer_id'].between(7000,7999)]
-    # nodes_vol9 = nodes.loc[nodes['layer_id'].between(9000,9999)]
-    # endcap_nodes = [nodes_vol7, nodes_vol9]
-    # nodes = pd.concat(endcap_nodes)
+    nodes_vol7 = nodes.loc[nodes['layer_id'].between(7000,7999)]
+    nodes_vol9 = nodes.loc[nodes['layer_id'].between(9000,9999)]
+    endcap_nodes = [nodes_vol7, nodes_vol9]
+    nodes = pd.concat(endcap_nodes)
 
     nodes['r'] = nodes.apply(lambda row: edge_length_xy(row), axis=1)
     nodes['volume_id'] = nodes.apply(lambda row: get_volume_id(row.layer_id), axis=1) 

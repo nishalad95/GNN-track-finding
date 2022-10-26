@@ -11,23 +11,109 @@ from utilities import helper as h
 import pprint
 
 
+def compute_3d_distance(coord1, coord2):
+    x1, y1, z1 = coord1[0], coord1[1], coord1[2]
+    x2, y2, z2 = coord2[0], coord2[1], coord2[2]
+    return np.sqrt( (x1 - x2)**2 + (y1 - y2)**2 + (z1 - z2)**2 )
+
+
+def get_midpoint_coords(xyzr_coords):
+    x1, y1, z1 = xyzr_coords[0][0], xyzr_coords[0][1], xyzr_coords[0][2]
+    x2, y2, z2 = xyzr_coords[1][0], xyzr_coords[1][1], xyzr_coords[1][2]
+    xm = (x1 + x2) / 2
+    ym = (y1 + y2) / 2
+    zm = (z1 + z2) / 2
+    rm = np.sqrt(xm**2 + ym**2)
+    return xm, ym, zm, rm
+
+
+def check_close_proximity_nodes(subGraphs, threshold_distance):
+    subgraph_merged_nodes = []
+
+    for subgraph in subGraphs:
+        print("Threshold distance for node merging: ", threshold_distance)
+
+        # get the freq distribution of the vivl_ids
+        vivl_id_dict = nx.get_node_attributes(subgraph, "vivl_id")
+        module_id_dict = nx.get_node_attributes(subgraph, "module_id")
+        node_nums = list(vivl_id_dict.keys())
+        vivl_ids = list(vivl_id_dict.values())
+        vivl_ids_freq = {x:vivl_ids.count(x) for x in vivl_ids}
+        freq_count = list(vivl_ids_freq.values())
+
+        # node merging 
+        # check that there are exactly 2 or fewer nodes per layer in all layers
+        if all(count <= 2 for count in freq_count):
+            print("Merging possible in this subgraph: 2 or fewer nodes in each layer")
+            # Get duplicate nodes in same layer & compute their 3d separation distance
+            duplicated_vivl_ids = list(set([tup for tup in vivl_ids if vivl_ids.count(tup) > 1]))
+            # there could be more than 1 duplicated element
+            copied_subgraph = subgraph.copy()
+            for dup in duplicated_vivl_ids:
+                # get the indexes which they appear at, and hence get the node numbers
+                indexes_of_repeated_items = list(locate(vivl_ids, lambda x: x == dup))
+                nodes_of_interest = [node_nums[idx] for idx in indexes_of_repeated_items]
+                # compute the distance between the nodes
+                node1 = nodes_of_interest[0]
+                node2 = nodes_of_interest[1]
+                node1_coords = copied_subgraph.nodes[node1]['xyzr']
+                node2_coords = copied_subgraph.nodes[node2]['xyzr']
+                distance = compute_3d_distance(node1_coords, node2_coords)
+                print("distance separation of close proximity nodes: ", distance)
+                with open('distance_between_close_proximity_nodes.csv', 'a') as f:
+                        f.write(str(distance) + " \n")
+                
+                if distance <= threshold_distance:
+                    # merge the 2 nodes together and update the copied_subgraph
+                    # the copied_subgraph contains the candidate with the merged nodes - only to be used in the KF
+                    nodes_to_merge = (node1_coords, node2_coords)
+                    xm, ym, zm, rm = get_midpoint_coords(nodes_to_merge)
+                    print("merging of nodes possible:")
+                    
+                    # change subgraph attributes
+                    copied_subgraph.nodes[node1]['GNN_Measurement'].x = xm
+                    copied_subgraph.nodes[node1]['GNN_Measurement'].y = ym
+                    copied_subgraph.nodes[node1]['GNN_Measurement'].z = zm
+                    copied_subgraph.nodes[node1]['GNN_Measurement'].r = rm
+                    copied_subgraph.nodes[node1]['xy'] = (xm, ym)
+                    copied_subgraph.nodes[node1]['zr'] = (zm, rm)
+                    copied_subgraph.nodes[node1]['xyzr'] = (xm, ym, zm, rm)
+                    node1_module_id = copied_subgraph.nodes[node1]['module_id']
+                    node2_module_id = copied_subgraph.nodes[node2]['module_id']
+                    copied_subgraph.nodes[node1]['module_id'] = np.concatenate((node1_module_id, node2_module_id))
+                    dict1 = copied_subgraph.nodes[node1]['hit_dissociation']
+                    dict2 = copied_subgraph.nodes[node2]['hit_dissociation']
+                    new_hit_ids = np.concatenate((dict1['hit_id'], dict2['hit_id']))
+                    new_particle_ids = dict1['particle_id'] + dict2['particle_id']
+                    copied_subgraph.nodes[node1]['hit_dissociation'] = {'hit_id' : new_hit_ids,
+                                                                        'particle_id' : new_particle_ids}
+                    # remove the other node
+                    copied_subgraph.remove_node(node2)
+                else:
+                    print("merging of nodes nodes not possible, too large distance between them, distance: ", distance)
+                    copied_subgraph = None
+                    break
+        else:
+            print("Cannot process subgraph, leaving for further iterations, > 2 close proximity nodes")
+
+        subgraph_merged_nodes.append(copied_subgraph)
+
+    return subgraph_merged_nodes
+
+
+# extrapolating the state from the node (nodeA) to neighbour (nodeC)
 def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour_attr, chi2CutFactor, sigma_ms):
     print("\n Extrapolate validate:")
     print("Processing node num: ", node_num)
 
     # global coordinates of node and neighbour
-    node_x = node_attr['GNN_Measurement'].x             # nodeA
+    node_x = node_attr['GNN_Measurement'].x             # global coords nodeA
     node_y = node_attr['GNN_Measurement'].y
-    neighbour_x = neighbour_attr['GNN_Measurement'].x   # nodeC
+    neighbour_x = neighbour_attr['GNN_Measurement'].x   # global coords nodeC
     neighbour_y = neighbour_attr['GNN_Measurement'].y
-    # print("global nodeA x,y: ", node_x, node_y)
-    # print("global target nodeC x,y: ", neighbour_x, neighbour_y)
 
     # compute the angle of rotation
     angle_of_rotation_C = atan2(node_y, node_x)
-    # print("phi in rad: ", angle_of_rotation_C)
-    # angle_of_rotation_C_deg = angle_of_rotation_C * 180 / np.pi
-    # print("phi in deg:", angle_of_rotation_C_deg)
 
     # Change coordinate systems! Transform coordinate axis nodeA into coord axis of nodeC
     # calculation of x_A and y_A (coordinates x and y of node A in c.s. of node C)
@@ -41,10 +127,7 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     print("original parabolic parameters: ", a, b, c)
 
     phi = atan2( (node_x*neighbour_y) - (node_y*neighbour_x), (node_x*neighbour_x) + (node_y*neighbour_y) )
-    # print("global phi between node A and node C (relative angle):")
-    # print("phi in rad: ", phi)
-    # phi_deg = phi * 180 / np.pi
-    # print("phi in deg:", phi_deg)
+    # print("global phi between node A and node C (relative angle):", phi)
 
     # calculation of track position/parameters in the target c.s. (nodeC)
     x_prime = x_A + (c * np.sin(phi))     # x_prime = x_A + scos(phi) + (as**2 + bs + c)*sin(phi), when s=0
@@ -163,6 +246,9 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
         f.predict()
         f.update(z)
         updated_state, updated_cov = f.x_post, f.P_post
+        print("merged state: ", merged_state)
+        print("extrapolated state: ", extrp_state)
+        print("storing updated state: ", updated_state)
 
         return { 'xy': (node_x, node_y),
                  'edge_state_vector': updated_state, 
@@ -239,11 +325,13 @@ def main():
     parser.add_argument('-o', '--outputDir', help='output directory for updated states')
     parser.add_argument('-c', '--chi2CutFactor', help='chi2 cut factor for threshold')
     parser.add_argument('-m', '--sigma_ms', help="uncertainty due to multiple scattering, process noise")
+    parser.add_argument('-t', '--threshold_distance_node_merging', help="threshold_distance_node_merging")
     args = parser.parse_args()
     inputDir = args.inputDir
     outputDir = args.outputDir
     chi2CutFactor = float(args.chi2CutFactor)
     sigma_ms = float(args.sigma_ms)                # process error - due to multiple scattering
+    threshold_distance_node_merging = float(args.threshold_distance_node_merging)
 
     # read in subgraph data
     subGraphs = []
@@ -252,6 +340,8 @@ def main():
         sub = nx.read_gpickle(file)
         subGraphs.append(sub)
 
+    # merge close proximity nodes together
+    check_close_proximity_nodes(subGraphs, threshold_distance_node_merging)
 
     # distribute merged state to neighbours, extrapolate, validation & create new updated state(s)
     message_passing(subGraphs, chi2CutFactor, sigma_ms)
@@ -261,13 +351,13 @@ def main():
     h.reweight(subGraphs, 'updated_track_states')
     h.compute_prior_probabilities(subGraphs, 'updated_track_states')
 
-    for i, s in enumerate(subGraphs):
-        print("-------------------")
-        print("SUBGRAPH " + str(i))
-        for node in s.nodes(data=True):
-            pprint.pprint(node)
-        print("--------------------")
-        print("EDGE DATA:", s.edges.data(), "\n")
+    # for i, s in enumerate(subGraphs):
+    #     print("-------------------")
+    #     print("SUBGRAPH " + str(i))
+    #     for node in s.nodes(data=True):
+    #         pprint.pprint(node)
+    #     print("--------------------")
+    #     print("EDGE DATA:", s.edges.data(), "\n")
 
     title = "Subgraphs after iteration 2: message passing, extrapolation \n& validation of merged state, formation of updated state"
     h.plot_subgraphs(subGraphs, outputDir, node_labels=True, save_plot=True, title=title)
