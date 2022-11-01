@@ -277,13 +277,13 @@ def main():
     h.reweight(subGraphs, 'updated_track_states')
     h.compute_prior_probabilities(subGraphs, 'updated_track_states')
 
-    for i, s in enumerate(subGraphs):
-        print("-------------------")
-        print("SUBGRAPH " + str(i))
-        for node in s.nodes(data=True):
-            pprint.pprint(node)
-        print("--------------------")
-        print("EDGE DATA:", s.edges.data(), "\n")
+    # for i, s in enumerate(subGraphs):
+    #     print("-------------------")
+    #     print("SUBGRAPH " + str(i))
+    #     for node in s.nodes(data=True):
+    #         pprint.pprint(node)
+    #     print("--------------------")
+    #     print("EDGE DATA:", s.edges.data(), "\n")
 
     title = "Subgraphs after iteration 2: message passing, extrapolation \n& validation of merged state, formation of updated state"
     h.plot_subgraphs(subGraphs, outputDir, node_labels=True, save_plot=True, title=title)

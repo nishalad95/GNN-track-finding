@@ -24,8 +24,6 @@ t=4.0                   # threshold distance node merging in extraction
 # ----------------------------------------------------------------------------------------------
 
 
-
-
 # ----------------------------------------------------------------------------------------------
 # this section is commented out during debugging - no need to regenerate the event conversion into graph network
 # ----------------------------------------------------------------------------------------------
@@ -60,10 +58,6 @@ start=$SECONDS
 execution_times=($start)
 stages=("start")
 
-
-# TESTING FOR ITERATION 2 ONLY
-# INPUT=$ROOTDIR/iteration_1/remaining/       # THIS LINE CAN BE REMOVED
-# for i in {2..2};                            # THIS LINE CAN BE REMOVED
 
 for i in {1..2};
     do
@@ -102,36 +96,6 @@ for i in {1..2};
             echo "-------------------------------------------------"
             execution_times+=($prev_duration)
             stages+=("extrapolate_merged_states.py")
-
-        elif (( $i == 3 ))
-        then
-            echo "----------------------------------------------------------------------------"
-            echo "Iteration ${i}: Clusterization on remaining network, reactivating all edges"
-            echo "----------------------------------------------------------------------------"
-            prev_duration=$SECONDS
-            python src/clustering/clustering.py -i $INPUT -o $OUTPUT -d track_state_estimates -l $LUT -r True
-
-            # time it!
-            prev_duration=$(( SECONDS - prev_duration ))
-            echo "-----------------------------------------------------------------------------"
-            echo "Execution time, clustering.py reactivating all edges: $prev_duration seconds"
-            echo "-----------------------------------------------------------------------------"
-            stages+=("clustering.py reactivating edges")
-
-        else #(( $i % 2 == 1 ))
-            echo "------------------------------------------------"
-            echo "Iteration ${i}: Clusterization on updated states"
-            echo "------------------------------------------------"
-            prev_duration=$SECONDS
-            python src/clustering/clustering_updated_states.py -i $INPUT -o $OUTPUT -d updated_track_states -l $LUT
-
-            # time it!
-            prev_duration=$(( SECONDS - prev_duration ))
-            echo "--------------------------------------------------------------------"
-            echo "Execution time, clustering_updated_states.py: $prev_duration seconds"
-            echo "--------------------------------------------------------------------"
-            execution_times+=($prev_duration)
-            stages+=("clustering_updated_states.py")
         fi
         
 
