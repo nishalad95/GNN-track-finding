@@ -44,7 +44,6 @@ def compute_prior_probabilities(GraphList, track_state_key):
             for neighbour_num, _ in track_state_estimates.items():
                 # inward edge coming into the node from the neighbour
                 if subGraph[neighbour_num][node_num]['activated'] == 1:
-                    # layer = subGraph.nodes[neighbour_num]['GNN_Measurement'].x
                     layer = subGraph.nodes[neighbour_num]['in_volume_layer_id']
                     if layer in layer_neighbour_num_dict.keys():
                         layer_neighbour_num_dict[layer].append(neighbour_num)
@@ -365,17 +364,21 @@ def construct_graph(graph, nodes, edges, truth, sigma_ms):
 
 
 
-def load_nodes_edges(event_path, max_volume_region):
+def load_nodes_edges(event_path):
     # TODO: temporary select nodes in region of interest
+    # barrel only
+    min_num = 7000
+    max_number = 10000
     
     # nodes dataframe: node_idx,layer_id,x,y,z, r, volume_id, in_volume_layer_id
     nodes = pd.read_csv(event_path + "nodes.csv")
-    nodes = nodes.loc[nodes['layer_id'] <= max_volume_region]
+    # nodes = nodes.loc[nodes['layer_id'] <= max_volume_region]
+    nodes = nodes.loc[nodes['layer_id'].between(min_num, max_number)]
+
+
     nodes['r'] = nodes.apply(lambda row: edge_length_xy(row), axis=1)
     nodes['volume_id'] = nodes.apply(lambda row: get_volume_id(row.layer_id), axis=1) 
     nodes['in_volume_layer_id'] = nodes.apply(lambda row: get_in_volume_layer_id(row.layer_id), axis=1)
-    # nodes['module_id'] = nodes.apply(lambda row: get_module_id(), axis=1)
-    # print("nodes:\n", nodes)
 
     # edges dataframe: node2, node1, weight
     edges = pd.read_csv(event_path + "edges.csv")
@@ -469,8 +472,11 @@ def __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, extrac
                                                 title, key, axis1, axis2, node_labels, save_plot):
 
     colors = ["#f7c04a", "#2648ad", "#991895"]
-    _, ax = plt.subplots(figsize=(12,10))
     GraphList.sort(key=lambda subGraph: int(subGraph.graph["iteration"]))
+
+    figsize=(12,10)
+    if key == 'zr': figsize=(16,10)
+    _, ax = plt.subplots(figsize=figsize)
 
     for subGraph in GraphList:
         

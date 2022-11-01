@@ -17,7 +17,7 @@ c=20                     #  initial chi2 distance acceptance threshold for extra
 
 # extracting track candidates
 p=0.01                  # p-value acceptance level for good track candidate extraction - currently applied in xy plane
-n=4                     # minimum number of hits for good track candidate acceptance (>=n)
+n=3                     # minimum number of hits for good track candidate acceptance (>=n)
 s=10                    # 3d distance threshold for close proximity nodes, used in KF rotatation if nodes too close together
 t=8.0                   # threshold distance node merging in extraction
 
@@ -32,6 +32,7 @@ time=$SECONDS
 execution_times=($time)
 
 
+# Comment out for debugging when event-to-network conversion is not needed!!
 # -----------------------------------------------------
 # Event conversion into graph network
 # -----------------------------------------------------
@@ -130,7 +131,7 @@ echo "----------------------------------------------------"
 
 
 # time it!
-stages+=("plotting_end")
+stages+=("reconstruction_efficiency.py")
 time=$SECONDS
 execution_times+=($time)
 
@@ -138,14 +139,14 @@ execution_times+=($time)
 echo "----------------------------------------------------"
 echo "Execution stages and times:"
 touch execution_stages.txt
-printf "%s\n" "${stages[@]}" > execution_stages.txt
+printf "%s\n" "${stages[@]}" > $ROOTDIR/execution_stages.txt
 for value in "${stages[@]}"
 do
      echo $value
 done
 
 touch execution_times.txt
-printf "%s\n" "${execution_times[@]}" > execution_times.txt
+printf "%s\n" "${execution_times[@]}" > $ROOTDIR/execution_times.txt
 for value in "${execution_times[@]}"
 do
      echo $value

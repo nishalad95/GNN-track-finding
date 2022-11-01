@@ -158,15 +158,6 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, reactivate):
             
             edge_covs = np.array([component[EDGE_COV] for component in track_state_estimates.values()])
             
-            # # TEMPORARY: debugging
-            # print("------------------------")
-            # print("Clustering and KL distance:")
-            # print("------------------------")
-            # print("central node: ", node[0])
-            # print("position of central node: ", node_attr['GNN_Measurement'].x, node_attr['GNN_Measurement'].y)
-            # print("all neighbours: ", neighbors_to_deactivate)
-            # print("all neighbour state vectors [a,b,c]: \n", edge_svs)
-            
             # edge_covs = np.reshape(edge_covs[:, :, np.newaxis], (num_edges, 2, 2))
             edge_covs = np.reshape(edge_covs[:, :, np.newaxis], (num_edges, 3, 3))
             inv_covs = np.linalg.inv(edge_covs)
@@ -175,54 +166,14 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, reactivate):
             # calculate pairwise distances between edge state vectors, find smallest distance & keep track of merged states
             pairwise_distances, neighbour_pairs_1, neighbour_pairs_2 = calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs, neighbors_to_deactivate)
             smallest_dist, idx = get_smallest_dist_idx(pairwise_distances) #[row_idx, column_idx]
-
-            # # TEMPORARY: debugging
-            # print("pairwise distances: \n", pairwise_distances)
-            # print("smallest KL distance: ", smallest_dist)
-            # print("neighbour pair of nodes with smallest distance: ")
-            # print("neighbour1: ", neighbour_pairs_1[idx[0]][idx[1]], " neighbour2: ", neighbour_pairs_2[idx[0]][idx[1]])
-            
+  
             # perform clustering, query LUT with degree/empvar & smallest pairwise distance
             KL_thres = get_KL_upper_threshold(empvar, smallest_dist, mapping)
             if smallest_dist < KL_thres:
 
-                # # TEMPORARY: debugging
-                # print("smallest_dist: ", smallest_dist)
-                # print("index: ", idx)
-                # print("the edge state vectors with smallest dist: \n"),
-                # a = edge_svs[idx[0]]
-                # b = edge_svs[idx[1]]
-                # print("edge state vector one: ", a)
-                # print("edge state vector two: ", b)
-                # result = chi2_distance(a, b)
-                # print("The Chi-square distance is :", result)
-                # print("KL distance: ", smallest_dist)
-                # print("neighbour pair of nodes with smallest distance: ")
-                # neighbour_1 = neighbour_pairs_1[idx[0]][idx[1]]
-                # neighbour_2 = neighbour_pairs_2[idx[0]][idx[1]]
-                # print("neighbour1: ", neighbour_1, " neighbour2: ", neighbour_2)
-            
                 # merge states
                 merged_mean, merged_cov, merged_inv_cov = merge_states(edge_svs[idx[0]], inv_covs[idx[0]], edge_svs[idx[1]], inv_covs[idx[1]])
                 merged_prior = priors[idx[0]] + priors[idx[1]]
-
-                # # TEMPORARY: debugging
-                # print("merged mean [a, b, c]: ", merged_mean)
-                # # global coordinates of neighbour pair
-                # neighbour_1_attr = subGraph.nodes[neighbour_1]
-                # neighbour_2_attr = subGraph.nodes[neighbour_2]
-                # neighbour_1_x = neighbour_1_attr['GNN_Measurement'].x
-                # neighbour_1_y = neighbour_1_attr['GNN_Measurement'].y
-                # neighbour_2_x = neighbour_2_attr['GNN_Measurement'].x
-                # neighbour_2_y = neighbour_2_attr['GNN_Measurement'].y
-                # print("global coordinates neighbour 1: ", neighbour_1_x, neighbour_1_y)
-                # print("global coordinates neighbour 2: ", neighbour_2_x, neighbour_2_y)
-                # # Compute the angle between nodeA (central node) and nodeC (neighbour to extrapolate to) using global c.s.
-                # phi = np.arccos(((neighbour_1_x * neighbour_2_x) + (neighbour_1_y * neighbour_2_y)) / (np.sqrt(neighbour_1_x**2 + neighbour_1_y**2) * np.sqrt(neighbour_2_x**2 + neighbour_2_y**2)))
-                # phi_deg = phi * 180 / np.pi
-                # print("global phi between the two neighbour nodes (relative angle):")
-                # print("phi in rad: ", phi)
-                # print("phi in deg:", phi_deg)
 
                 # update variables, keep the merged state information at the end
                 edge_svs = np.delete(edge_svs, idx, axis=0)
@@ -245,15 +196,6 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, reactivate):
                     # merge states
                     merged_mean, merged_cov, merged_inv_cov = merge_states(edge_svs[idx], inv_covs[idx], merged_mean, merged_inv_cov)
                     merged_prior = priors[idx] + merged_prior
-
-                    # print("merging continuing in while loop...")
-                    # print("all neighbours at this stage: ", neighbors_to_deactivate)
-                    # print("neighbout node to merge together with the current mean: ", neighbors_to_deactivate[idx])
-                    # print("edge state vector that will be merged:", edge_svs[idx])
-                    # new_neighbour = subGraph.nodes[neighbors_to_deactivate[idx]]
-                    # new_neighbour_x = new_neighbour['GNN_Measurement'].x
-                    # new_neighbour_y = new_neighbour['GNN_Measurement'].y
-                    # print("global coordinates of new neighbour: ", new_neighbour_x, new_neighbour_y)
 
                     # update variables, keep the merged state at the end
                     edge_svs = np.delete(edge_svs, idx, axis=0)
@@ -324,21 +266,6 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, reactivate):
     # save networks
     for i, sub in enumerate(subGraphs):
         h.save_network(outputDir, i, sub)
-
-    # print("-------------------------------------------")
-    # print("CLUSTERING STAGE NETWORK:")
-    # print("-------------------------------------------")
-    # for i, s in enumerate(subGraphs):
-    #     print("-------------------")
-    #     print("SUBGRAPH " + str(i))
-    #     print("-------------------")
-    #     print("EDGE DATA:")
-    #     for connection in s.edges.data():
-    #         print(connection)
-    #     print("-------------------")
-        # for node in s.nodes(data=True):
-        #     pprint.pprint(node)
-        # print("--------------------")
 
     
 

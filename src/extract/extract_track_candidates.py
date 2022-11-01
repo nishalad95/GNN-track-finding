@@ -427,9 +427,9 @@ def main():
         for good_candidate in candidate_to_remove_from_subGraph:
             nodes = good_candidate.nodes()
             subGraph.remove_nodes_from(nodes)
-        if (len(subGraph.nodes()) <= 3) and (len(subGraph.nodes()) > 0): 
+        if (len(subGraph.nodes()) < fragment) and (len(subGraph.nodes()) > 0): 
             fragments.append(subGraph)
-        elif len(subGraph.nodes()) >= 4:
+        elif len(subGraph.nodes()) >= fragment:
             remaining.append(subGraph)
 
     

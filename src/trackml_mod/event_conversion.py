@@ -38,9 +38,7 @@ def main():
     parser.add_argument('-m', '--sigma_ms', help="uncertainty due to multiple scattering, process noise")
     parser.add_argument('-n', '--eventNetwork', help="Full directory path to event nodes, edges & nodes-to-hits")
     parser.add_argument('-t', '--eventTruth', help="Full directory path to event truth from TrackML")
-    
-    # TODO: temporary, only considering endcap volume 7
-    max_volume_region = 8000 # first consider endcap volume 7 only
+ 
 
     args = parser.parse_args()
     outputDir = args.outputDir
@@ -54,7 +52,7 @@ def main():
     event_truth_file = event_truth + "full-mapping-minCurv-0.3-800.csv"
 
     # load truth information & metadata on events
-    nodes, edges = h.load_nodes_edges(event_network, max_volume_region)
+    nodes, edges = h.load_nodes_edges(event_network)
     # h.load_save_truth(event_network, event_truth, event_truth_file) #  only need to execute once
     truth = pd.read_csv(event_truth_file)
 
