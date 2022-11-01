@@ -468,17 +468,16 @@ def plot_subgraphs(GraphList, outputDir, node_labels=False, save_plot=False, tit
 def __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, extracted_pvals_zr, outputFile, 
                                                 title, key, axis1, axis2, node_labels, save_plot):
 
+    colors = ["#f7c04a", "#2648ad", "#991895"]
     _, ax = plt.subplots(figsize=(12,10))
-    iteration_1=[]
-    other_iterations=[]
-    for subGraph in GraphList:
-        iteration = int(subGraph.graph["iteration"])
-        if iteration == 1: iteration_1.append(subGraph)
-        else: other_iterations.append(subGraph)
+    GraphList.sort(key=lambda subGraph: int(subGraph.graph["iteration"]))
 
-    for subGraph in iteration_1:
+    for subGraph in GraphList:
+        
         iteration = int(subGraph.graph["iteration"])
-        color = subGraph.graph["color"]
+        if iteration == 1: color = colors[0]
+        elif iteration == 2: color = colors[1]
+
         pos=nx.get_node_attributes(subGraph, key)
         edge_colors = []
         for u, v in subGraph.edges():
@@ -488,20 +487,7 @@ def __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, extrac
         nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=50, label=iteration)
         if node_labels:
             nx.draw_networkx_labels(subGraph, pos, font_size=4)
-    
-    for subGraph in other_iterations:
-        iteration = int(subGraph.graph["iteration"])
-        color = subGraph.graph["color"]
-        pos=nx.get_node_attributes(subGraph, key)
-        edge_colors = []
-        for u, v in subGraph.edges():
-            if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
-            else: edge_colors.append("#f2f2f2")
-        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
-        nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=50, label=iteration)
-        if node_labels:
-            nx.draw_networkx_labels(subGraph, pos, font_size=4)
-    
+
     ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
     plt.xlabel(axis1)
     plt.ylabel(axis2)

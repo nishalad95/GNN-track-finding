@@ -127,7 +127,7 @@ print("truth_num_hits:\n", truth_num_hits)
 
 for i, track in enumerate(track_candidates):
     # if i == 20:   # temporary for debugging
-    print("---\nProcessing track candidate ", str(i), "\n---")
+    print("------- Processing track candidate ", str(i), " -------")
     
     # get the majority particle id from all nodes in the candidate to find out reconstructed particle id
     # get the hit dissociation to particle id for every node in each candidate
@@ -214,6 +214,6 @@ print("\nTotal num of reconstructed tracks:", num_reconstructed_tracks)
 print("Total num of reference tracks:", num_reference_tracks)
 efficiency = num_reconstructed_tracks * 100 / num_reference_tracks
 efficiency= "{:.3f}".format(efficiency)
-print("----------------------------")
+print("-------------------------------------------------------")
 print("Track reconstruction efficiency: ", efficiency, "%")
-print("----------------------------")
+print("-------------------------------------------------------")

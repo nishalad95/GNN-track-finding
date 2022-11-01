@@ -433,11 +433,9 @@ def main():
             remaining.append(subGraph)
 
     
-    # attach iteration number & color to good extracted tracks
-    color = ["#"+''.join([random.choice('0123456789ABCDEF') for _ in range(6) ])]
+    # attach iteration number to good extracted tracks
     for subGraph in extracted:
         subGraph.graph["iteration"] = iteration_num
-        subGraph.graph["color"] = color[0]
 
     print("\nNumber of extracted candidates during this iteration:", len(extracted))
     print("Number of remaining subGraphs to be further processed:", len(remaining))
