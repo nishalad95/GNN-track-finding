@@ -12,11 +12,13 @@ import random
 from utilities import helper as h
 # from community_detection import community_detection
 import pprint
-from collections import Counter
+from collections import Counter, defaultdict
 from itertools import combinations
 import itertools
 from math import *
 from more_itertools import locate
+from multiprocessing import Pool
+from functools import partial
 
 
 COMMUNITY_DETECTION = False
@@ -55,9 +57,8 @@ def get_midpoint_coords(xyzr_coords):
     return xm, ym, zm, rm
 
 
-def check_close_proximity_nodes(subgraph, threshold_distance):
-    # threshold_distance = 4.0        # distance between nodes used for close proximity node merging
-    print("Threshold distance for node merging: ", threshold_distance)
+def check_close_proximity_nodes(subgraph):
+    threshold_distance = 4.0
 
     # get the freq distribution of the vivl_ids
     vivl_id_dict = nx.get_node_attributes(subgraph, "vivl_id")
@@ -110,7 +111,6 @@ def check_close_proximity_nodes(subgraph, threshold_distance):
                             nodes_to_merge = (node1_coords, node2_coords)
                             xm, ym, zm, rm = get_midpoint_coords(nodes_to_merge)
                             print("merging of nodes possible")
-                            print("distance separation of close proximity nodes: ", distance)
                             
                             # change subgraph attributes
                             copied_subgraph.nodes[node1]['GNN_Measurement'].x = xm
@@ -133,7 +133,7 @@ def check_close_proximity_nodes(subgraph, threshold_distance):
                             copied_subgraph.remove_node(node2)
 
                         else:
-                            print("merging of nodes nodes not possible, too large distance between them, distance: ", distance)
+                            print("merging of nodes nodes not possible, too large distance between them")
                             copied_subgraph = None
                             break
                     else:
@@ -151,21 +151,17 @@ def check_close_proximity_nodes(subgraph, threshold_distance):
 
 
 
-def angle_trunc(a, p2):
-    if p2[1] > 0.0:
-        a = (2*np.pi) - a
+def angle_trunc(a):
+    while a < 0.0:
+        a += pi * 2
     return a
-    # while a < 0.0:
-    #     a += pi * 2
-    # return a
 
 
 # get angle to the positive x axis in radians
 def getAngleBetweenPoints(p1, p2):
     deltaY = p2[1] - p1[1]
     deltaX = p2[0] - p1[0]
-    angle = np.abs(atan2(deltaY, deltaX))
-    return angle_trunc(angle, p2)
+    return angle_trunc(atan2(deltaY, deltaX))
 
 
 def rotate_track(coords, separation_3d_threshold):
@@ -179,7 +175,9 @@ def rotate_track(coords, separation_3d_threshold):
         p2 = coords[-3]
 
     # rotate counter clockwise, first edge to be parallel with x axis
-    angle = getAngleBetweenPoints(p1, p2)
+    angle = 2*pi - getAngleBetweenPoints(p1, p2)
+    cos_angle = np.cos(angle)
+    sin_angle = np.sin(angle)
     rotated_coords = []
     for c in coords:
         x, y, z, r = c[0], c[1], c[2], c[3]
@@ -258,6 +256,7 @@ def KF_track_fit_xy(sigma_ms, coords):
                     [Q01,                   st2 + dxw2, Q12],
                     [Q02,                   Q12,        sw2]])      # Q process uncertainty/noise, OU model
 
+    print("KF track fit in xy")
     pval = KF_predict_update(f, obs_y)
     return pval
 
@@ -284,6 +283,7 @@ def KF_track_fit_zr(sigma_ms, coords):
     f.R = sigma0**2                                         # R measuremnt noise
     f.Q = sigma_ms                                          # Q process uncertainty/noise, OU model
 
+    print("KF track fit in zr")
     pval = KF_predict_update(f, obs_y)
     return pval
 
@@ -306,6 +306,94 @@ def CCA(subCopy):
     return potential_tracks
 
 
+
+def track_splitting(subGraph, extracted, fragment, color, iteration_num, track_acceptance, sigma_ms, separation_3d_threshold):
+    
+    # create extracted candidates dict
+    extracted= {"extracted":[], "extracted_pvals":[], "extracted_pvals_zr":[], "remaining":[], "fragments":[]}
+    
+    subCopy = subGraph.copy()
+    potential_tracks = CCA(subCopy)     # remove any deactive edges & identify subgraphs
+    print("\nProcessing subGraph: \nNum. of potential tracks: ", len(potential_tracks))
+
+    candidate_to_remove_from_subGraph = []
+    for n, candidate in enumerate(potential_tracks):
+        print("Processing candidate: ", n)
+
+        #TODO: need to check for holes?
+
+        # check for track fragments
+        if candidate.number_of_nodes() >= fragment:
+            
+            # check for close proximity nodes based on their distance & common module_id values - merge where appropriate
+            # if merged_candidate is not None, then we need to use merged_candidate's coords in the KF, but extract the original candidate
+            candidate, merged_candidate = check_close_proximity_nodes(candidate)
+            
+            candidate_to_assess = candidate
+            if merged_candidate is not None: candidate_to_assess = merged_candidate
+
+            # check for 1 hit per layer - use volume_id & in_volume_layer_id
+            vivl_id_values = nx.get_node_attributes(candidate_to_assess,'vivl_id').values()
+
+            if len(vivl_id_values) == len(set(vivl_id_values)): 
+                # good candidate
+                print("no duplicates volume_ids & in_volume_layer_ids for this candidate")
+
+                # sort the candidates by radius r largest to smallest (4th element in this tuple of tuples: (node_num, (x,y,z,r)) )
+                nodes_coords_tuples = list(nx.get_node_attributes(candidate_to_assess, 'xyzr').items())
+                sorted_nodes_coords_tuples = sorted(nodes_coords_tuples, reverse=True, key=lambda item: item[1][3])
+                # check if the sorted nodes are connected
+                all_connected = True
+                for j in range(len(sorted_nodes_coords_tuples) - 1):
+                    node1 = sorted_nodes_coords_tuples[j][0]
+                    node2 = sorted_nodes_coords_tuples[j+1][0]
+                    if not candidate_to_assess.has_edge(node1, node2) and not candidate_to_assess.has_edge(node2, node1):
+                        all_connected = False
+                
+                if all_connected:
+                    coords = [element[1] for element in sorted_nodes_coords_tuples]
+                    # rotate the track such that innermost edge parallel to x-axis - r&z components are left unchanged
+                    coords = rotate_track(coords, separation_3d_threshold)
+                    # apply KF track fit - TODO: parallelize these 2 KF track fits
+                    pval = KF_track_fit_xy(sigma_ms, coords)
+                    pval_zr = KF_track_fit_zr(sigma_ms, coords)
+                    
+                    if (pval >= track_acceptance) and (pval_zr >= track_acceptance):
+                        print("Good KF fit, p-value:", pval, "\n(x,y,z,r):", coords)
+                        candidate.graph["iteration"] = iteration_num
+                        candidate.graph["color"] = color  
+                        extracted["extracted"].append(candidate)
+                        extracted["extracted_pvals"].append(pval)
+                        extracted["extracted_pvals_zr"].append(pval_zr)
+                        candidate_to_remove_from_subGraph.append(candidate)
+                        
+                    else:
+                        print("p-value too small, leave for further processing, pval_xy: " + pval + " pval_zr: "+ pval_zr)
+                else:
+                    print("Candidate not accepted, not connceted in order")
+
+            else: 
+                print("Bad candidate, > 1 hit per layer, will pass through community detection")
+                # TODO: community detection?
+                if COMMUNITY_DETECTION:
+                    run_community_detection(candidate, fragment)
+        else:
+            print("Too few nodes, track fragment")
+
+    # remove good candidates from subGraph & save remaining network
+    for good_candidate in candidate_to_remove_from_subGraph:
+        nodes = good_candidate.nodes()
+        subGraph.remove_nodes_from(nodes)
+    if (len(subGraph.nodes()) <= 3) and (len(subGraph.nodes()) > 0): 
+        extracted["fragments"].append(subGraph)
+    elif len(subGraph.nodes()) >= 4:
+        extracted["remaining"].append(subGraph)
+
+    return extracted
+
+
+
+
 def main():
     
     # parse command line args
@@ -316,7 +404,6 @@ def main():
     parser.add_argument('-f', '--fragments', help='output directory to save track fragments')
     parser.add_argument('-p', '--pval', help='chi-squared track candidate acceptance level')
     parser.add_argument('-s', '--separation_3d_threshold', help="3d distance cut between close proximity nodes, used in node merging")
-    parser.add_argument('-t', '--threshold_distance_node_merging', help="threshold_distance_node_merging")
     # parser.add_argument('-e', '--error', help="rms of track position measurements")
     parser.add_argument('-m', '--sigma_ms', help="uncertainty due to multiple scattering, process noise")
     parser.add_argument('-n', '--numhits', help="minimum number of hits for good track candidate")
@@ -333,7 +420,6 @@ def main():
     subgraph_path = "_subgraph.gpickle"
     fragment = int(args.numhits)
     separation_3d_threshold = float(args.separation_3d_threshold)
-    threshold_distance_node_merging = float(args.threshold_distance_node_merging)
     # get iteration num
     inputDir_list = inputDir.split("/")
     iterationDir = filter(lambda x: x.startswith('iteration_'), inputDir_list)
@@ -351,97 +437,35 @@ def main():
 
     print("Intial total no. of subgraphs:", len(subGraphs))
 
-    extracted = []
-    extracted_pvals = []
-    extracted_pvals_zr = []
-    remaining = []
-    fragments = []
-    for i, subGraph in enumerate(subGraphs):
-        
-        subCopy = subGraph.copy()
-        potential_tracks = CCA(subCopy)     # remove any deactive edges & identify subgraphs
-        print("\nProcessing subGraph: ", i, "\nNum. of potential tracks: ", len(potential_tracks))
+    # assign colour for this iteration - used in plotting
+    color = ["#"+''.join([random.choice('0123456789ABCDEF') for _ in range(6) ])][0]
 
-        candidate_to_remove_from_subGraph = []
-        for n, candidate in enumerate(potential_tracks):
-            print("Processing candidate: ", n)
+    # execute parallel track splitting
+    extracted = {}
+    pool = Pool(os.cpu_count())
+    items = [(subGraphs[i], extracted, fragment, color, iteration_num, track_acceptance, sigma_ms, separation_3d_threshold) for i in range(len(subGraphs))]
+    extracted = pool.starmap(track_splitting, items)
+    pool.close()
+    pool.join()
 
-            #TODO: need to check for holes?
+    # flatten the dictionary to {"extracted":[], "extracted_pvals":[], "extracted_pvals_zr":[], "remaining":[], "fragments":[]}
+    extracted_flattened = {
+                            k: [d.get(k) for d in extracted]
+                            for k in set().union(*extracted)
+                        }
+    for k, v in extracted_flattened.items():
+        extracted_flattened[k] = list(itertools.chain(*v))
 
-            # check for track fragments
-            if candidate.number_of_nodes() >= fragment:
-                
-                # check for close proximity nodes based on their distance & common module_id values - merge where appropriate
-                # if merged_candidate is not None, then we need to use merged_candidate's coords in the KF, but extract the original candidate
-                candidate, merged_candidate = check_close_proximity_nodes(candidate, threshold_distance_node_merging)
-                
-                candidate_to_assess = candidate
-                if merged_candidate is not None: candidate_to_assess = merged_candidate
-
-                # check for 1 hit per layer - use volume_id & in_volume_layer_id
-                vivl_id_values = nx.get_node_attributes(candidate_to_assess,'vivl_id').values()
-
-                if len(vivl_id_values) == len(set(vivl_id_values)): 
-                    # good candidate
-                    print("no duplicates volume_ids & in_volume_layer_ids for this candidate")
-
-                    # sort the candidates by radius r largest to smallest (4th element in this tuple of tuples: (node_num, (x,y,z,r)) )
-                    nodes_coords_tuples = list(nx.get_node_attributes(candidate_to_assess, 'xyzr').items())
-                    sorted_nodes_coords_tuples = sorted(nodes_coords_tuples, reverse=True, key=lambda item: item[1][3])
-                    # check if the sorted nodes are connected
-                    all_connected = True
-                    for j in range(len(sorted_nodes_coords_tuples) - 1):
-                        node1 = sorted_nodes_coords_tuples[j][0]
-                        node2 = sorted_nodes_coords_tuples[j+1][0]
-                        if not candidate_to_assess.has_edge(node1, node2) and not candidate_to_assess.has_edge(node2, node1):
-                            all_connected = False
-                    
-                    if all_connected:
-                        coords = [element[1] for element in sorted_nodes_coords_tuples]
-                        # rotate the track such that innermost edge parallel to x-axis - r&z components are left unchanged
-                        coords = rotate_track(coords, separation_3d_threshold)
-                        # apply KF track fit - TODO: parallelize these 2 KF track fits
-                        pval = KF_track_fit_xy(sigma_ms, coords)
-                        pval_zr = KF_track_fit_zr(sigma_ms, coords)
-                        if (pval >= track_acceptance) and (pval_zr >= track_acceptance):
-                            print("Good KF fit, p-value:", pval, "\n(x,y,z,r):", coords)
-                            extracted.append(candidate)
-                            extracted_pvals.append(pval)
-                            extracted_pvals_zr.append(pval_zr)
-                            candidate_to_remove_from_subGraph.append(candidate)
-                            
-                        else:
-                            print("p-value too small, leave for further processing, pval_xy: " + str(pval) + " pval_zr: " + str(pval_zr))
-                    else:
-                        print("Candidate not accepted, not connceted in order")
-
-                else: 
-                    print("Bad candidate, > 1 hit per layer, will pass through community detection")
-                    # TODO: community detection?
-                    if COMMUNITY_DETECTION:
-                        run_community_detection(candidate, fragment)
-            else:
-                print("Too few nodes, track fragment")
-
-        # remove good candidates from subGraph & save remaining network
-        for good_candidate in candidate_to_remove_from_subGraph:
-            nodes = good_candidate.nodes()
-            subGraph.remove_nodes_from(nodes)
-        if (len(subGraph.nodes()) <= 3) and (len(subGraph.nodes()) > 0): 
-            fragments.append(subGraph)
-        elif len(subGraph.nodes()) >= 4:
-            remaining.append(subGraph)
-
+    extracted = extracted_flattened["extracted"]
+    extracted_pvals = extracted_flattened["extracted_pvals"]
+    extracted_pvals_zr = extracted_flattened["extracted_pvals_zr"]
+    remaining = extracted_flattened["remaining"]
+    fragments = extracted_flattened["fragments"]
     
-    # attach iteration number & color to good extracted tracks
-    color = ["#"+''.join([random.choice('0123456789ABCDEF') for _ in range(6) ])]
-    for subGraph in extracted:
-        subGraph.graph["iteration"] = iteration_num
-        subGraph.graph["color"] = color[0]
-
-    print("\nNumber of extracted candidates during this iteration:", len(extracted))
     print("Number of remaining subGraphs to be further processed:", len(remaining))
     print("Number of track fragments found:", len(fragments))
+    print("\nNumber of extracted candidates during this iteration:", len(extracted))
+    
     # load all extracted candidates, from previous iterations
     i = 0
     path = candidatesDir + str(i) + subgraph_path
@@ -452,6 +476,7 @@ def main():
         path = candidatesDir + str(i) + subgraph_path
 
     print("Total number of extracted candidates:", len(extracted))
+
 
     # plot and save all extracted candidates from previous and this iteration
     h.plot_save_subgraphs_iterations(extracted, extracted_pvals, extracted_pvals_zr, candidatesDir, "Extracted candidates", node_labels=True, save_plot=True)

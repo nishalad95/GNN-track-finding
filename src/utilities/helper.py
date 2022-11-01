@@ -175,41 +175,6 @@ def compute_3d_distance(coord1, coord2):
     return np.sqrt( (x1 - x2)**2 + (y1 - y2)**2 + (z1 - z2)**2 )
 
 
-def angle_trunc(a):
-    while a < 0.0:
-        a += pi * 2
-    return a
-
-
-# get angle to the positive x axis in radians
-def getAngleBetweenPoints(p1, p2):
-    deltaY = p2[1] - p1[1]
-    deltaX = p2[0] - p1[0]
-    return angle_trunc(atan2(deltaY, deltaX))
-
-
-def rotate_track(coords, separation_3d_threshold=None):
-    # coords are ordered from outermost to innermost -> use innermost edge
-    p1 = coords[-1]
-    p2 = coords[-2]
-
-    # if nodes p1 and p2 are too close, use the next node
-    if separation_3d_threshold is not None:    
-        distance = compute_3d_distance(p1, p2)
-        if distance < separation_3d_threshold:
-            p2 = coords[-3]
-
-    # rotate counter clockwise, first edge to be parallel with x axis
-    angle = 2*pi - getAngleBetweenPoints(p1, p2)
-    cos_angle = np.cos(angle)
-    sin_angle = np.sin(angle)
-    rotated_coords = []
-    for c in coords:
-        x, y = c[0], c[1]
-        x_new = x * np.cos(angle) - y * np.sin(angle)    # x_new = xcos(angle) - ysin(angle)
-        y_new = x * np.sin(angle) + y * np.cos(angle)    # y_new = xsin(angle) + ycos(angle) 
-        rotated_coords.append((x_new, y_new)) 
-    return rotated_coords
 
 def compute_track_state_estimates(GraphList):
     sigmaO = 4.0        # 4.0mm larger error in m_O due to beamspot error and error at the origin
@@ -226,18 +191,20 @@ def compute_track_state_estimates(GraphList):
             gradients = []
             track_state_estimates = {}
             
+            print("\nInitialization: Processing node...", node)
+
             # create a list of node & neighbour coords including the origin
             node_gnn = G.nodes[node]["GNN_Measurement"]
             m_node = (node_gnn.x, node_gnn.y)
             coords = [(0.0, 0.0), m_node]
             keys = [-1, node]
 
-            for neighbor in nx.all_neighbors(G, node):
+            for neighbor in set(nx.all_neighbors(G, node)):
                 neighbour_gnn = G.nodes[neighbor]["GNN_Measurement"]
                 m_neighbour = (neighbour_gnn.x, neighbour_gnn.y)
                 coords.append(m_neighbour)
                 keys.append(neighbor)
-
+                # calculate gradient - used in clustering
                 dy = m_node[1] - m_neighbour[1]
                 dx = m_node[0] - m_neighbour[0]
                 grad = dy / dx
@@ -246,48 +213,85 @@ def compute_track_state_estimates(GraphList):
             # [neighbour1, neighbour2, ..., node, (0.0, 0.0)]
             coords.reverse()
             keys.reverse()
+  
+            # transform the coords: translate and rotate
+            # x_new = xcos(angle) + ysin(angle)
+            # y_new = -xsin(angle) + ycos(angle)
+            print("Now transforming to local coordinate system:")
+            x_A = m_node[0]
+            y_A = m_node[1]
+            print("NodeA coordinates: we want to move into this local c.s.")
+            print("x_A: ", x_A, "y_A: ", y_A)
+        
+            # get the azimuth angle - angle of rotation (origin-node edge parallel with x axis):
+            azimuth_angle = atan2(y_A, x_A)
+            azimuth_angle_deg = azimuth_angle * 180 / np.pi
+            print("All coordinates [neighbour1, neighbour2, ..., node, (0.0, 0.0)]: \n", coords)
+            print("azimuth_angle: ", azimuth_angle)
+            print("azimuth angle in deg: ", azimuth_angle_deg)
 
-            # rotate the node & its neighbours to local node-specific coordinate system
-            rotated_coords = rotate_track(coords)
-
-            # translate all coords such that the node in question becomes the new origin
-            x_trans = rotated_coords[-2][0]
-            y_trans = rotated_coords[-2][1]
             transformed_coords = []
-            for rc in rotated_coords:
-                tx = rc[0] - x_trans
-                ty = rc[1] - y_trans
-                tc = (tx, ty)
+            for c in coords:
+                x_P = c[0]
+                y_P = c[1]
+                x_new = (x_P - x_A)*np.cos(azimuth_angle) + (y_P - y_A)*np.sin(azimuth_angle)
+                y_new = -(x_P - x_A)*np.sin(azimuth_angle) + (y_P - y_A)*np.cos(azimuth_angle)
+                tc = (x_new, y_new)
                 transformed_coords.append(tc)
-            # print("TRANSLATED COORDS:\n", transformed_coords)
+            print("All original coordinates: ", coords)
+            print("All transformed coordinates", transformed_coords)
 
             # for each neighbour connection obtain the measurement vector in the new axis
             # [m_0, m_A, m_B] m_0 the old origin, m_A the new origin, m_B the neighbour
+            print("Now compute track state estimates for every neighbour edge component:")
             x_0 = transformed_coords[-1][0]
+            print("x0 (same for every neighbour): ", x_0)
             transformed_neighbour_coords = transformed_coords[:-2]
             keys = keys[:-2]
             for tnc, key in zip(transformed_neighbour_coords, keys):
                 x_B = tnc[0]
                 m_B = tnc[1]
                 measurement_vector = [m_O, m_A, m_B]
-                H = np.array([  [x_0**2,         x_0,          1], 
-                                [0,                0,          1], 
-                                [x_B**2,         x_B,          1]])
+                H = np.array([  [0.5*x_0**2,         x_0,          1], 
+                                [0.0,                0.0,          1], 
+                                [0.5*x_B**2,         x_B,          1]])
+                print("x_B: ", x_B, "\nm_B: ", m_B)
+                print("measurement vector: ", measurement_vector)
+                print("H matrix: \n", H)
 
-                # compute track state parameters & covariance
+                # compute track state parameters, covariance and t_vector for parametric representation
                 H_inv = np.linalg.inv(H)    # invert H matrix to obtain measurement matrix
                 track_state_vector = H_inv.dot(measurement_vector)  # parabolic parameters: a, b, c
+                print("H_inv: \n", H_inv)
+                print("track_state_vector [a, b, c]: ", track_state_vector)
+
+                a = track_state_vector[0]
+                b = track_state_vector[1]
+                c = track_state_vector[2]   # the measurement y = c
+
+                # print("saving parabolic parameters:")
+                # with open('parabolic_param_a.csv', 'a') as f:
+                #     f.write(str(a) + "\n")
+                # with open('parabolic_param_b.csv', 'a') as f:
+                #     f.write(str(b) + "\n")
+                # with open('parabolic_param_c.csv', 'a') as f:
+                #     f.write(str(c) + "\n")
+
+                norm_factor = 1/(np.sqrt(1 + b**2))
+                t_vector = np.array([0, c, norm_factor, b*norm_factor, 0, a])
                 covariance = H_inv.dot(S).dot(H_inv.T)
                 track_state_estimates[key] = {  'edge_state_vector': track_state_vector, 
-                                                'edge_covariance': covariance }
+                                                'edge_covariance': covariance,
+                                                't_vector': t_vector }
 
-            # TODO: debugging
-            # if i == 0:
-            #     print("track state estimates:\n", track_state_estimates)
             # store all track state estimates at the node
             G.nodes[node]['track_state_estimates'] = track_state_estimates
-            # (mean, variance) of edge orientation - needed for KL distance in clustering
+            # (mean, variance) of edge orientation in xy plane - needed for KL distance in clustering
             G.nodes[node]['edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
+            
+            # store the transformation information - used in extrapolation
+            G.nodes[node]['angle_of_rotation'] = azimuth_angle
+            G.nodes[node]['translation'] = (x_A, y_A)
 
     return GraphList
 
@@ -461,11 +465,18 @@ def plot_subgraphs(GraphList, outputDir, node_labels=False, save_plot=False, tit
 
 
 # private function
-def __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, outputFile, title,
-                                                    key, axis1, axis2, node_labels, save_plot):
+def __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, extracted_pvals_zr, outputFile, 
+                                                title, key, axis1, axis2, node_labels, save_plot):
 
     _, ax = plt.subplots(figsize=(12,10))
+    iteration_1=[]
+    other_iterations=[]
     for subGraph in GraphList:
+        iteration = int(subGraph.graph["iteration"])
+        if iteration == 1: iteration_1.append(subGraph)
+        else: other_iterations.append(subGraph)
+
+    for subGraph in iteration_1:
         iteration = int(subGraph.graph["iteration"])
         color = subGraph.graph["color"]
         pos=nx.get_node_attributes(subGraph, key)
@@ -477,6 +488,20 @@ def __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, output
         nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=50, label=iteration)
         if node_labels:
             nx.draw_networkx_labels(subGraph, pos, font_size=4)
+    
+    for subGraph in other_iterations:
+        iteration = int(subGraph.graph["iteration"])
+        color = subGraph.graph["color"]
+        pos=nx.get_node_attributes(subGraph, key)
+        edge_colors = []
+        for u, v in subGraph.edges():
+            if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
+            else: edge_colors.append("#f2f2f2")
+        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
+        nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=50, label=iteration)
+        if node_labels:
+            nx.draw_networkx_labels(subGraph, pos, font_size=4)
+    
     ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
     plt.xlabel(axis1)
     plt.ylabel(axis2)
@@ -493,16 +518,13 @@ def __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, output
     for i, sub in enumerate(GraphList):
         save_network(outputFile, i, sub) # save network to serialized form
 
-    f = open(outputFile + "pvals.csv", 'w')
-    writer = csv.writer(f)
-    for pval in extracted_pvals:
-        writer.writerow([pval])
-    f.close()
+    pvals_df = pd.DataFrame({'pvals_xy' : extracted_pvals, 'pvals_zr' : extracted_pvals_zr}) 
+    pvals_df.to_csv(outputFile + 'pvals.csv')
 
 
 # used for visualising the good extracted candidates & iteration num
-def plot_save_subgraphs_iterations(GraphList, extracted_pvals, outputFile, title, node_labels=True, save_plot=True):
+def plot_save_subgraphs_iterations(GraphList, extracted_pvals, extracted_pvals_zr, outputFile, title, node_labels=True, save_plot=True):
     #xy plane
-    __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, outputFile, title, 'xy', "x", "y", node_labels, save_plot)
+    __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, extracted_pvals_zr, outputFile, title, 'xy', "x", "y", node_labels, save_plot)
     #zr plane
-    __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, outputFile, title, 'zr', "z", "r", node_labels, save_plot)
+    __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, extracted_pvals_zr, outputFile, title, 'zr', "z", "r", node_labels, save_plot)

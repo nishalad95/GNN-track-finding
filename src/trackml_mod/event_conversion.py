@@ -62,16 +62,6 @@ def main():
     endcap_graph = nx.DiGraph()
     endcap_graph = h.construct_graph(endcap_graph, nodes, edges, truth, sigma_ms)
 
-    # debugging
-    # print("-----------------------------------------")
-    # print("ENDCAP GRAPH:")
-    # print("-----------------------------------------")
-    # for node in endcap_graph.nodes(data=True):
-    #     pprint.pprint(node)
-    # print("-----------------------------------------")
-    # print("EDGE DATA:", endcap_graph.edges.data(), "\n")
-    # print("-----------------------------------------")
-
     print("Endcap volume 7 graph network:")
     print("Number of edges:", endcap_graph.number_of_edges())
     print("Number of nodes:", endcap_graph.number_of_nodes())
@@ -81,33 +71,25 @@ def main():
     endcap_graph = nx.Graph(endcap_graph[0])
     endcap_graph = nx.to_directed(endcap_graph)
 
-    # Temporary: can remove later
-    # save and plot the graph before any CCA is done
-    print("saving network before CCA")
-    h.initialize_edge_activation([endcap_graph])
-    h.save_network("beforeCCA/", 0, endcap_graph)
-    print("plotting network before CCA")
-    h.plot_subgraphs([endcap_graph], "beforeCCA/", save_plot=True, node_labels=True)
+    # temporary: can remove later
+    print("Number of edges again:", endcap_graph.number_of_edges())
+    print("Number of nodes again:", endcap_graph.number_of_nodes())
 
-    # # temporary: can remove later
-    # print("Number of edges again:", endcap_graph.number_of_edges())
-    # print("Number of nodes again:", endcap_graph.number_of_nodes())
-
-    # subGraphs = [endcap_graph.subgraph(c).copy() for c in nx.weakly_connected_components(endcap_graph)]
+    subGraphs = [endcap_graph.subgraph(c).copy() for c in nx.weakly_connected_components(endcap_graph)]
     
-    # subGraphs = h.compute_track_state_estimates(subGraphs)
-    # h.initialize_edge_activation(subGraphs)
-    # h.compute_prior_probabilities(subGraphs, 'track_state_estimates')
-    # h.compute_mixture_weights(subGraphs)
+    subGraphs = h.compute_track_state_estimates(subGraphs)
+    h.initialize_edge_activation(subGraphs)
+    h.compute_prior_probabilities(subGraphs, 'track_state_estimates')
+    h.compute_mixture_weights(subGraphs)
 
-    # print("Number of subgraphs..", len(subGraphs))
-    # h.plot_subgraphs(subGraphs, outputDir, title="Nodes & Edges subgraphs from TrackML generated data")
+    print("Number of subgraphs..", len(subGraphs))
+    h.plot_subgraphs(subGraphs, outputDir, title="Nodes & Edges subgraphs from TrackML generated data")
     
-    # # save the subgraphs
-    # for i, sub in enumerate(subGraphs):
-    #     h.save_network(outputDir, i, sub)
+    # save the subgraphs
+    for i, sub in enumerate(subGraphs):
+        h.save_network(outputDir, i, sub)
 
-    # print_graph_stats(outputDir)
+    print_graph_stats(outputDir)
 
 
 
