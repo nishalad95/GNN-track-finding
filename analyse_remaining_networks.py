@@ -14,8 +14,6 @@ def plot_subgraphs(graph):
     for i, subGraph in enumerate(graph):
         color = ["#"+''.join([random.choice('0123456789ABCDEF') for _ in range(6) ])][0]
         pos=nx.get_node_attributes(subGraph, 'xy')
-        # print("pos")
-        # print(pos)
         nodes = subGraph.nodes()
         edge_colors = []
         for u, v in subGraph.edges():

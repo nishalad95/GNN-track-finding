@@ -364,18 +364,14 @@ def construct_graph(graph, nodes, edges, truth, sigma_ms):
 
 
 
-def load_nodes_edges(event_path):
-    # TODO: temporary select nodes in region of interest
-    # barrel only
-    min_num = 7000
-    max_number = 10000
+def load_nodes_edges(event_path, min_volume, max_volume):
+    # volume region to consider
+    min_num = min_volume * 1000
+    max_number = (max_volume + 1) * 1000
     
     # nodes dataframe: node_idx,layer_id,x,y,z, r, volume_id, in_volume_layer_id
     nodes = pd.read_csv(event_path + "nodes.csv")
-    # nodes = nodes.loc[nodes['layer_id'] <= max_volume_region]
     nodes = nodes.loc[nodes['layer_id'].between(min_num, max_number)]
-
-
     nodes['r'] = nodes.apply(lambda row: edge_length_xy(row), axis=1)
     nodes['volume_id'] = nodes.apply(lambda row: get_volume_id(row.layer_id), axis=1) 
     nodes['in_volume_layer_id'] = nodes.apply(lambda row: get_in_volume_layer_id(row.layer_id), axis=1)
@@ -388,7 +384,6 @@ def load_nodes_edges(event_path):
     edges['node2'] = edges.apply(lambda row: row.name[0], axis=1)
     edges['node1'] = edges.apply(lambda row: row.name[1], axis=1)
     edges = edges.astype({'node2': 'int32', 'node1': 'int32'})
-    # print("edges:\n", edges)
 
     return nodes, edges
 
@@ -409,13 +404,13 @@ def load_save_truth(event_path, truth_event_path, truth_event_file):
 
     for index, row in truth.iterrows():
         hit_id = row.hit_id
-        truth['particle_id'][index] = hits_particles.loc[hits_particles.hit_id == hit_id].particle_id.item()
-        truth['volume_id'][index] = hits_module_id.loc[hits_module_id.hit_id == hit_id].volume_id.item()
-        truth['layer_id'][index] = hits_module_id.loc[hits_module_id.hit_id == hit_id].layer_id.item()
-        truth['module_id'][index] = hits_module_id.loc[hits_module_id.hit_id == hit_id].module_id.item()
+        truth.at[index, 'particle_id'] = hits_particles.loc[hits_particles.hit_id == hit_id].particle_id.item()
+        truth.at[index, 'volume_id'] = hits_module_id.loc[hits_module_id.hit_id == hit_id].volume_id.item()
+        truth.at[index, 'layer_id'] = hits_module_id.loc[hits_module_id.hit_id == hit_id].layer_id.item()
+        truth.at[index, 'module_id'] = hits_module_id.loc[hits_module_id.hit_id == hit_id].module_id.item()
 
     # number of hits for each truth particle
-    nhits = np.array([])
+    nhits = np.array([])                    # total number of hits associated to this particle_id
     particle_ids = truth['particle_id']
     for pid in particle_ids:
         try:

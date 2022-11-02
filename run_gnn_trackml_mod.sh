@@ -3,8 +3,9 @@
 # ---------------------------------------------------------------------------------------------
 # VARIABLES
 # ---------------------------------------------------------------------------------------------
-
-# track sim
+# event conversion and track simulation
+min_volume=7            # minimum volume number to analyse (inclusive) - used also in effciency calc
+max_volume=9            # maximum volume number to analyse (inclusive) - used also in efficiency calc
 # SIGMA0=0.1            # IMPORTANT: sigma0 is used in the extraction KF only, r.m.s measurement error in xy plane
 SIGMA_MS=0.0001         # 10^-4 multiple scattering error
 ROOTDIR=src/output      # output directory to store GNN algorithm output
@@ -20,7 +21,6 @@ p=0.01                  # p-value acceptance level for good track candidate extr
 n=3                     # minimum number of hits for good track candidate acceptance (>=n)
 s=10                    # 3d distance threshold for close proximity nodes, used in KF rotatation if nodes too close together
 t=8.0                   # threshold distance node merging in extraction
-
 # ----------------------------------------------------------------------------------------------
 
 
@@ -44,9 +44,7 @@ INPUT=$ROOTDIR/track_sim/network/
 mkdir -p $INPUT
 EVENT_NETWORK=src/trackml_mod/event_network/minCurv_0.3_800
 EVENT_TRUTH=src/trackml_mod/event_truth
-python src/trackml_mod/event_conversion.py -o $INPUT -m $SIGMA_MS -n $EVENT_NETWORK -t $EVENT_TRUTH
-# python particleid_nhits_endcap.py
-# python particleid_ndistinct_layers_endcap.py
+python src/trackml_mod/event_conversion.py -o $INPUT -m $SIGMA_MS -n $EVENT_NETWORK -t $EVENT_TRUTH -a $min_volume -z $max_volume
 stages+=("event_conversion.py")
 time=$SECONDS
 execution_times+=($time)
@@ -55,10 +53,11 @@ execution_times+=($time)
 # # copy the first 100 files over - DEVELOPMENT ONLY
 # mkdir $ROOTDIR/track_sim/network_100/
 # ls $ROOTDIR/track_sim/network/* | head -2000 | xargs -I{} cp {} $ROOTDIR/track_sim/network_100/
-# ----------------------------------------------------------------------------------------------
 
 
-
+# -----------------------------------------------------
+# Begin the iterations....
+# -----------------------------------------------------
 INPUT=$ROOTDIR/track_sim/network/
 for i in {1..2};
     do
@@ -91,7 +90,6 @@ for i in {1..2};
             time=$SECONDS
             execution_times+=($time)
         fi
-        
 
         echo "------------------------------------------------------"
         echo "Extracting track candidates"
@@ -105,7 +103,6 @@ for i in {1..2};
         mkdir -p $FRAGMENTS
         if (( $i > 1 ))
         then
-            # t=5.1  # threshold distance for node merging has been increased
             let num=$i-1
             cp -r $ROOTDIR/iteration_$num/candidates/ $CANDIDATES
         fi
@@ -121,8 +118,8 @@ done
 
 
 echo "----------------------------------------------------"
-echo "Running track reconstruction efficiency:"
-python src/extract/reconstruction_efficiency.py -t $EVENT_TRUTH -o $ROOTDIR
+# echo "Running track reconstruction efficiency:"
+python src/extract/reconstruction_efficiency.py -t $EVENT_TRUTH -o $ROOTDIR -a $min_volume -z $max_volume
 echo "Plotting Purity distribution..."
 python src/extract/purity_distribution.py -i $ROOTDIR
 echo "Plotting p-value distribution..."
@@ -130,10 +127,10 @@ python src/extract/p_value_distribution.py -i $ROOTDIR
 echo "----------------------------------------------------"
 
 
-# time it!
-stages+=("reconstruction_efficiency.py")
-time=$SECONDS
-execution_times+=($time)
+# # time it!
+# stages+=("reconstruction_efficiency.py")
+# time=$SECONDS
+# execution_times+=($time)
 
 
 echo "----------------------------------------------------"
@@ -142,14 +139,14 @@ touch execution_stages.txt
 printf "%s\n" "${stages[@]}" > $ROOTDIR/execution_stages.txt
 for value in "${stages[@]}"
 do
-     echo $value
+     echo "$value"
 done
 
 touch execution_times.txt
 printf "%s\n" "${execution_times[@]}" > $ROOTDIR/execution_times.txt
 for value in "${execution_times[@]}"
 do
-     echo $value
+     echo "$value"
 done
 echo "----------------------------------------------------"
 
