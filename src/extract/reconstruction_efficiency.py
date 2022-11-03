@@ -17,15 +17,15 @@ parser.add_argument('-t', '--eventTruth', help="Full directory path to event tru
 parser.add_argument('-o', '--output', help='output directory to save data')
 parser.add_argument('-a', '--min_volume', help="Minimum volume integer number in TrackML model to consider")
 parser.add_argument('-z', '--max_volume', help="Maximum volume integer number in TrackML model to consider")
+parser.add_argument('-i', '--iterations', help='Total number of iterations')
 
 args = parser.parse_args()
 outputDir = args.output
 event_truth = args.eventTruth
 min_volume = int(args.min_volume)
 max_volume = int(args.max_volume)
-
-# TODO: will change in future - for endcap only & currently only for iteration1
-inputDir = outputDir + "/iteration_2/candidates/"
+iteration_num = int(args.iterations)
+inputDir = outputDir + "/iteration_" + str(iteration_num) + "/candidates/"
 
 # every hit has an associated particle id: from the truth information file for hits
 # full info about particles itself is contained in the particles file
@@ -62,7 +62,7 @@ print(len(pixel_hits.particle_id.unique()))
 
 # Compute number of reference tracks: Apply a cut on the num of distinct layers for all the hits of a particle
 # due to the many-to-1 hits-to-node mapping, we require a cut on the number of distinct layers
-num_distinct_layers_required = 3
+num_distinct_layers_required = 4
 num_reference_tracks = 0
 reference_tracks_dict = {}          # key:value particle_id:num_distinct_layers_endcap
 unique_particle_ids = pixel_hits.particle_id.unique()
@@ -200,16 +200,14 @@ np.savetxt(outputDir + "/extracted_particle_purities.csv", particle_purities, de
 # plt.show()
 
 # distribution of reconstructed tracks pTs after the purity calc & pT cut
-pT_dist = []
-for i, r in enumerate(reconstructed_particle_ids_set):
-    pT_dist.append(particles.loc[particles.particle_id == r].pT.item())
-plt.hist(pT_dist, bins=30)
-plt.title("pT distribution of extracted candidates after processing purity & pT cut")
-plt.savefig(outputDir + "/pt_distribution_extracted_candidates.png", dpi=300)
-plt.ylabel("Frequency")
-plt.xlabel("pT (GeV)")
-plt.show()
-
+# pT_dist = []
+# for i, r in enumerate(reconstructed_particle_ids_set):
+#     pT_dist.append(particles.loc[particles.particle_id == r].pT.item())
+# plt.hist(pT_dist, bins=30)
+# plt.title("pT distribution of extracted candidates after processing purity & pT cut")
+# plt.ylabel("Frequency")
+# plt.xlabel("pT (GeV)")
+# plt.savefig(outputDir + "/pt_distribution_extracted_candidates.png", dpi=300)
 
 efficiency = num_reconstructed_tracks * 100 / num_reference_tracks
 efficiency= "{:.3f}".format(efficiency)

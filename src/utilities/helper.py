@@ -123,7 +123,7 @@ def calculate_side_norm_factor(subGraph, node, updated_track_states):
 
 # used in extrapolate_merged_states
 def reweight(subGraphs, track_state_estimates_key):
-    print("Reweighting Gaussian mixture...")
+    # print("Reweighting Gaussian mixture...")
     reweight_threshold = 0.1
 
     for subGraph in subGraphs:
@@ -134,7 +134,7 @@ def reweight(subGraphs, track_state_estimates_key):
             node_attr = node[1]
 
             if track_state_estimates_key in node_attr.keys():
-                print("\nReweighting node:", node_num)
+                # print("\nReweighting node:", node_num)
                 updated_track_states = node_attr[track_state_estimates_key]
                 
                 calculate_side_norm_factor(subGraph, node, updated_track_states)
@@ -150,8 +150,8 @@ def reweight(subGraphs, track_state_estimates_key):
                     if subGraph[neighbour_num][node_num]['activated'] == 1:
                         reweight = (updated_state_dict['mixture_weight'] * updated_state_dict['likelihood'] * updated_state_dict['prior']) / reweight_denom
                         reweight /= updated_state_dict['lr_layer_norm']
-                        print("REWEIGHT:", reweight)
-                        print("side:", updated_state_dict['side'])  
+                        # print("REWEIGHT:", reweight)
+                        # print("side:", updated_state_dict['side'])  
                         updated_state_dict['mixture_weight'] = reweight
 
                         # add as edge attribute
@@ -191,8 +191,6 @@ def compute_track_state_estimates(GraphList):
             gradients = []
             track_state_estimates = {}
             
-            print("\nInitialization: Processing node...", node)
-
             # create a list of node & neighbour coords including the origin
             node_gnn = G.nodes[node]["GNN_Measurement"]
             m_node = (node_gnn.x, node_gnn.y)
@@ -214,21 +212,20 @@ def compute_track_state_estimates(GraphList):
             coords.reverse()
             keys.reverse()
   
-            # transform the coords: translate and rotate
+            # transform the coords to local coordinate system: translate and rotate
             # x_new = xcos(angle) + ysin(angle)
             # y_new = -xsin(angle) + ycos(angle)
-            print("Now transforming to local coordinate system:")
             x_A = m_node[0]
             y_A = m_node[1]
-            print("NodeA coordinates: we want to move into this local c.s.")
-            print("x_A: ", x_A, "y_A: ", y_A)
+            # print("NodeA coordinates: we want to move into this local c.s.")
+            # print("x_A: ", x_A, "y_A: ", y_A)
         
             # get the azimuth angle - angle of rotation (origin-node edge parallel with x axis):
             azimuth_angle = atan2(y_A, x_A)
             azimuth_angle_deg = azimuth_angle * 180 / np.pi
-            print("All coordinates [neighbour1, neighbour2, ..., node, (0.0, 0.0)]: \n", coords)
-            print("azimuth_angle: ", azimuth_angle)
-            print("azimuth angle in deg: ", azimuth_angle_deg)
+            # print("All coordinates [neighbour1, neighbour2, ..., node, (0.0, 0.0)]: \n", coords)
+            # print("azimuth_angle: ", azimuth_angle)
+            # print("azimuth angle in deg: ", azimuth_angle_deg)
 
             transformed_coords = []
             for c in coords:
@@ -238,14 +235,14 @@ def compute_track_state_estimates(GraphList):
                 y_new = -(x_P - x_A)*np.sin(azimuth_angle) + (y_P - y_A)*np.cos(azimuth_angle)
                 tc = (x_new, y_new)
                 transformed_coords.append(tc)
-            print("All original coordinates: ", coords)
-            print("All transformed coordinates", transformed_coords)
+            # print("All original coordinates: ", coords)
+            # print("All transformed coordinates", transformed_coords)
 
             # for each neighbour connection obtain the measurement vector in the new axis
             # [m_0, m_A, m_B] m_0 the old origin, m_A the new origin, m_B the neighbour
-            print("Now compute track state estimates for every neighbour edge component:")
+            # print("Now compute track state estimates for every neighbour edge component:")
             x_0 = transformed_coords[-1][0]
-            print("x0 (same for every neighbour): ", x_0)
+            # print("x0 (same for every neighbour): ", x_0)
             transformed_neighbour_coords = transformed_coords[:-2]
             keys = keys[:-2]
             for tnc, key in zip(transformed_neighbour_coords, keys):
@@ -255,15 +252,15 @@ def compute_track_state_estimates(GraphList):
                 H = np.array([  [0.5*x_0**2,         x_0,          1], 
                                 [0.0,                0.0,          1], 
                                 [0.5*x_B**2,         x_B,          1]])
-                print("x_B: ", x_B, "\nm_B: ", m_B)
-                print("measurement vector: ", measurement_vector)
-                print("H matrix: \n", H)
+                # print("x_B: ", x_B, "\nm_B: ", m_B)
+                # print("measurement vector: ", measurement_vector)
+                # print("H matrix: \n", H)
 
                 # compute track state parameters, covariance and t_vector for parametric representation
                 H_inv = np.linalg.inv(H)    # invert H matrix to obtain measurement matrix
                 track_state_vector = H_inv.dot(measurement_vector)  # parabolic parameters: a, b, c
-                print("H_inv: \n", H_inv)
-                print("track_state_vector [a, b, c]: ", track_state_vector)
+                # print("H_inv: \n", H_inv)
+                # print("track_state_vector [a, b, c]: ", track_state_vector)
 
                 a = track_state_vector[0]
                 b = track_state_vector[1]
@@ -467,8 +464,7 @@ def plot_subgraphs(GraphList, outputDir, node_labels=False, save_plot=False, tit
 
 
 # private function
-def __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, extracted_pvals_zr, outputFile, 
-                                                title, key, axis1, axis2, node_labels, save_plot):
+def __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, key, axis1, axis2, node_labels, save_plot):
 
     colors = ["#f7c04a", "#2648ad", "#991895"]
     GraphList.sort(key=lambda subGraph: int(subGraph.graph["iteration"]))
@@ -505,17 +501,11 @@ def __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, extrac
     if save_plot:
         plt.savefig(outputFile + "subgraphs_"+ key +".png", dpi=300)
 
-    # save extracted candidate track quality information
-    for i, sub in enumerate(GraphList):
-        save_network(outputFile, i, sub) # save network to serialized form
-
-    pvals_df = pd.DataFrame({'pvals_xy' : extracted_pvals, 'pvals_zr' : extracted_pvals_zr}) 
-    pvals_df.to_csv(outputFile + 'pvals.csv')
 
 
 # used for visualising the good extracted candidates & iteration num
-def plot_save_subgraphs_iterations(GraphList, extracted_pvals, extracted_pvals_zr, outputFile, title, node_labels=True, save_plot=True):
+def plot_save_subgraphs_iterations(GraphList, outputFile, title, node_labels=True, save_plot=True):
     #xy plane
-    __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, extracted_pvals_zr, outputFile, title, 'xy', "x", "y", node_labels, save_plot)
+    __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, 'xy', "x", "y", node_labels, save_plot)
     #zr plane
-    __plot_save_subgraphs_iterations_in_plane(GraphList, extracted_pvals, extracted_pvals_zr, outputFile, title, 'zr', "z", "r", node_labels, save_plot)
+    __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, 'zr', "z", "r", node_labels, save_plot)

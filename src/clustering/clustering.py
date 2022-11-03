@@ -5,6 +5,7 @@ import argparse
 from utilities import helper as h
 import pprint
 import math
+import time
 
 # KL distance - takes into account covariances between the components 
 # If you were to use simple Euclidean distance, cov not taken into account
@@ -14,13 +15,13 @@ def KLDistance(mean1, cov1, inv1, mean2, cov2, inv2):
 
 # inverse variance-weighting: multivariate case https://en.wikipedia.org/wiki/Inverse-variance_weighting#Multivariate_Case
 def merge_states(mean1, inv1, mean2, inv2):
-    print("merging: ")
+    # print("merging: ")
     sum_inv_covs = inv1 + inv2
     merged_cov = np.linalg.inv(sum_inv_covs)
-    print("merged cov: \n", merged_cov)
+    # print("merged cov: \n", merged_cov)
     merged_mean = inv1.dot(mean1) + inv2.dot(mean2)
     merged_mean = merged_cov.dot(merged_mean)
-    print("merged mean: \n", merged_mean)
+    # print("merged mean: \n", merged_mean)
     merged_inv_cov = np.linalg.inv(merged_cov)
     return merged_mean, merged_cov, merged_inv_cov
 
@@ -261,8 +262,8 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, reactivate):
     # compute priors for a node based on inward edges
     h.compute_prior_probabilities(subGraphs, TRACK_STATE_KEY)
   
-    title = "Filtered Graph outlier edge removal using clustering with KL distance measure"
-    h.plot_subgraphs(subGraphs, outputDir, node_labels=True, save_plot=True, title=title)
+    # title = "Filtered Graph outlier edge removal using clustering with KL distance measure"
+    # h.plot_subgraphs(subGraphs, outputDir, node_labels=True, save_plot=True, title=title)
     # save networks
     for i, sub in enumerate(subGraphs):
         h.save_network(outputDir, i, sub)
@@ -285,9 +286,13 @@ def main():
     KL_lut = args.lut
     reactivate = args.reactivateall
 
+    start = time.time()
+
     cluster(inputDir, outputDir, track_states_key, KL_lut, reactivate)
 
-
+    end = time.time()
+    total_time = end - start
+    print("Time taken in clustering.py cluster function: "+ str(total_time))
 
 if __name__ == "__main__":
     main()

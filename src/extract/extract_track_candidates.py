@@ -451,10 +451,20 @@ def main():
 
     print("Total number of extracted candidates:", len(extracted))
 
-    # plot and save all extracted candidates from previous and this iteration
-    h.plot_save_subgraphs_iterations(extracted, extracted_pvals, extracted_pvals_zr, candidatesDir, "Extracted candidates", node_labels=True, save_plot=True)
-    # plot and save the remaining subgraphs to be further processed
-    h.plot_subgraphs(remaining, remainingDir, node_labels=True, save_plot=True, title="Remaining candidates")
+    # save p-value information
+    pvals_df = pd.DataFrame({'pvals_xy' : extracted_pvals, 'pvals_zr' : extracted_pvals_zr}) 
+    pvals_df.to_csv(candidatesDir + 'pvals.csv')
+
+    # save extracted tracks
+    for i, sub in enumerate(extracted):
+        h.save_network(candidatesDir, i, sub) # save network to serialized form
+
+    # # plot and save all extracted candidates from previous and this iteration
+    # h.plot_save_subgraphs_iterations(extracted, candidatesDir, "Extracted candidates", node_labels=True, save_plot=True)
+
+    # # plot and save the remaining subgraphs to be further processed
+    # h.plot_subgraphs(remaining, remainingDir, node_labels=True, save_plot=True, title="Remaining candidates")
+    
     # save remaining and track fragments
     for i, sub in enumerate(remaining):
         h.save_network(remainingDir, i, sub)

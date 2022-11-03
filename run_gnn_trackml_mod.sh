@@ -3,6 +3,10 @@
 # ---------------------------------------------------------------------------------------------
 # VARIABLES
 # ---------------------------------------------------------------------------------------------
+# iterations
+START=1
+END=2
+
 # event conversion and track simulation
 min_volume=7            # minimum volume number to analyse (inclusive) - used also in effciency calc
 max_volume=7            # maximum volume number to analyse (inclusive) - used also in efficiency calc
@@ -14,12 +18,12 @@ ROOTDIR=src/output      # output directory to store GNN algorithm output
 LUT=learn_KL_linear_model/output/empvar/empvar_relaxed.lut   # LUT file for KL distance calibration
 
 # extrapolation
-c=20                     #  initial chi2 distance acceptance threshold for extrapolated states
-# c=10
+# c=20                     #  initial chi2 distance acceptance threshold for extrapolated states
+c=10
 
 # extracting track candidates
 p=0.01                  # p-value acceptance level for good track candidate extraction - currently applied in xy plane
-n=3                     # minimum number of hits for good track candidate acceptance (>=n)
+n=4                     # minimum number of hits for good track candidate acceptance (>=n)
 s=10                    # 3d distance threshold for close proximity nodes, used in KF rotatation if nodes too close together
 # used in node-merging in extraction for close proximity nodes, but this will change due to PDA
 t=8.0                   # threshold distance node merging in extraction
@@ -61,7 +65,8 @@ execution_times+=($time)
 # Begin the iterations....
 # -----------------------------------------------------
 INPUT=$ROOTDIR/track_sim/network/
-for i in {1..2};
+# for i in {1..2};
+for (( i=$START; i<=$END; i++ ))
     do
         OUTPUT=$ROOTDIR/iteration_$i/network/
         mkdir -p $OUTPUT
@@ -121,7 +126,7 @@ done
 
 echo "----------------------------------------------------"
 # echo "Running track reconstruction efficiency:"
-python src/extract/reconstruction_efficiency.py -t $EVENT_TRUTH -o $ROOTDIR -a $min_volume -z $max_volume
+python src/extract/reconstruction_efficiency.py -t $EVENT_TRUTH -o $ROOTDIR -a $min_volume -z $max_volume -i $END
 echo "Plotting Purity distribution..."
 python src/extract/purity_distribution.py -i $ROOTDIR
 echo "Plotting p-value distribution..."
@@ -131,6 +136,14 @@ echo "----------------------------------------------------"
 
 # time it!
 stages+=("reconstruction_efficiency.py")
+time=$SECONDS
+execution_times+=($time)
+
+# plot all candidates
+python src/extract/plot_all_extracted_candidates.py -i $END
+
+# time it!
+stages+=("plot_all_extracted_candidates.py")
 time=$SECONDS
 execution_times+=($time)
 

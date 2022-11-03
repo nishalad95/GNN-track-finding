@@ -9,11 +9,11 @@ from utilities import helper as h
 import pprint
 import os
 import glob
+import time
 
 
 def main():
 
-    # TODO: command line args, change these into command line arguments with full path directory
     parser = argparse.ArgumentParser(description='Convert trackml csv to GNN')
     parser.add_argument('-o', '--outputDir', help="Full directory path of where to save graph networks")
     parser.add_argument('-e', '--error', help="rms of track position measurements")
@@ -36,36 +36,71 @@ def main():
     event_truth = args.eventTruth + "/event000001000-"
     event_truth_file = event_truth + "full-mapping-minCurv-0.3-800.csv"
 
+    start = time.time()
+
     # load truth information & metadata on events
     nodes, edges = h.load_nodes_edges(event_network, min_volume, max_volume)
     # NOTE: only need to execute the following once - aggregating all truth information into 1 file
     # h.load_save_truth(event_network, event_truth, event_truth_file)
     truth = pd.read_csv(event_truth_file)
 
+    end = time.time()
+    total_time = end - start
+    print("Time taken in event_conversion initial load: "+ str(total_time))
+    start = time.time()
+
     # create a graph network
     pixel_graph_network = nx.DiGraph()
     pixel_graph_network = h.construct_graph(pixel_graph_network, nodes, edges, truth, sigma0, sigma_ms)
-    print("Graph network infor before processing:")
+    print("Graph network info before processing:")
     print("Number of edges:", pixel_graph_network.number_of_edges())
     print("Number of nodes:", pixel_graph_network.number_of_nodes())
 
+    end = time.time()
+    total_time = end - start
+    print("Time taken in event_conversion construct graph: "+ str(total_time))
+    start = time.time()
+
     # compute track state estimates, extract subgraphs: out-of-the-box CCA
-    pixel_graph_network = h.compute_track_state_estimates([pixel_graph_network])
-    pixel_graph_network = nx.Graph(pixel_graph_network[0])
+    # pixel_graph_network = h.compute_track_state_estimates([pixel_graph_network])
+    # pixel_graph_network = nx.Graph(pixel_graph_network[0])
+    pixel_graph_network = nx.Graph(pixel_graph_network)
     pixel_graph_network = nx.to_directed(pixel_graph_network)
 
+    end = time.time()
+    total_time = end - start
+    print("Time taken in event_conversion to_directed: "+ str(total_time))
+    start = time.time()
+
     subGraphs = [pixel_graph_network.subgraph(c).copy() for c in nx.weakly_connected_components(pixel_graph_network)]
+    
+    end = time.time()
+    total_time = end - start
+    print("Time taken in event_conversion CCA: "+ str(total_time))
+    start = time.time()
+    
     subGraphs = h.compute_track_state_estimates(subGraphs)
     h.initialize_edge_activation(subGraphs)
     h.compute_prior_probabilities(subGraphs, 'track_state_estimates')
     h.compute_mixture_weights(subGraphs)
 
+    end = time.time()
+    total_time = end - start
+    print("Time taken in event_conversion compute track state estimates: "+ str(total_time))
+    start = time.time()
+
     print("Number of subgraphs..", len(subGraphs))
-    h.plot_subgraphs(subGraphs, outputDir, title="Nodes & Edges subgraphs from TrackML generated data")
-    
+    # plotting takes a long time!!
+    # h.plot_subgraphs(subGraphs, outputDir, title="Nodes & Edges subgraphs from TrackML generated data")
+
     # save the subgraphs
     for i, sub in enumerate(subGraphs):
         h.save_network(outputDir, i, sub)
+
+    end = time.time()
+    total_time = end - start
+    print("Time taken in event_conversion write to file: "+ str(total_time))
+    start = time.time()
 
 
 

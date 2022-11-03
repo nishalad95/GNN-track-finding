@@ -20,14 +20,14 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     node_y = node_attr['GNN_Measurement'].y
     neighbour_x = neighbour_attr['GNN_Measurement'].x
     neighbour_y = neighbour_attr['GNN_Measurement'].y
-    print("global nodeA x,y: ", node_x, node_y)
-    print("global target nodeC x,y: ", neighbour_x, neighbour_y)
+    # print("global nodeA x,y: ", node_x, node_y)
+    # print("global target nodeC x,y: ", neighbour_x, neighbour_y)
 
     # compute the angle of rotation
     angle_of_rotation_C = atan2(node_y, node_x)
     angle_of_rotation_C_deg = angle_of_rotation_C * 180 / np.pi
-    print("phi in rad: ", angle_of_rotation_C)
-    print("phi in deg:", angle_of_rotation_C_deg)
+    # print("phi in rad: ", angle_of_rotation_C)
+    # print("phi in deg:", angle_of_rotation_C_deg)
 
     # Change coordinate systems! Transform coordinate axis nodeA into coord axis of nodeC
     # calculation of x_A and y_A (coordinates x and y of node A in c.s. of node C)
@@ -39,28 +39,28 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     nodeC_trans_y = neighbour_attr['translation'][1]
     x_A = (neighbour_x - node_x)*np.cos(angle_of_rotation_C) + (neighbour_y - node_y)*np.sin(angle_of_rotation_C)
     y_A = -(neighbour_x - node_x)*np.sin(angle_of_rotation_C) + (neighbour_y - node_y)*np.cos(angle_of_rotation_C)
-    print("transformed coordinates of nodeA in c.s. of nodeC (x,y): ", x_A, y_A)
+    # print("transformed coordinates of nodeA in c.s. of nodeC (x,y): ", x_A, y_A)
  
     # parabolic track state (and parameteres) at node A
     merged_state = node_attr['merged_state']
     a, b, c = merged_state[0], merged_state[1], merged_state[2]
-    print("original parabolic parameters: ", a, b, c)
+    # print("original parabolic parameters: ", a, b, c)
 
     phi = atan2( (node_x*neighbour_y) - (node_y*neighbour_x), (node_x*neighbour_x) + (node_y*neighbour_y) )
     phi_deg = phi * 180 / np.pi
-    print("global phi version 2 between node A and node C (relative angle):")
-    print("phi_version_2 in rad: ", phi)
-    print("phi_version_2 in deg:", phi_deg)
+    # print("global phi version 2 between node A and node C (relative angle):")
+    # print("phi_version_2 in rad: ", phi)
+    # print("phi_version_2 in deg:", phi_deg)
 
     # calculation of track position/parameters in the target c.s. (nodeC)
     x_prime = x_A + (c * np.sin(phi))     # x_prime = x_A + scos(phi) + (as**2 + bs + c)*sin(phi), when s=0
     Vx_prime = np.cos(phi) + (b * np.sin(phi))
     Ax_prime = a * np.sin(phi)
-    print("x_prime, Vx_prime, Ax_prime: ", x_prime, Vx_prime, Ax_prime)
+    # print("x_prime, Vx_prime, Ax_prime: ", x_prime, Vx_prime, Ax_prime)
 
     # s* substitution - from solution of quadratic equation
     s_star = (- x_prime * ((2 * Vx_prime**2) + (Ax_prime * x_prime))) / (2 * Vx_prime**3)
-    print("step size: ", s_star)
+    # print("step size: ", s_star)
     with open('s_star.csv', 'a') as f:
         f.write(str(s_star) + "\n")
 
@@ -69,9 +69,9 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     # TODO check this stage:
     Vy_prime = - np.sin(phi) + (b * np.cos(phi))    # taking the terms with s from y_prime equation
     Ay_prime = a * np.cos(phi)                      # taking the terms with s**2 from y_prime equation
-    print("parameter a: ", a)
-    print("np.cos(phi): ", np.cos(phi))
-    print("y_prime, Vy_prime, Ay_prime: ", y_prime, Vy_prime, Ay_prime)
+    # print("parameter a: ", a)
+    # print("np.cos(phi): ", np.cos(phi))
+    # print("y_prime, Vy_prime, Ay_prime: ", y_prime, Vy_prime, Ay_prime)
 
     # compute new (extrapolated) parabolic parameters at nodeC
     x_c = 0     # condition
@@ -116,15 +116,15 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     extrp_state = F.dot(merged_state)
     extrp_cov = F.dot(merged_cov).dot(F.T)
 
-    print("extrapolated ac, bc, yc from computation: ", a_c, b_c, y_c)
-    print("extrapolated track state from F matrix (derivations): ", extrp_state)
-    print("extrapolated covariance: \n", extrp_cov)
-    print("Jacobian: \n", F)
+    # print("extrapolated ac, bc, yc from computation: ", a_c, b_c, y_c)
+    # print("extrapolated track state from F matrix (derivations): ", extrp_state)
+    # print("extrapolated covariance: \n", extrp_cov)
+    # print("Jacobian: \n", F)
 
     # validate the extrapolated state against the measurement at the neighbour node
     # calc chi2 distance between measurement at neighbour node and extrapolated track state
     H = np.array([[0., 0., 1.]])
-    print("H vector: ", H)
+    # print("H vector: ", H)
     # residual = neighbour_y - H.dot(extrp_state)     # compute the residual
     neighbour_y_in_cs_nodeC = .0                      # measurement is always zero in c.s. of neighbour
     residual = neighbour_y_in_cs_nodeC - H.dot(extrp_state)              # compute the residual
@@ -133,9 +133,9 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     chi2 = residual.T.dot(inv_S).dot(residual)
     chi2_cut = chi2CutFactor
 
-    print("residual: ", residual)
-    print("S matrix: ", S)
-    print("inverse S: ", inv_S)
+    # print("residual: ", residual)
+    # print("S matrix: ", S)
+    # print("inverse S: ", inv_S)
 
     # save chi2 distance data - USED FOR TUNING THE CHI2 CUT FACTOR
     # truth, chi2 distance, chi2_cut
@@ -147,18 +147,18 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     with open('chi2_data_sigma_0.1.csv', 'a') as f:
         f.write(line)
 
-    print("chi2 cut: ", chi2_cut)
-    print("chi2 distance: ", chi2)
+    # print("chi2 cut: ", chi2_cut)
+    # print("chi2 distance: ", chi2)
 
     # validate chi2 distance
     if chi2 < chi2_cut:
-        print("chi2 OK, performing KF update...")
+        # print("chi2 OK, performing KF update...")
 
         # calc beta: measurement likelihood
         factor = 2 * math.pi * np.abs(S)
         norm_factor = math.pow(factor, -0.5)
         likelihood = norm_factor * np.exp(-0.5 * chi2)
-        print("likelihood: ", likelihood)
+        # print("likelihood: ", likelihood)
 
         # initialize KF
         f = KalmanFilter(dim_x=3, dim_z=1)
@@ -205,7 +205,7 @@ def message_passing(subGraphs, chi2CutFactor, sigma_ms):
             print("\nProcessing node: ", node_num)
 
             if 'merged_state' in node_attr.keys():
-                print("Performing message passing")
+                # print("Performing message passing")
                 for neighbour_num in subGraph.neighbors(node_num):
 
                     # extrapolating outwards, from node to neighbour
@@ -283,8 +283,6 @@ def main():
     #     print("--------------------")
     #     print("EDGE DATA:", s.edges.data(), "\n")
 
-    title = "Subgraphs after iteration 2: message passing, extrapolation \n& validation of merged state, formation of updated state"
-    h.plot_subgraphs(subGraphs, outputDir, node_labels=True, save_plot=True, title=title)
     # save networks
     for i, sub in enumerate(subGraphs):
         h.save_network(outputDir, i, sub)
