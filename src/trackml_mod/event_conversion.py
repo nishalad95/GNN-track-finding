@@ -16,7 +16,7 @@ def main():
     # TODO: command line args, change these into command line arguments with full path directory
     parser = argparse.ArgumentParser(description='Convert trackml csv to GNN')
     parser.add_argument('-o', '--outputDir', help="Full directory path of where to save graph networks")
-    # parser.add_argument('-e', '--error', help="rms of track position measurements")
+    parser.add_argument('-e', '--error', help="rms of track position measurements")
     parser.add_argument('-m', '--sigma_ms', help="uncertainty due to multiple scattering, process noise")
     parser.add_argument('-n', '--eventNetwork', help="Full directory path to event nodes, edges & nodes-to-hits")
     parser.add_argument('-t', '--eventTruth', help="Full directory path to event truth from TrackML")
@@ -25,7 +25,7 @@ def main():
 
     args = parser.parse_args()
     outputDir = args.outputDir
-    # sigma0 = float(args.error)                   # r.m.s measurement error
+    sigma0 = float(args.error)                   # r.m.s measurement error
     sigma_ms = float(args.sigma_ms)                # process error - due to multiple scattering
     min_volume = int(args.min_volume)
     max_volume = int(args.max_volume)
@@ -38,14 +38,13 @@ def main():
 
     # load truth information & metadata on events
     nodes, edges = h.load_nodes_edges(event_network, min_volume, max_volume)
-    # only need to execute the following once - aggregating all truth information into 1 file
+    # NOTE: only need to execute the following once - aggregating all truth information into 1 file
     # h.load_save_truth(event_network, event_truth, event_truth_file)
     truth = pd.read_csv(event_truth_file)
 
     # create a graph network
     pixel_graph_network = nx.DiGraph()
-    pixel_graph_network = h.construct_graph(pixel_graph_network, nodes, edges, truth, sigma_ms)
-
+    pixel_graph_network = h.construct_graph(pixel_graph_network, nodes, edges, truth, sigma0, sigma_ms)
     print("Graph network infor before processing:")
     print("Number of edges:", pixel_graph_network.number_of_edges())
     print("Number of nodes:", pixel_graph_network.number_of_nodes())

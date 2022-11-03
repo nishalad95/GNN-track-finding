@@ -276,7 +276,6 @@ def main():
     parser.add_argument('-o', '--output', help='output directory to save remaining network & track candidates')
     parser.add_argument('-d', '--dict', help='dictionary of track state estimates to use')
     parser.add_argument('-l', '--lut', help='lut file for KL distance acceptance region')
-    # parser.add_argument('-e', '--error', help="rms of track position measurements")
     parser.add_argument('-r', '--reactivateall', default=False, type=bool)
     args = parser.parse_args()
 
@@ -284,7 +283,6 @@ def main():
     outputDir = args.output
     track_states_key = args.dict
     KL_lut = args.lut
-    # sigma0 = float(args.error)
     reactivate = args.reactivateall
 
     cluster(inputDir, outputDir, track_states_key, KL_lut, reactivate)

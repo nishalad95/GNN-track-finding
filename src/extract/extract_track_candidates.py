@@ -21,22 +21,22 @@ from more_itertools import locate
 
 COMMUNITY_DETECTION = False
 
-def run_community_detection(candidate, fragment):
-    # when == 1 potential, need to remember to append the graph to the 'remaining' list
-    # > 1 potential track
-    #TODO: coordinates & community detection method needs to be updated
-    valid_communities, vc_coords = community_detection(candidate, fragment)
-    if len(valid_communities) > 0:
-        print("found communities via community detection")
-        for vc, vcc in zip(valid_communities, vc_coords):
-            pval = KF_track_fit_xy(sigma0, sigma_ms, vcc)
-            if pval >= track_acceptance:
-                print("Good KF fit, P value:", pval, "(x,y,z,r):", vcc)
-                extracted.append(vc)
-                extracted_pvals.append(pval)
-                candidate_to_remove_from_subGraph.append(vc)
-            else:
-                print("pval too small,", pval, "leave for further processing")
+# def run_community_detection(candidate, fragment):
+#     # when == 1 potential, need to remember to append the graph to the 'remaining' list
+#     # > 1 potential track
+#     #TODO: coordinates & community detection method needs to be updated
+#     valid_communities, vc_coords = community_detection(candidate, fragment)
+#     if len(valid_communities) > 0:
+#         print("found communities via community detection")
+#         for vc, vcc in zip(valid_communities, vc_coords):
+#             pval = KF_track_fit_xy(sigma0, sigma_ms, vcc)
+#             if pval >= track_acceptance:
+#                 print("Good KF fit, P value:", pval, "(x,y,z,r):", vcc)
+#                 extracted.append(vc)
+#                 extracted_pvals.append(pval)
+#                 candidate_to_remove_from_subGraph.append(vc)
+#             else:
+#                 print("pval too small,", pval, "leave for further processing")
 
 
 def compute_3d_distance(coord1, coord2):
@@ -216,7 +216,7 @@ def KF_predict_update(f, obs_y):
     return pval
 
 
-def KF_track_fit_xy(sigma_ms, coords):
+def KF_track_fit_xy(sigma0, sigma_ms, coords):
     # KF applied from outermost point to innermost point
     obs_x = [c[0] for c in coords]
     obs_y = [c[1] for c in coords]
@@ -230,7 +230,7 @@ def KF_track_fit_xy(sigma_ms, coords):
     g1 = (np.abs(dx) - f1) / alpha
     
     # variables for Q process noise matrix
-    sigma0 = 0.1                                                    # IMPORTANT This is different in model setup!
+    # sigma0 = 0.1                                                    # IMPORTANT This is different in model setup!
     sigma_ou = 0.00001                                              # 10^-5
     sw2 = sigma_ou**2                                               # OU parameter 
     st2 = sigma_ms**2                                               # process noise representing multiple scattering
@@ -263,14 +263,14 @@ def KF_track_fit_xy(sigma_ms, coords):
 
 
 
-def KF_track_fit_zr(sigma_ms, coords):
+def KF_track_fit_zr(sigma0, sigma_ms, coords):
     # KF applied from outermost point to innermost point
     obs_x = [c[2] for c in coords]
     obs_y = [c[3] for c in coords]
     yf = obs_y[0]
     dx = coords[1][2] - coords[0][2]    # dx = z1 - z0
 
-    sigma0 = 0.1                                                    # IMPORTANT This is different in model setup!
+    # sigma0 = 0.1                                                    # IMPORTANT This is different in model setup!
     f = KalmanFilter(dim_x=2, dim_z=1)
     f.x = np.array([yf, 0.])                                # X state vector [yf, dy/dx, w] = [coordinate, track inclination, integrated OU]
 
@@ -317,7 +317,7 @@ def main():
     parser.add_argument('-p', '--pval', help='chi-squared track candidate acceptance level')
     parser.add_argument('-s', '--separation_3d_threshold', help="3d distance cut between close proximity nodes, used in node merging")
     parser.add_argument('-t', '--threshold_distance_node_merging', help="threshold_distance_node_merging")
-    # parser.add_argument('-e', '--error', help="rms of track position measurements")
+    parser.add_argument('-e', '--error', help="sigma0 rms of track position measurements")
     parser.add_argument('-m', '--sigma_ms', help="uncertainty due to multiple scattering, process noise")
     parser.add_argument('-n', '--numhits', help="minimum number of hits for good track candidate")
     args = parser.parse_args()
@@ -328,7 +328,7 @@ def main():
     remainingDir = args.remain
     fragmentsDir = args.fragments
     track_acceptance = float(args.pval)
-    # sigma0 = float(args.error)
+    sigma0 = float(args.error)
     sigma_ms = float(args.sigma_ms)
     subgraph_path = "_subgraph.gpickle"
     fragment = int(args.numhits)
@@ -401,8 +401,8 @@ def main():
                         # rotate the track such that innermost edge parallel to x-axis - r&z components are left unchanged
                         coords = rotate_track(coords, separation_3d_threshold)
                         # apply KF track fit - TODO: parallelize these 2 KF track fits
-                        pval = KF_track_fit_xy(sigma_ms, coords)
-                        pval_zr = KF_track_fit_zr(sigma_ms, coords)
+                        pval = KF_track_fit_xy(sigma0, sigma_ms, coords)
+                        pval_zr = KF_track_fit_zr(sigma0, sigma_ms, coords)
                         if (pval >= track_acceptance) and (pval_zr >= track_acceptance):
                             print("Good KF fit, p-value:", pval, "\n(x,y,z,r):", coords)
                             extracted.append(candidate)

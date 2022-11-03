@@ -39,8 +39,6 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     nodeC_trans_y = neighbour_attr['translation'][1]
     x_A = (neighbour_x - node_x)*np.cos(angle_of_rotation_C) + (neighbour_y - node_y)*np.sin(angle_of_rotation_C)
     y_A = -(neighbour_x - node_x)*np.sin(angle_of_rotation_C) + (neighbour_y - node_y)*np.cos(angle_of_rotation_C)
-    # x_A = (nodeA_trans_x - nodeC_trans_x)*np.cos(angle_of_rotation_C) + (nodeA_trans_y - nodeC_trans_y)*np.sin(angle_of_rotation_C)
-    # y_A = -(nodeA_trans_x - nodeC_trans_x)*np.sin(angle_of_rotation_C) + (nodeA_trans_y - nodeC_trans_y)*np.cos(angle_of_rotation_C)
     print("transformed coordinates of nodeA in c.s. of nodeC (x,y): ", x_A, y_A)
  
     # parabolic track state (and parameteres) at node A

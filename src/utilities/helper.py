@@ -176,6 +176,7 @@ def compute_3d_distance(coord1, coord2):
 
 
 def compute_track_state_estimates(GraphList):
+    # NOTE: sigmaO - error at the origin, different to sigma0 rms error in xy plane
     sigmaO = 4.0        # 4.0mm larger error in m_O due to beamspot error and error at the origin
     sigmaA = 0.1        # 0.1mm
     sigmaB = 0.1        # 0.1mm
@@ -305,7 +306,7 @@ def __get_particle_id(row, df):
 
 
 
-def construct_graph(graph, nodes, edges, truth, sigma_ms):
+def construct_graph(graph, nodes, edges, truth, sigma0, sigma_ms):
     # TODO: 'truth_particle' attribute needs to be updated - clustering calculation uses 1 particle id, currently needs updating
     # group truth particle ids to node index
     group = truth.groupby('node_idx')
@@ -322,7 +323,6 @@ def construct_graph(graph, nodes, edges, truth, sigma_ms):
     grouped_module_ids = group['module_id'].unique()
 
     # add nodes
-    sigma0 = 0.1
     for i in range(len(nodes)):
         row = nodes.iloc[i]
         node_idx = int(row.node_idx)
@@ -432,7 +432,11 @@ def save_network(directory, i, subGraph):
 
 # private function
 def __plot_subgraphs_in_plane(GraphList, outputDir, key, axis1, axis2, node_labels, save_plot, title):
-    _, ax = plt.subplots(figsize=(10,8))
+    
+    figsize=(12,10)
+    if key == 'zr': figsize=(16,10)
+    _, ax = plt.subplots(figsize=figsize)
+    
     for i, subGraph in enumerate(GraphList):
         color = ["#"+''.join([random.choice('0123456789ABCDEF') for _ in range(6) ])][0]
         pos=nx.get_node_attributes(subGraph, key)
