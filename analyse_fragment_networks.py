@@ -7,6 +7,48 @@ import random
 import itertools
 from collections import Counter
 
+
+def plot_subgraphs(graph):
+    _, ax = plt.subplots(figsize=(10,8))
+
+    for i, subGraph in enumerate(graph):
+        color = ["#"+''.join([random.choice('0123456789ABCDEF') for _ in range(6) ])][0]
+        pos=nx.get_node_attributes(subGraph, 'xy')
+        nodes = subGraph.nodes()
+        edge_colors = []
+        for u, v in subGraph.edges():
+            if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
+            else: edge_colors.append("#f2f2f2")
+        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
+        nx.draw_networkx_nodes(subGraph, pos, nodelist=nodes, node_color=color, node_size=50)
+        nx.draw_networkx_labels(subGraph, pos, font_size=4)
+    ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.axis('on')
+    plt.show()
+
+def plot_subgraphs_zr(graph):
+    _, ax = plt.subplots(figsize=(10,8))
+
+    for i, subGraph in enumerate(graph):
+        color = ["#"+''.join([random.choice('0123456789ABCDEF') for _ in range(6) ])][0]
+        pos=nx.get_node_attributes(subGraph, 'zr')
+        nodes = subGraph.nodes()
+        edge_colors = []
+        for u, v in subGraph.edges():
+            if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
+            else: edge_colors.append("#f2f2f2")
+        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
+        nx.draw_networkx_nodes(subGraph, pos, nodelist=nodes, node_color=color, node_size=50)
+        nx.draw_networkx_labels(subGraph, pos, font_size=4)
+    ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
+    plt.xlabel("z")
+    plt.ylabel("r")
+    plt.axis('on')
+    plt.show()
+
+
 # read in remaining
 subGraphs = []
 inputDir = "src/output/iteration_1/fragments/"
@@ -41,7 +83,7 @@ fragments = []
 particle_ids = []
 min_num_nodes = 4
 for s in subGraphs:
-    if s.number_of_nodes() < 4:
+    if s.number_of_nodes() < 3:
         fragments.append(s)
 
         # get the majority particle id from all nodes in the candidate to find out reconstructed particle id
@@ -68,4 +110,12 @@ diff = len(fragments) - len(unique_particle_ids)
 print("diff:", diff)
 
 
+# # plot the graphs
+plot_subgraphs(fragments)
+plot_subgraphs_zr(fragments)
 
+# for i, s in enumerate(fragments):
+#     if i % 200 == 0 :
+#         print(i, s)
+#         plot_subgraphs([s])
+#         plot_subgraphs_zr([s])

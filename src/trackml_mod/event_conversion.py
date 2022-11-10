@@ -51,6 +51,7 @@ def main():
 
     # create a graph network
     pixel_graph_network = nx.DiGraph()
+    print("here")
     pixel_graph_network = h.construct_graph(pixel_graph_network, nodes, edges, truth, sigma0, sigma_ms)
     print("Graph network info before processing:")
     print("Number of edges:", pixel_graph_network.number_of_edges())
@@ -61,24 +62,24 @@ def main():
     print("Time taken in event_conversion construct graph: "+ str(total_time))
     start = time.time()
 
-    # compute track state estimates, extract subgraphs: out-of-the-box CCA
-    # pixel_graph_network = h.compute_track_state_estimates([pixel_graph_network])
     # pixel_graph_network = nx.Graph(pixel_graph_network[0])
-    pixel_graph_network = nx.Graph(pixel_graph_network)
-    pixel_graph_network = nx.to_directed(pixel_graph_network)
+    pixel_graph_network = nx.DiGraph(pixel_graph_network)
+    # pixel_graph_network = nx.to_directed(pixel_graph_network)
 
     end = time.time()
     total_time = end - start
     print("Time taken in event_conversion to_directed: "+ str(total_time))
     start = time.time()
 
+    # extract subgraphs: out-of-the-box CCA
     subGraphs = [pixel_graph_network.subgraph(c).copy() for c in nx.weakly_connected_components(pixel_graph_network)]
-    
+
     end = time.time()
     total_time = end - start
     print("Time taken in event_conversion CCA: "+ str(total_time))
     start = time.time()
     
+    # compute track state estimates, priors and weights
     subGraphs = h.compute_track_state_estimates(subGraphs)
     h.initialize_edge_activation(subGraphs)
     h.compute_prior_probabilities(subGraphs, 'track_state_estimates')
@@ -90,9 +91,7 @@ def main():
     start = time.time()
 
     print("Number of subgraphs..", len(subGraphs))
-    # plotting takes a long time!!
-    # h.plot_subgraphs(subGraphs, outputDir, title="Nodes & Edges subgraphs from TrackML generated data")
-
+    
     # save the subgraphs
     for i, sub in enumerate(subGraphs):
         h.save_network(outputDir, i, sub)

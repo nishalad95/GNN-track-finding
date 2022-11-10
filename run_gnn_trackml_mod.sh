@@ -9,17 +9,19 @@ END=2
 
 # event conversion and track simulation
 min_volume=7            # minimum volume number to analyse (inclusive) - used also in effciency calc
-max_volume=7            # maximum volume number to analyse (inclusive) - used also in efficiency calc
-SIGMA0=0.1            # IMPORTANT: sigma0 is used in the extraction KF only, r.m.s measurement error in xy plane
+max_volume=9            # maximum volume number to analyse (inclusive) - used also in efficiency calc
+SIGMA0=0.1              # IMPORTANT: sigma0 is used in the extraction KF only, r.m.s measurement error in xy plane
 SIGMA_MS=0.0001         # 10^-4 multiple scattering error
 ROOTDIR=src/output      # output directory to store GNN algorithm output
 
 # clustering
-LUT=learn_KL_linear_model/output/empvar/empvar_relaxed.lut   # LUT file for KL distance calibration
+# LUT=learn_KL_linear_model/output/empvar/empvar_relaxed.lut   # LUT file for KL distance calibration
+LUT=learn_KL_linear_model/output/empvar/empvar.lut
+# LUT=learn_KL_LUT_trackML/kl_empvar_test.lut 
 
 # extrapolation
 # c=20                     #  initial chi2 distance acceptance threshold for extrapolated states
-c=10
+c=4
 
 # extracting track candidates
 p=0.01                  # p-value acceptance level for good track candidate extraction - currently applied in xy plane
@@ -51,7 +53,7 @@ mkdir -p $INPUT
 EVENT_NETWORK=src/trackml_mod/event_network/minCurv_0.3_800
 EVENT_TRUTH=src/trackml_mod/event_truth
 python src/trackml_mod/event_conversion.py -o $INPUT -e $SIGMA0 -m $SIGMA_MS -n $EVENT_NETWORK -t $EVENT_TRUTH -a $min_volume -z $max_volume
-stages+=("event_conversion.py")
+stages+=("event_conversion")
 time=$SECONDS
 execution_times+=($time)
 
@@ -65,7 +67,6 @@ execution_times+=($time)
 # Begin the iterations....
 # -----------------------------------------------------
 INPUT=$ROOTDIR/track_sim/network/
-# for i in {1..2};
 for (( i=$START; i<=$END; i++ ))
     do
         OUTPUT=$ROOTDIR/iteration_$i/network/
@@ -79,7 +80,7 @@ for (( i=$START; i<=$END; i++ ))
             prev_duration=$SECONDS
             python src/clustering/clustering.py -i $INPUT -o $OUTPUT -d track_state_estimates -l $LUT
             # time it!
-            stages+=("clustering.py")
+            stages+=("clustering")
             time=$SECONDS
             execution_times+=($time)
         elif (( $i % 2 == 0 ))
@@ -93,7 +94,7 @@ for (( i=$START; i<=$END; i++ ))
             let c=$c/2   # tighter cut each time
 
             # time it!
-            stages+=("extrapolate_merged_states.py")
+            stages+=("extrapolation")
             time=$SECONDS
             execution_times+=($time)
         fi
@@ -117,7 +118,7 @@ for (( i=$START; i<=$END; i++ ))
         INPUT=$REMAINING
 
         # time it!
-        stages+=("extract_track_candidates.py")
+        stages+=("extract")
         time=$SECONDS
         execution_times+=($time)
 
@@ -135,7 +136,7 @@ echo "----------------------------------------------------"
 
 
 # time it!
-stages+=("reconstruction_efficiency.py")
+stages+=("reconstruction_efficiency")
 time=$SECONDS
 execution_times+=($time)
 
@@ -143,7 +144,7 @@ execution_times+=($time)
 python src/extract/plot_all_extracted_candidates.py -i $END
 
 # time it!
-stages+=("plot_all_extracted_candidates.py")
+stages+=("plot_all_candidates")
 time=$SECONDS
 execution_times+=($time)
 

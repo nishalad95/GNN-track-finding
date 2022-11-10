@@ -49,7 +49,7 @@ with open(outputDir + str(num_events) + '_events_training_data.csv', 'w', encodi
                 node_num = node[0]
                 node_attr = node[1]
 
-                emp_var = node_attr['edge_gradient_mean_var'][1]
+                emp_var = node_attr['xy_edge_gradient_mean_var'][1]
                 num_edges = query_node_degree_in_edges(subGraph, node_num)
                 if num_edges <= 1: continue
 

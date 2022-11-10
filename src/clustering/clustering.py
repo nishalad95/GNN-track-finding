@@ -64,12 +64,16 @@ def load_lut(KL_lut):
         feature = float(elements[0]) 
         KL_thres = float(elements[2].split("\n")[0])
         mapping[feature] = KL_thres
+        print("MAPPING LUT: ")
+        print(mapping)
     return mapping
 
 def get_KL_upper_threshold(empvar_feature, distance, mapping):
     base = 0.05
-    feature = math.ceil(float(empvar_feature)/base) - 1
+    # base = 0.001
+    feature = int(math.ceil(empvar_feature/base)) - 1
 
+    print("emp_var: ", empvar_feature, "emp_var_bin_num: ", feature)
     if float(feature) in mapping.keys():
         KL_thres = mapping[feature]
         if distance <= KL_thres: return KL_thres
@@ -115,7 +119,7 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, reactivate):
     # variable names
     subgraph_path = "_subgraph.gpickle"
     TRACK_STATE_KEY = track_state_key
-    EMPIRICAL_MEAN_VAR = "edge_gradient_mean_var"
+    EMPIRICAL_MEAN_VAR = "xy_edge_gradient_mean_var"
     EDGE_STATE_VECTOR = "edge_state_vector"
     EDGE_COV = "edge_covariance"
     PRIOR = "prior"
@@ -234,7 +238,8 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, reactivate):
 
             else:
                 # all edges are incompatible
-                print("No clusters found for node num: ", node_num)
+                print("No clusters found for node num: ", node_num, "vivl_id: ", node_attr['vivl_id'])
+                print("KL thres: ", KL_thres, "smallest distance: ", smallest_dist)
 
         # simultaneous deactivation of outlier edge connections
         print("Deactivating outlier edges...", edges_to_deactivate)

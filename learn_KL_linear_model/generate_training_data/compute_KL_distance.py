@@ -48,7 +48,7 @@ with open(outputDir + str(num_events) + '_events_training_data.csv', 'w', encodi
                 node_num = node[0]
                 node_attr = node[1]
 
-                emp_var = node_attr['edge_gradient_mean_var'][1]
+                emp_var = node_attr['xy_edge_gradient_mean_var'][1]
                 # TODO: change this - query the node degree
                 num_edges = node_attr['degree']
                 if num_edges <= 1: continue

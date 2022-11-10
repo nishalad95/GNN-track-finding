@@ -188,25 +188,33 @@ def compute_track_state_estimates(GraphList):
     m_A = 0.0
     for i, G in enumerate(GraphList):
         for node in G.nodes():
-            gradients = []
+            gradients_xy = []
+            gradients_rz = []
             track_state_estimates = {}
             
             # create a list of node & neighbour coords including the origin
             node_gnn = G.nodes[node]["GNN_Measurement"]
-            m_node = (node_gnn.x, node_gnn.y)
-            coords = [(0.0, 0.0), m_node]
+            m_node_xy = (node_gnn.x, node_gnn.y)
+            m_node_zr = (node_gnn.z, node_gnn.r)
+            coords = [(0.0, 0.0), m_node_xy]
             keys = [-1, node]
 
             for neighbor in set(nx.all_neighbors(G, node)):
                 neighbour_gnn = G.nodes[neighbor]["GNN_Measurement"]
-                m_neighbour = (neighbour_gnn.x, neighbour_gnn.y)
-                coords.append(m_neighbour)
+                m_neighbour_xy = (neighbour_gnn.x, neighbour_gnn.y)
+                m_neighbour_zr = (neighbour_gnn.z, neighbour_gnn.r)
+                coords.append(m_neighbour_xy)
                 keys.append(neighbor)
+                
                 # calculate gradient - used in clustering
-                dy = m_node[1] - m_neighbour[1]
-                dx = m_node[0] - m_neighbour[0]
-                grad = dy / dx
-                gradients.append(grad)
+                dy = m_node_xy[1] - m_neighbour_xy[1]
+                dx = m_node_xy[0] - m_neighbour_xy[0]
+                grad_xy = dy / dx
+                gradients_xy.append(grad_xy)
+                dr = m_node_zr[1] - m_neighbour_zr[1]
+                dz = m_node_zr[0] - m_neighbour_zr[0]
+                grad_zr = dy / dx
+                gradients_zr.append(grad_zr)
             
             # [neighbour1, neighbour2, ..., node, (0.0, 0.0)]
             coords.reverse()
@@ -215,17 +223,14 @@ def compute_track_state_estimates(GraphList):
             # transform the coords to local coordinate system: translate and rotate
             # x_new = xcos(angle) + ysin(angle)
             # y_new = -xsin(angle) + ycos(angle)
-            x_A = m_node[0]
-            y_A = m_node[1]
+            x_A = m_node_xy[0]
+            y_A = m_node_xy[1]
             # print("NodeA coordinates: we want to move into this local c.s.")
             # print("x_A: ", x_A, "y_A: ", y_A)
         
             # get the azimuth angle - angle of rotation (origin-node edge parallel with x axis):
             azimuth_angle = atan2(y_A, x_A)
-            azimuth_angle_deg = azimuth_angle * 180 / np.pi
-            # print("All coordinates [neighbour1, neighbour2, ..., node, (0.0, 0.0)]: \n", coords)
-            # print("azimuth_angle: ", azimuth_angle)
-            # print("azimuth angle in deg: ", azimuth_angle_deg)
+            # azimuth_angle_deg = azimuth_angle * 180 / np.pi
 
             transformed_coords = []
             for c in coords:
@@ -237,6 +242,17 @@ def compute_track_state_estimates(GraphList):
                 transformed_coords.append(tc)
             # print("All original coordinates: ", coords)
             # print("All transformed coordinates", transformed_coords)
+
+            # calculate local gradient - used in clustering
+            # [neighbour1, neighbour2, ..., node, (0.0, 0.0)]
+            # node_x = transformed_coords[-2][0]
+            # node_y = transformed_coords[-2][1]
+            # for i in range(len(transformed_coords) - 2):
+            #     neighbour_x = transformed_coords[i][0]
+            #     neighbour_y = transformed_coords[i][1]
+            #     dy_dx = (node_y - neighbour_y) / (node_x - neighbour_x)
+            #     local_gradients.append(dy_dx)
+
 
             # for each neighbour connection obtain the measurement vector in the new axis
             # [m_0, m_A, m_B] m_0 the old origin, m_A the new origin, m_B the neighbour
@@ -252,9 +268,6 @@ def compute_track_state_estimates(GraphList):
                 H = np.array([  [0.5*x_0**2,         x_0,          1], 
                                 [0.0,                0.0,          1], 
                                 [0.5*x_B**2,         x_B,          1]])
-                # print("x_B: ", x_B, "\nm_B: ", m_B)
-                # print("measurement vector: ", measurement_vector)
-                # print("H matrix: \n", H)
 
                 # compute track state parameters, covariance and t_vector for parametric representation
                 H_inv = np.linalg.inv(H)    # invert H matrix to obtain measurement matrix
@@ -284,8 +297,10 @@ def compute_track_state_estimates(GraphList):
             # store all track state estimates at the node
             G.nodes[node]['track_state_estimates'] = track_state_estimates
             # (mean, variance) of edge orientation in xy plane - needed for KL distance in clustering
-            G.nodes[node]['edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
-            
+            G.nodes[node]['xy_edge_gradient_mean_var'] = (np.mean(gradients_xy), np.var(gradients_xy))
+            G.nodes[node]['zr_edge_gradient_mean_var'] = (np.mean(gradients_zr), np.var(gradients_zr))
+            # G.nodes[node]['edge_local_gradient_mean_var'] = (np.mean(local_gradients), np.var(local_gradients))
+
             # store the transformation information - used in extrapolation
             G.nodes[node]['angle_of_rotation'] = azimuth_angle
             G.nodes[node]['translation'] = (x_A, y_A)
@@ -306,6 +321,8 @@ def __get_particle_id(row, df):
 def construct_graph(graph, nodes, edges, truth, sigma0, sigma_ms):
     # TODO: 'truth_particle' attribute needs to be updated - clustering calculation uses 1 particle id, currently needs updating
     # group truth particle ids to node index
+    
+    print("here: construct_graph")
     group = truth.groupby('node_idx')
     grouped_pid = group.apply(lambda row: row['particle_id'].unique())
     grouped_pid = pd.DataFrame({'node_idx':grouped_pid.index, 'particle_id':grouped_pid.values})
@@ -330,11 +347,11 @@ def construct_graph(graph, nodes, edges, truth, sigma0, sigma_ms):
         module_id = grouped_module_ids[node_idx]
         
         # TODO: update the following
-        label = grouped_pid.loc[grouped_pid['node_idx'] == node_idx]['single_particle_id'].item()  # MC truth label (particle id)
+        truth_particle = grouped_pid.loc[grouped_pid['node_idx'] == node_idx]['single_particle_id'].item()  # MC truth label (particle id)
         
         hit_dissociation = grouped_hit_id.loc[grouped_hit_id['node_idx'] == node_idx]['hit_dissociation'].item()
         
-        gm = gnn.GNN_Measurement(x, y, z, r, sigma0, sigma_ms, label=label, n=node_idx)
+        gm = gnn.GNN_Measurement(x, y, z, r, sigma0, sigma_ms, truth_particle=truth_particle, n=node_idx)
         graph.add_node(node_idx, GNN_Measurement=gm, 
                             xy=(x, y),                              # all attributes here for development only - can be abstracted away in GNN_Measurement
                             zr=(z, r),
@@ -343,7 +360,7 @@ def construct_graph(graph, nodes, edges, truth, sigma0, sigma_ms):
                             in_volume_layer_id = in_volume_layer_id,
                             vivl_id = (volume_id, in_volume_layer_id),
                             module_id = module_id,
-                            truth_particle=label,                   # TODO: update the following
+                            truth_particle=truth_particle,                   # TODO: update the following
                             hit_dissociation=hit_dissociation,
                             tags=[node_idx])                           # used in custom CCA
     
