@@ -80,10 +80,16 @@ def main():
     start = time.time()
     
     # compute track state estimates, priors and weights
-    subGraphs = h.compute_track_state_estimates(subGraphs)
+    subGraphs = h.compute_track_state_estimates(subGraphs, sigma_ms)
     h.initialize_edge_activation(subGraphs)
     h.compute_prior_probabilities(subGraphs, 'track_state_estimates')
     h.compute_mixture_weights(subGraphs)
+
+    # add node degree as attribute
+    for s in subGraphs:
+        for node_num, _ in s.nodes(data=True):
+            degree = h.query_node_degree_in_edges(s, node_num)
+            s.nodes[node_num]['degree'] = degree
 
     end = time.time()
     total_time = end - start

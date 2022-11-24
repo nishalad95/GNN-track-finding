@@ -320,6 +320,7 @@ def main():
     parser.add_argument('-e', '--error', help="sigma0 rms of track position measurements")
     parser.add_argument('-m', '--sigma_ms', help="uncertainty due to multiple scattering, process noise")
     parser.add_argument('-n', '--numhits', help="minimum number of hits for good track candidate")
+    parser.add_argument('-a', '--iteration', help="iteration number of algorithm")
     args = parser.parse_args()
 
     # set variables
@@ -335,9 +336,10 @@ def main():
     separation_3d_threshold = float(args.separation_3d_threshold)
     threshold_distance_node_merging = float(args.threshold_distance_node_merging)
     # get iteration num
-    inputDir_list = inputDir.split("/")
-    iterationDir = filter(lambda x: x.startswith('iteration_'), inputDir_list)
-    for i in iterationDir: iteration_num = i.split("_")[-1]
+    iteration_num = str(args.iteration)
+    # inputDir_list = inputDir.split("/")
+    # iterationDir = filter(lambda x: x.startswith('iteration_'), inputDir_list)
+    # for i in iterationDir: iteration_num = i.split("_")[-1]
 
     # read in subgraph data
     subGraphs = []

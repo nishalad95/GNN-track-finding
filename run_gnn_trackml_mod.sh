@@ -5,7 +5,7 @@
 # ---------------------------------------------------------------------------------------------
 # iterations
 START=1
-END=2
+END=1
 
 # event conversion and track simulation
 min_volume=7            # minimum volume number to analyse (inclusive) - used also in effciency calc
@@ -17,11 +17,9 @@ ROOTDIR=src/output      # output directory to store GNN algorithm output
 # clustering
 # LUT=learn_KL_linear_model/output/empvar/empvar_relaxed.lut   # LUT file for KL distance calibration
 LUT=learn_KL_linear_model/output/empvar/empvar.lut
-# LUT=learn_KL_LUT_trackML/kl_empvar_test.lut 
 
 # extrapolation
-# c=20                     #  initial chi2 distance acceptance threshold for extrapolated states
-c=4
+c=4                     #  initial chi2 distance acceptance threshold for extrapolated states
 
 # extracting track candidates
 p=0.01                  # p-value acceptance level for good track candidate extraction - currently applied in xy plane
@@ -38,7 +36,6 @@ t=8.0                   # threshold distance node merging in extraction
 stages=("start_time")
 time=$SECONDS
 execution_times=($time)
-
 
 # Comment out for debugging when event-to-network conversion is not needed!!
 # -----------------------------------------------------
@@ -57,16 +54,25 @@ stages+=("event_conversion")
 time=$SECONDS
 execution_times+=($time)
 
+echo "------------------------------------------------------"
+echo "Extracting track candidates post CCA: iteration0"
+echo "------------------------------------------------------"
+INPUT=$ROOTDIR/track_sim/network/
+CANDIDATES=$ROOTDIR/iteration_0/candidates/
+REMAINING=$ROOTDIR/iteration_0/remaining/
+FRAGMENTS=$ROOTDIR/iteration_0/fragments/
+mkdir -p $CANDIDATES
+mkdir -p $REMAINING
+mkdir -p $FRAGMENTS
+python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -e $SIGMA0 -m $SIGMA_MS -n $n -s $s -t $t -a 0
 
-# # copy the first 100 files over - DEVELOPMENT ONLY
-# mkdir $ROOTDIR/track_sim/network_100/
-# ls $ROOTDIR/track_sim/network/* | head -2000 | xargs -I{} cp {} $ROOTDIR/track_sim/network_100/
 
 
+INPUT=$REMAINING
 # -----------------------------------------------------
 # Begin the iterations....
 # -----------------------------------------------------
-INPUT=$ROOTDIR/track_sim/network/
+# INPUT=$ROOTDIR/track_sim/network/
 for (( i=$START; i<=$END; i++ ))
     do
         OUTPUT=$ROOTDIR/iteration_$i/network/
@@ -109,12 +115,12 @@ for (( i=$START; i<=$END; i++ ))
         mkdir -p $CANDIDATES
         mkdir -p $REMAINING
         mkdir -p $FRAGMENTS
-        if (( $i > 1 ))
-        then
-            let num=$i-1
-            cp -r $ROOTDIR/iteration_$num/candidates/ $CANDIDATES
-        fi
-        python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -e $SIGMA0 -m $SIGMA_MS -n $n -s $s -t $t
+        # if (( $i > 1 ))
+        # then
+        let num=$i-1
+        cp -r $ROOTDIR/iteration_$num/candidates/ $CANDIDATES
+        # fi
+        python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -e $SIGMA0 -m $SIGMA_MS -n $n -s $s -t $t -a $i
         INPUT=$REMAINING
 
         # time it!

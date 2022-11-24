@@ -6,16 +6,100 @@ from utilities import helper as h
 import pprint
 import math
 import time
+import csv
+
+def mahalanobis_distance(mean1, cov1, mean2, cov2, node_coords, neighbour1_coords, neighbour2_coords):
+    
+    # print("calculating mahalanobis distance...")
+    edge1 = mean1[:2]
+    edge2 = mean2[:2]
+    residual = edge1 - edge2
+
+    # covariance of delta_a and delta_b
+    ab_block1 = cov1[0:2, 0:2]
+    ab_block2 = cov2[0:2, 0:2]
+    covariance_delta_ab = ab_block1 + ab_block2
+    inv_covariance_delta_ab = np.linalg.inv(covariance_delta_ab)
+    
+    # chi2 contribution from [a, b] part of joint state vector
+    distance1 = residual.T.dot(inv_covariance_delta_ab).dot(residual)
+
+    # neighbours and node coords
+    x_a = node_coords[0]
+    x_b = neighbour1_coords[0]
+    x_c = neighbour2_coords[0]
+    y_a = node_coords[1]
+    y_b = neighbour1_coords[1]
+    y_c = neighbour2_coords[1]
+    z_a, r_a = node_coords[2], node_coords[3]
+    z_b, r_b = neighbour1_coords[2], neighbour1_coords[3]
+    z_c, r_c = neighbour2_coords[2], neighbour2_coords[3]
+
+    # jacobian for covariance of delta tau
+    j2 = 1/(r_b - r_a)
+    j3 = -1/(r_c - r_a)
+    j1 = - j3 - j2
+    j5 = -(z_b - z_a)/(r_b - r_a)**2
+    j6 = (z_c - z_a)/(r_c - r_a)**2
+    j4 = - j5 - j6
+    J = np.array([j1, j2, j3, j4, j5, j6])
+
+    # error in barrel
+    sigma_za, sigma_zb, sigma_zc = 0.5, 0.5, 0.5
+    sigma_ra, sigma_rb, sigma_rc = 0.1, 0.1, 0.1
+    # if node in endcap, then reduce z error
+    if np.abs(x_a) >= 600.0: 
+        sigma_za = 0.1
+        sigma_ra = 0.5
+    if np.abs(x_b) >= 600.0: 
+        sigma_zb = 0.1
+        sigma_rb = 0.5
+    if np.abs(x_c) >= 600.0: 
+        sigma_zc = 0.1
+        sigma_rc = 0.5
+
+    # covariance
+    S = np.array([  [sigma_za**2, 0, 0, 0, 0, 0],
+                    [0, sigma_zb**2, 0, 0, 0, 0],
+                    [0, 0, sigma_zc**2, 0, 0, 0],
+                    [0, 0, 0, sigma_ra**2, 0, 0],
+                    [0, 0, 0, 0, sigma_rb**2, 0],
+                    [0, 0, 0, 0, 0, sigma_rc**2]])
+    
+    # covariance of delta tau
+    cov_delta_tau = J.dot(S).dot(J.T)
+    inv_cov_delta_tau = 1/cov_delta_tau
+
+    # chi2 contribution from delta tau
+    tau1 = (z_b - z_a)/(r_b - r_a)
+    tau2 = (z_c - z_a)/(r_c - r_a)
+    residual = tau1 - tau2
+    distance2 = residual**2 * inv_cov_delta_tau
+
+    chi2 = distance1 + distance2
+    return chi2
+
+def calc_pairwise_distances_chi2(num_edges, edge_svs, edge_covs, node_coords, neighbour_coords):
+    pairwise_distances_chi2 = np.zeros(shape=(num_edges, num_edges))
+    for i in range(num_edges):
+        for j in range(i):
+            distance_chi2 = mahalanobis_distance(edge_svs[i], edge_covs[i], edge_svs[j], edge_covs[j], node_coords, neighbour_coords[i], neighbour_coords[j])
+            pairwise_distances_chi2[i][j] = distance_chi2
+    return pairwise_distances_chi2
+
 
 # KL distance - takes into account covariances between the components 
-# If you were to use simple Euclidean distance, cov not taken into account
-def KLDistance(mean1, cov1, inv1, mean2, cov2, inv2):
+# # If you were to use simple Euclidean distance, cov not taken into account
+def KLDistance(mean1, cov1, mean2, cov2):
+    inv1 = np.linalg.inv(cov1)
+    inv2 = np.linalg.inv(cov2)
     trace = np.trace((cov1 - cov2) * (inv2 - inv1))
     return trace + (mean1 - mean2).T.dot(inv1 + inv2).dot(mean1 - mean2)
 
 # inverse variance-weighting: multivariate case https://en.wikipedia.org/wiki/Inverse-variance_weighting#Multivariate_Case
-def merge_states(mean1, inv1, mean2, inv2):
-    # print("merging: ")
+def merge_states(mean1, cov1, mean2, cov2):
+    inv1 = np.linalg.inv(cov1)
+    inv2 = np.linalg.inv(cov2)
     sum_inv_covs = inv1 + inv2
     merged_cov = np.linalg.inv(sum_inv_covs)
     # print("merged cov: \n", merged_cov)
@@ -23,24 +107,24 @@ def merge_states(mean1, inv1, mean2, inv2):
     merged_mean = merged_cov.dot(merged_mean)
     # print("merged mean: \n", merged_mean)
     merged_inv_cov = np.linalg.inv(merged_cov)
-    return merged_mean, merged_cov, merged_inv_cov
+    return merged_mean, merged_cov
 
-def calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs, neighbors_to_deactivate):
-    pairwise_distances = np.zeros(shape=(num_edges, num_edges))
-    node_pairs_1 = np.zeros(shape=(num_edges, num_edges))
-    node_pairs_2 = np.zeros(shape=(num_edges, num_edges))
-    for i in range(num_edges):
-        for j in range(i):
-            distance = KLDistance(edge_svs[i], edge_covs[i], inv_covs[i], edge_svs[j], edge_covs[j], inv_covs[j])
-            pairwise_distances[i][j] = distance
-            node_pairs_1[i][j] = neighbors_to_deactivate[i]
-            node_pairs_2[i][j] = neighbors_to_deactivate[j]
-    return pairwise_distances, node_pairs_1, node_pairs_2
+# def calc_pairwise_distances(num_edges, edge_svs, edge_covs, neighbors_to_deactivate):
+#     pairwise_distances = np.zeros(shape=(num_edges, num_edges))
+#     node_pairs_1 = np.zeros(shape=(num_edges, num_edges))
+#     node_pairs_2 = np.zeros(shape=(num_edges, num_edges))
+#     for i in range(num_edges):
+#         for j in range(i):
+#             distance = KLDistance(edge_svs[i], edge_covs[i], edge_svs[j], edge_covs[j])
+#             pairwise_distances[i][j] = distance
+#             node_pairs_1[i][j] = neighbors_to_deactivate[i]
+#             node_pairs_2[i][j] = neighbors_to_deactivate[j]
+#     return pairwise_distances, node_pairs_1, node_pairs_2
 
-def calc_dist_to_merged_state(num_edges, edge_svs, edge_covs, inv_covs, merged_mean, merged_cov, merged_inv_cov):
+def calc_dist_to_merged_state(num_edges, edge_svs, edge_covs, merged_mean, merged_cov):
     distances = []
     for i in range(num_edges):
-        distance = KLDistance(edge_svs[i], edge_covs[i], inv_covs[i], merged_mean, merged_cov, merged_inv_cov)
+        distance = KLDistance(edge_svs[i], edge_covs[i], merged_mean, merged_cov)
         distances.append(distance)
     return distances
 
@@ -64,16 +148,13 @@ def load_lut(KL_lut):
         feature = float(elements[0]) 
         KL_thres = float(elements[2].split("\n")[0])
         mapping[feature] = KL_thres
-        print("MAPPING LUT: ")
-        print(mapping)
     return mapping
 
 def get_KL_upper_threshold(empvar_feature, distance, mapping):
     base = 0.05
-    # base = 0.001
     feature = int(math.ceil(empvar_feature/base)) - 1
 
-    print("emp_var: ", empvar_feature, "emp_var_bin_num: ", feature)
+    # print("emp_var: ", empvar_feature, "emp_var_bin_num: ", feature)
     if float(feature) in mapping.keys():
         KL_thres = mapping[feature]
         if distance <= KL_thres: return KL_thres
@@ -103,29 +184,20 @@ def reset_reactivate(subGraphs):
 
     return subGraphs
 
-# Function to calculate Chi-distance
-def chi2_distance(a, b):
-    # compute the chi-squared distance using above formula
-    chi = 0.0
-    for i in range(len(a)):
-        if a[i] > 0.0 and b[i] > 0.0:
-            chi += ((a[i] - b[i]) ** 2) / (a[i] + b[i])
-        print("chi: ", chi)
-    return 0.5 * chi
 
 
 def cluster(inputDir, outputDir, track_state_key, KL_lut, reactivate):
-
     # variable names
     subgraph_path = "_subgraph.gpickle"
     TRACK_STATE_KEY = track_state_key
-    EMPIRICAL_MEAN_VAR = "xy_edge_gradient_mean_var"
-    EDGE_STATE_VECTOR = "edge_state_vector"
-    EDGE_COV = "edge_covariance"
     PRIOR = "prior"
     MERGED_STATE = "merged_state"
     MERGED_COVARIANCE = "merged_cov"
     MERGED_PRIOR = "merged_prior"
+
+    # TODO
+    # cluster the joint vector and joint cov [a, b, tau]
+    # merge together the parabolic state vector and covariance [a, b, c]
 
     # load predefined LUT: empirical variance: {upper bound emp var bin: KL_dist upper bound threshold}
     mapping = load_lut(KL_lut)
@@ -152,60 +224,74 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, reactivate):
             node_num = node[0]
             node_attr = node[1]
 
-            empvar = node_attr[EMPIRICAL_MEAN_VAR][1]
+            # empvar = node_attr[EMPIRICAL_MEAN_VAR][1]
             num_edges = h.query_node_degree_in_edges(subGraph, node_num) # node degree is dynamical between iterations, only check active edges
-            if num_edges <= 2: continue
+            if (num_edges <= 2) or (num_edges >= 10): continue
 
-            # convert attributes to arrays
+            # convert attributes to arrays: "edge_state_vector" --> [a, b, c] used in merging states
             track_state_estimates = node_attr[TRACK_STATE_KEY]
             neighbors_to_deactivate = np.array([connection for connection in track_state_estimates.keys()])
-            edge_svs = np.array([component[EDGE_STATE_VECTOR] for component in track_state_estimates.values()])
-            
-            edge_covs = np.array([component[EDGE_COV] for component in track_state_estimates.values()])
-            
-            # edge_covs = np.reshape(edge_covs[:, :, np.newaxis], (num_edges, 2, 2))
+            edge_svs = np.array([component["edge_state_vector"] for component in track_state_estimates.values()])
+            edge_covs = np.array([component["edge_covariance"] for component in track_state_estimates.values()])
             edge_covs = np.reshape(edge_covs[:, :, np.newaxis], (num_edges, 3, 3))
-            inv_covs = np.linalg.inv(edge_covs)
-            priors = np.array([component[PRIOR] for component in track_state_estimates.values()])
+            priors = np.array([component["prior"] for component in track_state_estimates.values()])
 
-            # calculate pairwise distances between edge state vectors, find smallest distance & keep track of merged states
-            pairwise_distances, neighbour_pairs_1, neighbour_pairs_2 = calc_pairwise_distances(num_edges, edge_svs, edge_covs, inv_covs, neighbors_to_deactivate)
-            smallest_dist, idx = get_smallest_dist_idx(pairwise_distances) #[row_idx, column_idx]
-  
+            # calculate pairwise KL distances between edge state vectors, find smallest distance & keep track of merged states
+            # pairwise_distances, neighbour_pairs_1, neighbour_pairs_2 = calc_pairwise_distances(num_edges, edge_svs, edge_covs, neighbors_to_deactivate)
+            # smallest_dist, idx = get_smallest_dist_idx(pairwise_distances) #[row_idx, column_idx]
+
+            # compute mahalanobis distances: "joint_vector" --> [a, b, tau] used to cluster states
+            node_coords = node_attr['xyzr']
+            all_neighbours_coords = np.array([subGraph.nodes[neighbour_num]['xyzr'] for neighbour_num in track_state_estimates.keys()])
+            joint_edge_svs = np.array([component["joint_vector"] for component in track_state_estimates.values()])
+            joint_edge_covs = np.array([component["joint_vector_covariance"] for component in track_state_estimates.values()])
+            joint_edge_covs = np.reshape(joint_edge_covs[:, :, np.newaxis], (num_edges, 3, 3))
+            pairwise_distances_chi2 = calc_pairwise_distances_chi2(num_edges, joint_edge_svs, joint_edge_covs, node_coords, all_neighbours_coords)
+            chi2_threshold = 1.0    # chi2 trained threshold (loose cut)
+            smallest_dist, idx = get_smallest_dist_idx(pairwise_distances_chi2) #[row_idx, column_idx]
+
+            # non_zero_distances = list(delta_a[np.nonzero(delta_a)])
+            # for element in non_zero_distances:
+            #     writer_a.writerow([element])
+            # non_zero_distances = list(delta_b[np.nonzero(delta_b)])
+            # for element in non_zero_distances:
+            #     writer_b.writerow([element])
+            # non_zero_distances = list(delta_tau[np.nonzero(delta_tau)])
+            # for element in non_zero_distances:
+            #     writer_tau.writerow([element])
+
             # perform clustering, query LUT with degree/empvar & smallest pairwise distance
-            KL_thres = get_KL_upper_threshold(empvar, smallest_dist, mapping)
-            if smallest_dist < KL_thres:
+            # KL_thres = get_KL_upper_threshold(empvar, smallest_dist, mapping)
+            if smallest_dist < chi2_threshold:
 
                 # merge states
-                merged_mean, merged_cov, merged_inv_cov = merge_states(edge_svs[idx[0]], inv_covs[idx[0]], edge_svs[idx[1]], inv_covs[idx[1]])
+                merged_mean, merged_cov = merge_states(edge_svs[idx[0]], edge_covs[idx[0]], edge_svs[idx[1]], edge_covs[idx[1]])
                 merged_prior = priors[idx[0]] + priors[idx[1]]
 
                 # update variables, keep the merged state information at the end
                 edge_svs = np.delete(edge_svs, idx, axis=0)
                 edge_covs = np.delete(edge_covs, idx, axis=0)
-                inv_covs = np.delete(inv_covs, idx, axis=0)
                 priors = np.delete(priors, idx)
                 neighbors_to_deactivate = np.delete(neighbors_to_deactivate, idx, axis=0)
-                # print("check neighbours to deactivate:", neighbors_to_deactivate)
                 num_edges = edge_svs.shape[0]
 
                 # calc distances to the merged state
-                dist_to_merged_state = calc_dist_to_merged_state(num_edges, edge_svs, edge_covs, inv_covs, 
-                                                                    merged_mean, merged_cov, merged_inv_cov)
-                smallest_dist, idx = get_smallest_dist_idx(dist_to_merged_state)    
-      
+                dist_to_merged_state = calc_dist_to_merged_state(num_edges, edge_svs, edge_covs, merged_mean, merged_cov)
+                smallest_dist, idx = get_smallest_dist_idx(dist_to_merged_state)
+    
                 # carry on merging one by one state, check for smallest distance
                 # if smallest distance is less than KL threshold, then merge
                 # recalc distances to merged state
-                while smallest_dist < KL_thres:
+                KL_threshold = 2.0
+                # print("size: ", edge_svs)
+                while smallest_dist < KL_threshold:
                     # merge states
-                    merged_mean, merged_cov, merged_inv_cov = merge_states(edge_svs[idx], inv_covs[idx], merged_mean, merged_inv_cov)
+                    merged_mean, merged_cov = merge_states(edge_svs[idx], edge_covs[idx], merged_mean, merged_cov)
                     merged_prior = priors[idx] + merged_prior
 
                     # update variables, keep the merged state at the end
                     edge_svs = np.delete(edge_svs, idx, axis=0)
                     edge_covs = np.delete(edge_covs, idx, axis=0)
-                    inv_covs = np.delete(inv_covs, idx, axis=0)
                     priors = np.delete(priors, idx)
                     neighbors_to_deactivate = np.delete(neighbors_to_deactivate, idx, axis=0)
                     # print("check neighbours to deactivate:", neighbors_to_deactivate)
@@ -215,8 +301,7 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, reactivate):
                     if len(neighbors_to_deactivate) == 0: break
 
                     # calc distances to the merged state
-                    dist_to_merged_state = calc_dist_to_merged_state(num_edges, edge_svs, edge_covs, inv_covs, 
-                                                                        merged_mean, merged_cov, merged_inv_cov)
+                    dist_to_merged_state = calc_dist_to_merged_state(num_edges, edge_svs, edge_covs, merged_mean, merged_cov)
                     smallest_dist, idx = get_smallest_dist_idx(dist_to_merged_state)
 
 
@@ -239,7 +324,7 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, reactivate):
             else:
                 # all edges are incompatible
                 print("No clusters found for node num: ", node_num, "vivl_id: ", node_attr['vivl_id'])
-                print("KL thres: ", KL_thres, "smallest distance: ", smallest_dist)
+                print("smallest distance: ", smallest_dist)
 
         # simultaneous deactivation of outlier edge connections
         print("Deactivating outlier edges...", edges_to_deactivate)
@@ -255,6 +340,12 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, reactivate):
                 if node_truth_particle != neighbour_truth_particle:
                     perc_correct_outliers_detected += 1
             total_outliers += len(edges_to_deactivate)
+        
+        # update the node degree as an attribute
+        for node in subGraph.nodes(data=True):
+            node_num = node[0]
+            degree = h.query_node_degree_in_edges(subGraph, node_num)
+            subGraph.nodes[node_num]['degree'] = degree
 
     print("numerator:", perc_correct_outliers_detected, "denominator:", total_outliers)
     if total_outliers != 0:
@@ -266,7 +357,7 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, reactivate):
     h.compute_mixture_weights(subGraphs)
     # compute priors for a node based on inward edges
     h.compute_prior_probabilities(subGraphs, TRACK_STATE_KEY)
-  
+
     # title = "Filtered Graph outlier edge removal using clustering with KL distance measure"
     # h.plot_subgraphs(subGraphs, outputDir, node_labels=True, save_plot=True, title=title)
     # save networks

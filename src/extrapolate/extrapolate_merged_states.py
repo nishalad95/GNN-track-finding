@@ -275,6 +275,13 @@ def main():
     h.reweight(subGraphs, 'updated_track_states')
     h.compute_prior_probabilities(subGraphs, 'updated_track_states')
 
+    # update the node degree as an attribute
+    for subGraph in subGraphs:
+        for node in subGraph.nodes(data=True):
+            node_num = node[0]
+            degree = h.query_node_degree_in_edges(subGraph, node_num)
+            subGraph.nodes[node_num]['degree'] = degree
+
     # for i, s in enumerate(subGraphs):
     #     print("-------------------")
     #     print("SUBGRAPH " + str(i))

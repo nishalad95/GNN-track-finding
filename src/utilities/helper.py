@@ -175,11 +175,17 @@ def compute_3d_distance(coord1, coord2):
 
 
 
-def compute_track_state_estimates(GraphList):
+def compute_track_state_estimates(GraphList, sigma_ms):
     # NOTE: sigmaO - error at the origin, different to sigma0 rms error in xy plane
     sigmaO = 4.0        # 4.0mm larger error in m_O due to beamspot error and error at the origin
     sigmaA = 0.1        # 0.1mm
     sigmaB = 0.1        # 0.1mm
+    sigma_y = 0.1
+    
+    # default error for barrel located node
+    sigma_r = 0.1
+    sigma_z = 0.5
+    
     S = np.array([  [sigmaO**2,         0,                  0], 
                     [0,                 sigmaA**2,          0], 
                     [0,                 0,                  sigmaB**2]])        # edge covariance matrix
@@ -189,7 +195,10 @@ def compute_track_state_estimates(GraphList):
     for i, G in enumerate(GraphList):
         for node in G.nodes():
             gradients_xy = []
-            gradients_rz = []
+            gradients_zr = []
+            theta_xy = []
+            theta_zr = []
+            del_tau = []
             track_state_estimates = {}
             
             # create a list of node & neighbour coords including the origin
@@ -199,6 +208,14 @@ def compute_track_state_estimates(GraphList):
             coords = [(0.0, 0.0), m_node_xy]
             keys = [-1, node]
 
+            # if node in endcap, then reduce z error: used in calc of error in tau = dz/dr
+            if np.abs(m_node_xy[0]) >= 600.0: 
+                sigma_z = 0.1
+                sigma_r = 0.5
+            # del_dz = np.sqrt(2) * sigma_z
+            del_dz = sigma_z
+            del_dr = sigma_r
+
             for neighbor in set(nx.all_neighbors(G, node)):
                 neighbour_gnn = G.nodes[neighbor]["GNN_Measurement"]
                 m_neighbour_xy = (neighbour_gnn.x, neighbour_gnn.y)
@@ -207,31 +224,44 @@ def compute_track_state_estimates(GraphList):
                 keys.append(neighbor)
                 
                 # calculate gradient - used in clustering
-                dy = m_node_xy[1] - m_neighbour_xy[1]
-                dx = m_node_xy[0] - m_neighbour_xy[0]
+                y1 = m_node_xy[1]
+                y2 = m_neighbour_xy[1]
+                dy = y2 - y1
+                x1 = m_node_xy[0]
+                x2 = m_neighbour_xy[0]
+                dx =  x2 - x1
                 grad_xy = dy / dx
                 gradients_xy.append(grad_xy)
-                dr = m_node_zr[1] - m_neighbour_zr[1]
-                dz = m_node_zr[0] - m_neighbour_zr[0]
-                grad_zr = dy / dx
-                gradients_zr.append(grad_zr)
+                r1 = m_node_zr[1]
+                r2 = m_neighbour_zr[1]
+                dr = r2 - r1
+                z1 = m_node_zr[0]
+                z2 = m_neighbour_zr[0]
+                dz = z2 - z1
+                grad_zr = dz / dr
+                gradients_zr.append(grad_zr)        # dz_dr gradient
+                # calculate theta
+                angle_xy = np.arctan(grad_xy)
+                angle_zr = np.arctan(1/grad_zr)
+                theta_xy.append(angle_xy)
+                theta_zr.append(angle_zr)
+
+                # error in tau
+                dt = grad_zr * np.sqrt((del_dz / dz)**2 + (del_dr / dr)**2)
+                if dz == 0:
+                    dt = grad_zr * np.sqrt((del_dr / dr)**2)
+                del_tau.append(dt)
             
             # [neighbour1, neighbour2, ..., node, (0.0, 0.0)]
             coords.reverse()
             keys.reverse()
   
-            # transform the coords to local coordinate system: translate and rotate
-            # x_new = xcos(angle) + ysin(angle)
-            # y_new = -xsin(angle) + ycos(angle)
-            x_A = m_node_xy[0]
-            y_A = m_node_xy[1]
-            # print("NodeA coordinates: we want to move into this local c.s.")
-            # print("x_A: ", x_A, "y_A: ", y_A)
+            # transform the coords to local coordinate system of the central node
+            x_A = m_node_xy[0]      # x_new = xcos(angle) + ysin(angle)
+            y_A = m_node_xy[1]      # y_new = -xsin(angle) + ycos(angle)
         
             # get the azimuth angle - angle of rotation (origin-node edge parallel with x axis):
             azimuth_angle = atan2(y_A, x_A)
-            # azimuth_angle_deg = azimuth_angle * 180 / np.pi
-
             transformed_coords = []
             for c in coords:
                 x_P = c[0]
@@ -240,19 +270,6 @@ def compute_track_state_estimates(GraphList):
                 y_new = -(x_P - x_A)*np.sin(azimuth_angle) + (y_P - y_A)*np.cos(azimuth_angle)
                 tc = (x_new, y_new)
                 transformed_coords.append(tc)
-            # print("All original coordinates: ", coords)
-            # print("All transformed coordinates", transformed_coords)
-
-            # calculate local gradient - used in clustering
-            # [neighbour1, neighbour2, ..., node, (0.0, 0.0)]
-            # node_x = transformed_coords[-2][0]
-            # node_y = transformed_coords[-2][1]
-            # for i in range(len(transformed_coords) - 2):
-            #     neighbour_x = transformed_coords[i][0]
-            #     neighbour_y = transformed_coords[i][1]
-            #     dy_dx = (node_y - neighbour_y) / (node_x - neighbour_x)
-            #     local_gradients.append(dy_dx)
-
 
             # for each neighbour connection obtain the measurement vector in the new axis
             # [m_0, m_A, m_B] m_0 the old origin, m_A the new origin, m_B the neighbour
@@ -261,7 +278,7 @@ def compute_track_state_estimates(GraphList):
             # print("x0 (same for every neighbour): ", x_0)
             transformed_neighbour_coords = transformed_coords[:-2]
             keys = keys[:-2]
-            for tnc, key in zip(transformed_neighbour_coords, keys):
+            for i, (tnc, key) in enumerate(zip(transformed_neighbour_coords, keys)):
                 x_B = tnc[0]
                 m_B = tnc[1]
                 measurement_vector = [m_O, m_A, m_B]
@@ -270,10 +287,8 @@ def compute_track_state_estimates(GraphList):
                                 [0.5*x_B**2,         x_B,          1]])
 
                 # compute track state parameters, covariance and t_vector for parametric representation
-                H_inv = np.linalg.inv(H)    # invert H matrix to obtain measurement matrix
+                H_inv = np.linalg.inv(H)                            # invert H matrix to obtain measurement matrix
                 track_state_vector = H_inv.dot(measurement_vector)  # parabolic parameters: a, b, c
-                # print("H_inv: \n", H_inv)
-                # print("track_state_vector [a, b, c]: ", track_state_vector)
 
                 a = track_state_vector[0]
                 b = track_state_vector[1]
@@ -287,20 +302,32 @@ def compute_track_state_estimates(GraphList):
                 # with open('parabolic_param_c.csv', 'a') as f:
                 #     f.write(str(c) + "\n")
 
-                norm_factor = 1/(np.sqrt(1 + b**2))
-                t_vector = np.array([0, c, norm_factor, b*norm_factor, 0, a])
+                # norm_factor = 1/(np.sqrt(1 + b**2))
+                # t_vector = np.array([0, c, norm_factor, b*norm_factor, 0, a])
                 covariance = H_inv.dot(S).dot(H_inv.T)
+                covariance[1, 1] += sigma_ms    # only the track direction is affected by multiple scattering affecting the b parameter
+                tau = gradients_zr[i]
+                joint_vector = [a, b, tau]
+                variance_tau = del_tau[i]**2
+                joint_vector_covariance = covariance
+                joint_vector_covariance[:, 2] = 0.0
+                joint_vector_covariance[2, :] = 0.0
+                joint_vector_covariance[2, 2] = variance_tau + sigma_ms
+                
                 track_state_estimates[key] = {  'edge_state_vector': track_state_vector, 
                                                 'edge_covariance': covariance,
-                                                't_vector': t_vector }
+                                                'joint_vector': joint_vector,
+                                                'joint_vector_covariance': joint_vector_covariance }
+                                                # 't_vector': t_vector }
 
             # store all track state estimates at the node
             G.nodes[node]['track_state_estimates'] = track_state_estimates
-            # (mean, variance) of edge orientation in xy plane - needed for KL distance in clustering
+            # (mean, variance) of edge orientation - needed for KL distance in clustering
             G.nodes[node]['xy_edge_gradient_mean_var'] = (np.mean(gradients_xy), np.var(gradients_xy))
             G.nodes[node]['zr_edge_gradient_mean_var'] = (np.mean(gradients_zr), np.var(gradients_zr))
-            # G.nodes[node]['edge_local_gradient_mean_var'] = (np.mean(local_gradients), np.var(local_gradients))
-
+            # (mean, variance) of edge theta - needed for KL distance in clustering
+            G.nodes[node]['xy_edge_theta_mean_var'] = (np.mean(theta_xy), np.var(theta_xy))
+            G.nodes[node]['zr_edge_theta_mean_var'] = (np.mean(theta_zr), np.var(theta_zr))
             # store the transformation information - used in extrapolation
             G.nodes[node]['angle_of_rotation'] = azimuth_angle
             G.nodes[node]['translation'] = (x_A, y_A)
@@ -322,7 +349,6 @@ def construct_graph(graph, nodes, edges, truth, sigma0, sigma_ms):
     # TODO: 'truth_particle' attribute needs to be updated - clustering calculation uses 1 particle id, currently needs updating
     # group truth particle ids to node index
     
-    print("here: construct_graph")
     group = truth.groupby('node_idx')
     grouped_pid = group.apply(lambda row: row['particle_id'].unique())
     grouped_pid = pd.DataFrame({'node_idx':grouped_pid.index, 'particle_id':grouped_pid.values})
@@ -483,7 +509,7 @@ def plot_subgraphs(GraphList, outputDir, node_labels=False, save_plot=False, tit
 # private function
 def __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, key, axis1, axis2, node_labels, save_plot):
 
-    colors = ["#f7c04a", "#2648ad", "#991895"]
+    colors = ["#f7c04a", "#2648ad", "#a5e438"]
     GraphList.sort(key=lambda subGraph: int(subGraph.graph["iteration"]))
 
     figsize=(12,10)
@@ -493,16 +519,16 @@ def __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, key,
     for subGraph in GraphList:
         
         iteration = int(subGraph.graph["iteration"])
-        if iteration == 1: color = colors[0]
-        elif iteration == 2: color = colors[1]
+        if iteration == 0: color = colors[0]
+        elif iteration == 1: color = colors[1]
 
         pos=nx.get_node_attributes(subGraph, key)
         edge_colors = []
         for u, v in subGraph.edges():
             if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
             else: edge_colors.append("#f2f2f2")
-        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.75)
-        nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=50, label=iteration)
+        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.65)
+        nx.draw_networkx_nodes(subGraph, pos, node_color=color, alpha=0.75, node_size=50, label=iteration)
         if node_labels:
             nx.draw_networkx_labels(subGraph, pos, font_size=4)
 
@@ -523,6 +549,7 @@ def __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, key,
 # used for visualising the good extracted candidates & iteration num
 def plot_save_subgraphs_iterations(GraphList, outputFile, title, node_labels=True, save_plot=True):
     #xy plane
-    __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, 'xy', "x", "y", node_labels, save_plot)
+    # __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, 'xy', "x", "y", node_labels, save_plot)
     #zr plane
     __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, 'zr', "z", "r", node_labels, save_plot)
+
