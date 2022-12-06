@@ -56,9 +56,6 @@ def get_midpoint_coords(xyzr_coords):
 
 
 def check_close_proximity_nodes(subgraph, threshold_distance):
-    # threshold_distance = 4.0        # distance between nodes used for close proximity node merging
-    print("Threshold distance for node merging: ", threshold_distance)
-
     # get the freq distribution of the vivl_ids
     vivl_id_dict = nx.get_node_attributes(subgraph, "vivl_id")
     module_id_dict = nx.get_node_attributes(subgraph, "module_id")
@@ -152,20 +149,20 @@ def check_close_proximity_nodes(subgraph, threshold_distance):
 
 
 def angle_trunc(a, p2):
-    if p2[1] > 0.0:
+    if p2 > 0.0:
         a = (2*np.pi) - a
     return a
-    # while a < 0.0:
-    #     a += pi * 2
-    # return a
-
+    
 
 # get angle to the positive x axis in radians
 def getAngleBetweenPoints(p1, p2):
     deltaY = p2[1] - p1[1]
     deltaX = p2[0] - p1[0]
-    angle = np.abs(atan2(deltaY, deltaX))
-    return angle_trunc(angle, p2)
+    angle_xy = atan2(deltaY, deltaX)
+    deltaZ = p2[2] - p1[2]
+    deltaR = p2[3] - p1[3]
+    angle_zr = atan2(deltaZ, deltaR)
+    return angle_xy, angle_zr
 
 
 def rotate_track(coords, separation_3d_threshold):
@@ -178,14 +175,17 @@ def rotate_track(coords, separation_3d_threshold):
     if distance < separation_3d_threshold:
         p2 = coords[-3]
 
-    # rotate counter clockwise, first edge to be parallel with x axis
-    angle = getAngleBetweenPoints(p1, p2)
+    # rotate such that the first edge is parallel with x axis
+    angle_xy, angle_zr = getAngleBetweenPoints(p1, p2)
+
     rotated_coords = []
     for c in coords:
         x, y, z, r = c[0], c[1], c[2], c[3]
-        x_new = x * np.cos(angle) - y * np.sin(angle)    # x_new = xcos(angle) - ysin(angle)
-        y_new = x * np.sin(angle) + y * np.cos(angle)    # y_new = xsin(angle) + ycos(angle) 
-        rotated_coords.append((x_new, y_new, z, r)) 
+        x_new = x * np.cos(angle_xy) + y * np.sin(angle_xy)    # x_new = xcos(angle) - ysin(angle)
+        y_new = -x * np.sin(angle_xy) + y * np.cos(angle_xy)    # y_new = xsin(angle) + ycos(angle) 
+        r_new = r * np.cos(angle_zr) + r * np.sin(angle_zr)    # x_new = xcos(angle) + ysin(angle)
+        z_new = -z * np.sin(angle_zr) + z * np.cos(angle_zr)    # y_new = -xsin(angle) + ycos(angle) 
+        rotated_coords.append((x_new, y_new, z_new, r_new)) 
     return rotated_coords
 
 
@@ -230,7 +230,6 @@ def KF_track_fit_xy(sigma0, sigma_ms, coords):
     g1 = (np.abs(dx) - f1) / alpha
     
     # variables for Q process noise matrix
-    # sigma0 = 0.1                                                    # IMPORTANT This is different in model setup!
     sigma_ou = 0.00001                                              # 10^-5
     sw2 = sigma_ou**2                                               # OU parameter 
     st2 = sigma_ms**2                                               # process noise representing multiple scattering
@@ -268,9 +267,8 @@ def KF_track_fit_zr(sigma0, sigma_ms, coords):
     obs_x = [c[2] for c in coords]
     obs_y = [c[3] for c in coords]
     yf = obs_y[0]
-    dx = coords[1][2] - coords[0][2]    # dx = z1 - z0
+    dx = coords[1][2] - coords[0][2]    # dz = z1 - z0
 
-    # sigma0 = 0.1                                                    # IMPORTANT This is different in model setup!
     f = KalmanFilter(dim_x=2, dim_z=1)
     f.x = np.array([yf, 0.])                                # X state vector [yf, dy/dx, w] = [coordinate, track inclination, integrated OU]
 
@@ -282,7 +280,7 @@ def KF_track_fit_zr(sigma0, sigma_ms, coords):
                     [0.,         1000.]])                   # P covariance
     
     f.R = sigma0**2                                         # R measuremnt noise
-    f.Q = sigma_ms                                          # Q process uncertainty/noise, OU model
+    f.Q = sigma_ms**2                                          # Q process uncertainty/noise, OU model
 
     pval = KF_predict_update(f, obs_y)
     return pval
@@ -337,9 +335,6 @@ def main():
     threshold_distance_node_merging = float(args.threshold_distance_node_merging)
     # get iteration num
     iteration_num = str(args.iteration)
-    # inputDir_list = inputDir.split("/")
-    # iterationDir = filter(lambda x: x.startswith('iteration_'), inputDir_list)
-    # for i in iterationDir: iteration_num = i.split("_")[-1]
 
     # read in subgraph data
     subGraphs = []
@@ -383,7 +378,7 @@ def main():
                 # check for 1 hit per layer - use volume_id & in_volume_layer_id
                 vivl_id_values = nx.get_node_attributes(candidate_to_assess,'vivl_id').values()
 
-                if len(vivl_id_values) == len(set(vivl_id_values)): 
+                if (len(vivl_id_values) == len(set(vivl_id_values))) and (len(set(vivl_id_values)) >= fragment): 
                     # good candidate
                     print("no duplicates volume_ids & in_volume_layer_ids for this candidate")
 
@@ -402,7 +397,6 @@ def main():
                         coords = [element[1] for element in sorted_nodes_coords_tuples]
                         # rotate the track such that innermost edge parallel to x-axis - r&z components are left unchanged
                         coords = rotate_track(coords, separation_3d_threshold)
-                        # apply KF track fit - TODO: parallelize these 2 KF track fits
                         pval = KF_track_fit_xy(sigma0, sigma_ms, coords)
                         pval_zr = KF_track_fit_zr(sigma0, sigma_ms, coords)
                         if (pval >= track_acceptance) and (pval_zr >= track_acceptance):
@@ -415,7 +409,7 @@ def main():
                         else:
                             print("p-value too small, leave for further processing, pval_xy: " + str(pval) + " pval_zr: " + str(pval_zr))
                     else:
-                        print("Candidate not accepted, not connceted in order")
+                        print("Candidate not accepted, not connected in order")
 
                 else: 
                     print("Bad candidate, > 1 hit per layer, will pass through community detection")
@@ -472,10 +466,6 @@ def main():
         h.save_network(remainingDir, i, sub)
     for i, sub in enumerate(fragments):
         h.save_network(fragmentsDir, i, sub)
-    
-
-    # TODO: plot the distribution of edge weightings within the extracted candidates
-
 
 
 

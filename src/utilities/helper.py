@@ -57,6 +57,7 @@ def compute_prior_probabilities(GraphList, track_state_key):
                     track_state_estimates[neighbour_num]['prior'] = prior
 
 
+
 def query_node_degree_in_edges(subGraph, node_num):
     in_edges = subGraph.in_edges(node_num) # one direction only, not double counted
     node_degree = 0
@@ -156,7 +157,7 @@ def reweight(subGraphs, track_state_estimates_key):
 
                         # add as edge attribute
                         subGraph[neighbour_num][node_num]['mixture_weight'] = reweight
-                    
+
                         # reactivate/deactivate
                         if reweight < reweight_threshold:
                             subGraph[neighbour_num][node_num]['activated'] = 0
@@ -212,7 +213,6 @@ def compute_track_state_estimates(GraphList, sigma_ms):
             if np.abs(m_node_xy[0]) >= 600.0: 
                 sigma_z = 0.1
                 sigma_r = 0.5
-            # del_dz = np.sqrt(2) * sigma_z
             del_dz = sigma_z
             del_dr = sigma_r
 
@@ -239,10 +239,10 @@ def compute_track_state_estimates(GraphList, sigma_ms):
                 z2 = m_neighbour_zr[0]
                 dz = z2 - z1
                 grad_zr = dz / dr
-                gradients_zr.append(grad_zr)        # dz_dr gradient
+                gradients_zr.append(grad_zr)        # dz_dr gradient (inverse gradient dz / dr)
                 # calculate theta
-                angle_xy = np.arctan(grad_xy)
-                angle_zr = np.arctan(1/grad_zr)
+                angle_xy = atan2(dy, dx)
+                angle_zr = atan2(dz, dr)
                 theta_xy.append(angle_xy)
                 theta_zr.append(angle_zr)
 
@@ -305,14 +305,14 @@ def compute_track_state_estimates(GraphList, sigma_ms):
                 # norm_factor = 1/(np.sqrt(1 + b**2))
                 # t_vector = np.array([0, c, norm_factor, b*norm_factor, 0, a])
                 covariance = H_inv.dot(S).dot(H_inv.T)
-                covariance[1, 1] += sigma_ms    # only the track direction is affected by multiple scattering affecting the b parameter
+                covariance[1, 1] += sigma_ms**2    # only the track direction is affected by multiple scattering affecting the b parameter
                 tau = gradients_zr[i]
                 joint_vector = [a, b, tau]
                 variance_tau = del_tau[i]**2
                 joint_vector_covariance = covariance
                 joint_vector_covariance[:, 2] = 0.0
                 joint_vector_covariance[2, :] = 0.0
-                joint_vector_covariance[2, 2] = variance_tau + sigma_ms
+                joint_vector_covariance[2, 2] = variance_tau + sigma_ms**2
                 
                 track_state_estimates[key] = {  'edge_state_vector': track_state_vector, 
                                                 'edge_covariance': covariance,
@@ -509,19 +509,17 @@ def plot_subgraphs(GraphList, outputDir, node_labels=False, save_plot=False, tit
 # private function
 def __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, key, axis1, axis2, node_labels, save_plot):
 
-    colors = ["#f7c04a", "#2648ad", "#a5e438"]
+    colors = ["#f7c04a", "#2648ad", "#a5e438", "#d16097"]
     GraphList.sort(key=lambda subGraph: int(subGraph.graph["iteration"]))
 
-    figsize=(12,10)
+    figsize=(14,10)
     if key == 'zr': figsize=(16,10)
     _, ax = plt.subplots(figsize=figsize)
 
     for subGraph in GraphList:
         
         iteration = int(subGraph.graph["iteration"])
-        if iteration == 0: color = colors[0]
-        elif iteration == 1: color = colors[1]
-
+        color = colors[iteration]
         pos=nx.get_node_attributes(subGraph, key)
         edge_colors = []
         for u, v in subGraph.edges():
@@ -535,6 +533,7 @@ def __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, key,
     ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
     plt.xlabel(axis1)
     plt.ylabel(axis2)
+    if key == 'zr' : plt.xlim([-1800, 1800])
     plt.title(title)
     # plot legend & remove duplicate entries
     handles, labels = plt.gca().get_legend_handles_labels()
@@ -549,7 +548,7 @@ def __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, key,
 # used for visualising the good extracted candidates & iteration num
 def plot_save_subgraphs_iterations(GraphList, outputFile, title, node_labels=True, save_plot=True):
     #xy plane
-    # __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, 'xy', "x", "y", node_labels, save_plot)
+    # __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, 'xy', "x", "y", False, save_plot)
     #zr plane
-    __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, 'zr', "z", "r", node_labels, save_plot)
+    __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, 'zr', "z", "r", False, save_plot)
 

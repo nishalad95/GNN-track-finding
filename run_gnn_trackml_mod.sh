@@ -5,13 +5,13 @@
 # ---------------------------------------------------------------------------------------------
 # iterations
 START=1
-END=1
+END=2
 
 # event conversion and track simulation
 min_volume=7            # minimum volume number to analyse (inclusive) - used also in effciency calc
 max_volume=9            # maximum volume number to analyse (inclusive) - used also in efficiency calc
 SIGMA0=0.1              # IMPORTANT: sigma0 is used in the extraction KF only, r.m.s measurement error in xy plane
-SIGMA_MS=0.0001         # 10^-4 multiple scattering error
+SIGMA_MS=0.01         # 10^-4 multiple scattering error
 ROOTDIR=src/output      # output directory to store GNN algorithm output
 
 # clustering
@@ -19,7 +19,7 @@ ROOTDIR=src/output      # output directory to store GNN algorithm output
 LUT=learn_KL_linear_model/output/empvar/empvar.lut
 
 # extrapolation
-c=4                     #  initial chi2 distance acceptance threshold for extrapolated states
+c=1                     #  initial chi2 distance acceptance threshold for extrapolated states
 
 # extracting track candidates
 p=0.01                  # p-value acceptance level for good track candidate extraction - currently applied in xy plane
@@ -67,13 +67,15 @@ mkdir -p $FRAGMENTS
 python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -e $SIGMA0 -m $SIGMA_MS -n $n -s $s -t $t -a 0
 
 
-
-INPUT=$REMAINING
 # -----------------------------------------------------
 # Begin the iterations....
 # -----------------------------------------------------
-# INPUT=$ROOTDIR/track_sim/network/
+INPUT=$REMAINING
 for (( i=$START; i<=$END; i++ ))
+
+# INPUT=$ROOTDIR/iteration_1/remaining/
+# for (( i=2; i<=2; i++ ))
+
     do
         OUTPUT=$ROOTDIR/iteration_$i/network/
         mkdir -p $OUTPUT
@@ -97,7 +99,7 @@ for (( i=$START; i<=$END; i++ ))
             echo "Using chisq distance cut of: ${c}"
             prev_duration=$SECONDS
             python src/extrapolate/extrapolate_merged_states.py -i $INPUT -o $OUTPUT -c $c -m $SIGMA_MS
-            let c=$c/2   # tighter cut each time
+            # let c=$c*0.5   # tighter cut each time
 
             # time it!
             stages+=("extrapolation")

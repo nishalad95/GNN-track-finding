@@ -163,7 +163,7 @@ def reset_reactivate(subGraphs):
 
 
 
-def cluster(inputDir, outputDir, track_state_key, KL_lut, reactivate):
+def cluster(inputDir, outputDir, track_state_key):
     # variable names
     subgraph_path = "_subgraph.gpickle"
     TRACK_STATE_KEY = track_state_key
@@ -181,11 +181,6 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, reactivate):
     for file in glob.glob(inputDir + "*" + subgraph_path):
         sub = nx.read_gpickle(file)
         subGraphs.append(sub)
-
-    # brute force approach to reset remaining network
-    if reactivate:
-        print("Resetting & reactivating all edges in remaining network")
-        subGraphs = reset_reactivate(subGraphs)
 
     # clustering on edges using KL-distance threshold
     perc_correct_outliers_detected = 0
@@ -344,31 +339,58 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, reactivate):
     for i, sub in enumerate(subGraphs):
         h.save_network(outputDir, i, sub)
 
+
     
 
 def main():
 
-    parser = argparse.ArgumentParser(description='edge outlier removal')
-    parser.add_argument('-i', '--input', help='input directory of outlier removal')
-    parser.add_argument('-o', '--output', help='output directory to save remaining network & track candidates')
-    parser.add_argument('-d', '--dict', help='dictionary of track state estimates to use')
-    parser.add_argument('-l', '--lut', help='lut file for KL distance acceptance region')
-    parser.add_argument('-r', '--reactivateall', default=False, type=bool)
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser(description='edge outlier removal')
+    # parser.add_argument('-i', '--input', help='input directory of outlier removal')
+    # parser.add_argument('-o', '--output', help='output directory to save remaining network & track candidates')
+    # parser.add_argument('-d', '--dict', help='dictionary of track state estimates to use')
+    # args = parser.parse_args()
 
-    inputDir = args.input
-    outputDir = args.output
-    track_states_key = args.dict
-    KL_lut = args.lut
-    reactivate = args.reactivateall
+    # inputDir = args.input
+    # outputDir = args.output
+    # track_states_key = args.dict
+    subgraph_path = "_subgraph.gpickle"
+    track_states_key = "updated_track_states"
+    inputDir = "src/output/iteration_2/remaining/"
 
-    start = time.time()
+    # read in subgraph data
+    subGraphs = []
+    os.chdir(".")
+    for file in glob.glob(inputDir + "*" + subgraph_path):
+        sub = nx.read_gpickle(file)
+        subGraphs.append(sub)
+    
+    i = 0
+    j = 0
+    for subGraph in subGraphs:
+        if len(subGraph.nodes()) == 1: continue
+        for node in subGraph.nodes(data=True):
+            node_num = node[0]
+            node_attr = node[1]
+            if "updated_track_states" not in node_attr.keys():
+                i += 1
+            else:
+                j += 1
+    print("number of nodes with updated track states: ", j)
+    print("number of nodes without updated track states: ", i)
 
-    cluster(inputDir, outputDir, track_states_key, KL_lut, reactivate)
+    perc_good = j * 100 / (j+i)
+    print("perc good: ", perc_good)
 
-    end = time.time()
-    total_time = end - start
-    print("Time taken in clustering.py cluster function: "+ str(total_time))
+    # for i, s in enumerate(subGraphs):
+    #     print("-------------------")
+    #     print("SUBGRAPH " + str(i))
+    #     for node in s.nodes(data=True):
+    #         pprint.pprint(node)
+    #     print("--------------------")
+
+    # cluster(inputDir, "", track_states_key)
+
+
 
 if __name__ == "__main__":
     main()
