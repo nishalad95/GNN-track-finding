@@ -67,9 +67,9 @@ mkdir -p $FRAGMENTS
 python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -e $SIGMA0 -m $SIGMA_MS -n $n -s $s -t $t -a 0
 
 
-# -----------------------------------------------------
-# Begin the iterations....
-# -----------------------------------------------------
+# # -----------------------------------------------------
+# # Begin the iterations....
+# # -----------------------------------------------------
 INPUT=$REMAINING
 for (( i=$START; i<=$END; i++ ))
 

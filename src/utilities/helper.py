@@ -191,6 +191,9 @@ def compute_track_state_estimates(GraphList, sigma_ms):
                     [0,                 sigmaA**2,          0], 
                     [0,                 0,                  sigmaB**2]])        # edge covariance matrix
     
+    var_ms_new_barrel = []
+    var_ms_new_endcap = []
+
     m_O = 0.0   # measurements for parabolic model
     m_A = 0.0
     for i, G in enumerate(GraphList):
@@ -210,12 +213,13 @@ def compute_track_state_estimates(GraphList, sigma_ms):
             keys = [-1, node]
 
             # if node in endcap, then reduce z error: used in calc of error in tau = dz/dr
-            if np.abs(m_node_xy[0]) >= 600.0: 
+            if np.abs(m_node_zr[0]) >= 600.0: 
                 sigma_z = 0.1
                 sigma_r = 0.5
             del_dz = sigma_z
             del_dr = sigma_r
 
+            # all neighbour coords get appended
             for neighbor in set(nx.all_neighbors(G, node)):
                 neighbour_gnn = G.nodes[neighbor]["GNN_Measurement"]
                 m_neighbour_xy = (neighbour_gnn.x, neighbour_gnn.y)
@@ -294,30 +298,56 @@ def compute_track_state_estimates(GraphList, sigma_ms):
                 b = track_state_vector[1]
                 c = track_state_vector[2]   # the measurement y = c
 
-                # print("saving parabolic parameters:")
-                # with open('parabolic_param_a.csv', 'a') as f:
-                #     f.write(str(a) + "\n")
-                # with open('parabolic_param_b.csv', 'a') as f:
-                #     f.write(str(b) + "\n")
-                # with open('parabolic_param_c.csv', 'a') as f:
-                #     f.write(str(c) + "\n")
+                # Moliere Theory - Highland formula multiple scattering
+                # all neighbour measurements and radius
+                gnn_measr_neighbour = G.nodes[key]["GNN_Measurement"]
+                x_k = gnn_measr_neighbour.x 
+                y_k = gnn_measr_neighbour.y 
+                z_k = gnn_measr_neighbour.z 
+                r_k = gnn_measr_neighbour.r    # r = sqrt(x^2 + y^2)
+                node_z = m_node_zr[0]
+                node_r = m_node_zr[1]
+
+                # calculation of hypotenuse using a pair of hits (track segment)   
+                dr = node_r - r_k
+                dz = node_z - z_k
+                hyp = np.sqrt(dr**2 + dz**2)
+                sin_t = np.abs(dr) / hyp
+                tan_t = np.abs(dr) / np.abs(dz)
+
+                # kappa and radius of curvature
+                kappa = (2*a) / (1 + ((2*a*x_k) + b)**2)**1.5
+
+                # Moliere Theory - Highland formula multiple scattering
+                var_ms = sin_t * ((13.6 * 1e-3 * np.sqrt(0.02) * kappa) / 0.3)**2
+                if np.abs(z_k) >= 600.0: 
+                    # endcap - orientation of detector layers are vertical
+                    var_ms = var_ms * tan_t
+                    var_ms_new_endcap.append(var_ms)
+                else:
+                    # barrel - orientation of detector layers are horizontal
+                    var_ms_new_barrel.append(var_ms)
 
                 # norm_factor = 1/(np.sqrt(1 + b**2))
                 # t_vector = np.array([0, c, norm_factor, b*norm_factor, 0, a])
                 covariance = H_inv.dot(S).dot(H_inv.T)
-                covariance[1, 1] += sigma_ms**2    # only the track direction is affected by multiple scattering affecting the b parameter
+                # covariance[1, 1] += sigma_ms**2    # only the track direction is affected by multiple scattering affecting the b parameter
+                covariance[1, 1] += var_ms   # only the track direction is affected by multiple scattering affecting the b parameter
                 tau = gradients_zr[i]
                 joint_vector = [a, b, tau]
                 variance_tau = del_tau[i]**2
                 joint_vector_covariance = covariance
                 joint_vector_covariance[:, 2] = 0.0
                 joint_vector_covariance[2, :] = 0.0
-                joint_vector_covariance[2, 2] = variance_tau + sigma_ms**2
+                # joint_vector_covariance[2, 2] = variance_tau + sigma_ms**2
+                joint_vector_covariance[2, 2] = variance_tau + var_ms
                 
+                # create track state estimates dictionary for each neighbour (node-->neighbour)
                 track_state_estimates[key] = {  'edge_state_vector': track_state_vector, 
                                                 'edge_covariance': covariance,
                                                 'joint_vector': joint_vector,
-                                                'joint_vector_covariance': joint_vector_covariance }
+                                                'joint_vector_covariance': joint_vector_covariance,
+                                                'var_ms': var_ms }
                                                 # 't_vector': t_vector }
 
             # store all track state estimates at the node
@@ -331,6 +361,15 @@ def compute_track_state_estimates(GraphList, sigma_ms):
             # store the transformation information - used in extrapolation
             G.nodes[node]['angle_of_rotation'] = azimuth_angle
             G.nodes[node]['translation'] = (x_A, y_A)
+    
+    # output the new sigma_ms values
+    with open('var_ms_new_endcap.txt', 'w') as fp:
+        for item in var_ms_new_endcap:
+            fp.write("%s\n" % item)
+    with open('var_ms_new_barrel.txt', 'w') as fp:
+        for item in var_ms_new_barrel:
+            fp.write("%s\n" % item)
+
 
     return GraphList
 

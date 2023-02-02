@@ -171,9 +171,6 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, reactivate):
     MERGED_STATE = "merged_state"
     MERGED_COVARIANCE = "merged_cov"
     MERGED_PRIOR = "merged_prior"
-
-    # # load predefined LUT: empirical variance: {upper bound emp var bin: KL_dist upper bound threshold}
-    # mapping = load_lut(KL_lut)
     
     # read in subgraph data
     subGraphs = []
@@ -202,7 +199,6 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, reactivate):
             node_num = node[0]
             node_attr = node[1]
 
-            # empvar = node_attr[EMPIRICAL_MEAN_VAR][1]
             num_edges = h.query_node_degree_in_edges(subGraph, node_num) # node degree is dynamical between iterations, only check active edges
             if (num_edges <= 2) or (num_edges >= 16): continue
 
@@ -224,18 +220,7 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut, reactivate):
             pairwise_distances_chi2 = calc_pairwise_distances_chi2(num_edges, joint_edge_svs, joint_edge_covs, node_coords, all_neighbours_coords)
             smallest_dist, idx = get_smallest_dist_idx(pairwise_distances_chi2) #[row_idx, column_idx]
 
-            # non_zero_distances = list(delta_a[np.nonzero(delta_a)])
-            # for element in non_zero_distances:
-            #     writer_a.writerow([element])
-            # non_zero_distances = list(delta_b[np.nonzero(delta_b)])
-            # for element in non_zero_distances:
-            #     writer_b.writerow([element])
-            # non_zero_distances = list(delta_tau[np.nonzero(delta_tau)])
-            # for element in non_zero_distances:
-            #     writer_tau.writerow([element])
-
             # perform clustering
-            # KL_thres = get_KL_upper_threshold(empvar, smallest_dist, mapping)
             if smallest_dist < chi2_threshold:
 
                 # merge parabolic states [a1, b1, c1] & [a2, b2, c2]

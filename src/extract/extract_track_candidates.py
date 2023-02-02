@@ -181,10 +181,10 @@ def rotate_track(coords, separation_3d_threshold):
     rotated_coords = []
     for c in coords:
         x, y, z, r = c[0], c[1], c[2], c[3]
-        x_new = x * np.cos(angle_xy) + y * np.sin(angle_xy)    # x_new = xcos(angle) - ysin(angle)
-        y_new = -x * np.sin(angle_xy) + y * np.cos(angle_xy)    # y_new = xsin(angle) + ycos(angle) 
-        r_new = r * np.cos(angle_zr) + r * np.sin(angle_zr)    # x_new = xcos(angle) + ysin(angle)
-        z_new = -z * np.sin(angle_zr) + z * np.cos(angle_zr)    # y_new = -xsin(angle) + ycos(angle) 
+        x_new = x * np.cos(angle_xy) + y * np.sin(angle_xy)  
+        y_new = -x * np.sin(angle_xy) + y * np.cos(angle_xy) 
+        r_new = r * np.cos(angle_zr) + r * np.sin(angle_zr) 
+        z_new = -z * np.sin(angle_zr) + z * np.cos(angle_zr) 
         rotated_coords.append((x_new, y_new, z_new, r_new)) 
     return rotated_coords
 
@@ -385,31 +385,34 @@ def main():
                     # sort the candidates by radius r largest to smallest (4th element in this tuple of tuples: (node_num, (x,y,z,r)) )
                     nodes_coords_tuples = list(nx.get_node_attributes(candidate_to_assess, 'xyzr').items())
                     sorted_nodes_coords_tuples = sorted(nodes_coords_tuples, reverse=True, key=lambda item: item[1][3])
-                    # check if the sorted nodes are connected
-                    all_connected = True
-                    for j in range(len(sorted_nodes_coords_tuples) - 1):
-                        node1 = sorted_nodes_coords_tuples[j][0]
-                        node2 = sorted_nodes_coords_tuples[j+1][0]
-                        if not candidate_to_assess.has_edge(node1, node2) and not candidate_to_assess.has_edge(node2, node1):
-                            all_connected = False
+                    print("SORTED NODES: \n", sorted_nodes_coords_tuples)
+
+                    # get the var_ms associated to each node
+                    # var_ms = [subGraph  for element in sorted_nodes_coords_tuples]
+
                     
-                    if all_connected:
-                        coords = [element[1] for element in sorted_nodes_coords_tuples]
-                        # rotate the track such that innermost edge parallel to x-axis - r&z components are left unchanged
-                        coords = rotate_track(coords, separation_3d_threshold)
-                        pval = KF_track_fit_xy(sigma0, sigma_ms, coords)
-                        pval_zr = KF_track_fit_zr(sigma0, sigma_ms, coords)
-                        if (pval >= track_acceptance) and (pval_zr >= track_acceptance):
-                            print("Good KF fit, p-value:", pval, "\n(x,y,z,r):", coords)
-                            extracted.append(candidate)
-                            extracted_pvals.append(pval)
-                            extracted_pvals_zr.append(pval_zr)
-                            candidate_to_remove_from_subGraph.append(candidate)
-                            
-                        else:
-                            print("p-value too small, leave for further processing, pval_xy: " + str(pval) + " pval_zr: " + str(pval_zr))
+                    # check if the sorted nodes are connected
+                    # all_connected = True
+                    # for j in range(len(sorted_nodes_coords_tuples) - 1):
+                    #     node1 = sorted_nodes_coords_tuples[j][0]
+                    #     node2 = sorted_nodes_coords_tuples[j+1][0]
+                    #     if not candidate_to_assess.has_edge(node1, node2) and not candidate_to_assess.has_edge(node2, node1):
+                    #         all_connected = False
+                    
+                    coords = [element[1] for element in sorted_nodes_coords_tuples]
+                    # rotate the track such that innermost edge parallel to x-axis - r&z components are left unchanged
+                    coords = rotate_track(coords, separation_3d_threshold)
+                    pval = KF_track_fit_xy(sigma0, sigma_ms, coords)
+                    pval_zr = KF_track_fit_zr(sigma0, sigma_ms, coords)
+                    if (pval >= track_acceptance) and (pval_zr >= track_acceptance):
+                        print("Good KF fit, p-value:", pval, "\n(x,y,z,r):", coords)
+                        extracted.append(candidate)
+                        extracted_pvals.append(pval)
+                        extracted_pvals_zr.append(pval_zr)
+                        candidate_to_remove_from_subGraph.append(candidate)
+                        
                     else:
-                        print("Candidate not accepted, not connected in order")
+                        print("p-value too small, leave for further processing, pval_xy: " + str(pval) + " pval_zr: " + str(pval_zr))
 
                 else: 
                     print("Bad candidate, > 1 hit per layer, will pass through community detection")
