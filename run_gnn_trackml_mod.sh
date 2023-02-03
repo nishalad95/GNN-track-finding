@@ -11,7 +11,7 @@ END=2
 min_volume=7            # minimum volume number to analyse (inclusive) - used also in effciency calc
 max_volume=9            # maximum volume number to analyse (inclusive) - used also in efficiency calc
 SIGMA0=0.1              # IMPORTANT: sigma0 is used in the extraction KF only, r.m.s measurement error in xy plane
-SIGMA_MS=0.01         # 10^-4 multiple scattering error
+# SIGMA_MS=0.01         # 10^-4 multiple scattering error
 ROOTDIR=src/output      # output directory to store GNN algorithm output
 
 # clustering
@@ -49,7 +49,7 @@ INPUT=$ROOTDIR/track_sim/network/
 mkdir -p $INPUT
 EVENT_NETWORK=src/trackml_mod/event_network/minCurv_0.3_800
 EVENT_TRUTH=src/trackml_mod/event_truth
-python src/trackml_mod/event_conversion.py -o $INPUT -e $SIGMA0 -m $SIGMA_MS -n $EVENT_NETWORK -t $EVENT_TRUTH -a $min_volume -z $max_volume
+python src/trackml_mod/event_conversion.py -o $INPUT -e $SIGMA0 -n $EVENT_NETWORK -t $EVENT_TRUTH -a $min_volume -z $max_volume
 stages+=("event_conversion")
 time=$SECONDS
 execution_times+=($time)
@@ -64,7 +64,7 @@ FRAGMENTS=$ROOTDIR/iteration_0/fragments/
 mkdir -p $CANDIDATES
 mkdir -p $REMAINING
 mkdir -p $FRAGMENTS
-python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -e $SIGMA0 -m $SIGMA_MS -n $n -s $s -t $t -a 0
+python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -e $SIGMA0 -n $n -s $s -t $t -a 0
 
 
 # # -----------------------------------------------------
@@ -98,7 +98,7 @@ for (( i=$START; i<=$END; i++ ))
             echo "---------------------------------------------------"
             echo "Using chisq distance cut of: ${c}"
             prev_duration=$SECONDS
-            python src/extrapolate/extrapolate_merged_states.py -i $INPUT -o $OUTPUT -c $c -m $SIGMA_MS
+            python src/extrapolate/extrapolate_merged_states.py -i $INPUT -o $OUTPUT -c $c
             # let c=$c*0.5   # tighter cut each time
 
             # time it!
@@ -122,7 +122,7 @@ for (( i=$START; i<=$END; i++ ))
         let num=$i-1
         cp -r $ROOTDIR/iteration_$num/candidates/ $CANDIDATES
         # fi
-        python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -e $SIGMA0 -m $SIGMA_MS -n $n -s $s -t $t -a $i
+        python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -e $SIGMA0 -n $n -s $s -t $t -a $i
         INPUT=$REMAINING
 
         # time it!

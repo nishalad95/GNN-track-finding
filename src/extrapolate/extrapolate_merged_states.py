@@ -24,7 +24,7 @@ def merge_states(mean1, cov1, mean2, cov2):
 
 
 def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour_attr, 
-                        chi2CutFactor, sigma_ms, state_to_extrapolate, state_cov, is_merged_state=False):
+                        chi2CutFactor, state_to_extrapolate, state_cov, is_merged_state=False):
     print("\n Extrapolate validate:")
     print("Processing node num: ", node_num)
 
@@ -169,7 +169,7 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
         f.Q = np.array([[0.,     0.,       0.], 
                         [0.,     var_ms,   0.],
                         [0.,     0.,       0.]])      # Q process uncertainty/noise
-                        
+
         # z = neighbour_y                     # "sensor reading"
         z = neighbour_y_in_cs_nodeC         # "sensor reading"
 
@@ -196,7 +196,7 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
 
 
 
-def message_passing(subGraphs, chi2CutFactor, sigma_ms):
+def message_passing(subGraphs, chi2CutFactor):
     for subGraph in subGraphs:
         if len(subGraph.nodes()) == 1: continue
 
@@ -215,7 +215,7 @@ def message_passing(subGraphs, chi2CutFactor, sigma_ms):
                     if subGraph[node_num][neighbour_num]["activated"] == 1:
                         neighbour_attr = subGraph.nodes[neighbour_num]
                         updated_state_dict, chi2 = extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour_attr, 
-                                                                chi2CutFactor, sigma_ms, state_to_extrapolate, state_cov, is_merged_state=True)
+                                                                chi2CutFactor, state_to_extrapolate, state_cov, is_merged_state=True)
                         if updated_state_dict != None:
                             # store the updated track states at the neighbour node
                             if 'updated_track_states' not in neighbour_attr:
@@ -244,7 +244,7 @@ def message_passing(subGraphs, chi2CutFactor, sigma_ms):
                                 state_to_extrapolate = s['edge_state_vector']
                                 state_cov = s['edge_covariance']
                                 updated_state_dict, chi2 = extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour_attr, 
-                                                                            chi2CutFactor, sigma_ms, state_to_extrapolate, state_cov)
+                                                                            chi2CutFactor, state_to_extrapolate, state_cov)
                                 all_updated_state_dicts.append(updated_state_dict)
                                 all_chi2s.append(chi2)
                             
@@ -280,12 +280,10 @@ def main():
     parser.add_argument('-i', '--inputDir', help='input directory of outlier removal')
     parser.add_argument('-o', '--outputDir', help='output directory for updated states')
     parser.add_argument('-c', '--chi2CutFactor', help='chi2 cut factor for threshold')
-    parser.add_argument('-m', '--sigma_ms', help="uncertainty due to multiple scattering, process noise")
     args = parser.parse_args()
     inputDir = args.inputDir
     outputDir = args.outputDir
     chi2CutFactor = float(args.chi2CutFactor)
-    sigma_ms = float(args.sigma_ms)                # process error - due to multiple scattering
 
     # read in subgraph data
     subGraphs = []
@@ -296,7 +294,7 @@ def main():
 
 
     # distribute merged state to neighbours, extrapolate, validation & create new updated state(s)
-    message_passing(subGraphs, chi2CutFactor, sigma_ms)
+    message_passing(subGraphs, chi2CutFactor)
 
     h.compute_prior_probabilities(subGraphs, 'updated_track_states')
     # h.reweight(subGraphs, 'updated_track_states')

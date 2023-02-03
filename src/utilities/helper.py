@@ -176,7 +176,7 @@ def compute_3d_distance(coord1, coord2):
 
 
 
-def compute_track_state_estimates(GraphList, sigma_ms):
+def compute_track_state_estimates(GraphList):
     # NOTE: sigmaO - error at the origin, different to sigma0 rms error in xy plane
     sigmaO = 4.0        # 4.0mm larger error in m_O due to beamspot error and error at the origin
     sigmaA = 0.1        # 0.1mm
@@ -191,8 +191,8 @@ def compute_track_state_estimates(GraphList, sigma_ms):
                     [0,                 sigmaA**2,          0], 
                     [0,                 0,                  sigmaB**2]])        # edge covariance matrix
     
-    var_ms_new_barrel = []
-    var_ms_new_endcap = []
+    # var_ms_new_barrel = []
+    # var_ms_new_endcap = []
 
     m_O = 0.0   # measurements for parabolic model
     m_A = 0.0
@@ -325,7 +325,6 @@ def compute_track_state_estimates(GraphList, sigma_ms):
                     var_ms = var_ms * tan_t
 
                 covariance = H_inv.dot(S).dot(H_inv.T)
-                # covariance[1, 1] += sigma_ms**2    # only the track direction is affected by multiple scattering affecting the b parameter
                 covariance[1, 1] += var_ms   # only the track direction is affected by multiple scattering affecting the b parameter
                 tau = gradients_zr[i]
                 joint_vector = [a, b, tau]
@@ -333,7 +332,6 @@ def compute_track_state_estimates(GraphList, sigma_ms):
                 joint_vector_covariance = covariance
                 joint_vector_covariance[:, 2] = 0.0
                 joint_vector_covariance[2, :] = 0.0
-                # joint_vector_covariance[2, 2] = variance_tau + sigma_ms**2
                 joint_vector_covariance[2, 2] = variance_tau + var_ms
                 
                 # create track state estimates dictionary for each neighbour (node-->neighbour)
@@ -341,7 +339,7 @@ def compute_track_state_estimates(GraphList, sigma_ms):
                                                 'edge_covariance': covariance,
                                                 'joint_vector': joint_vector,
                                                 'joint_vector_covariance': joint_vector_covariance,
-                                                'var_ms': var_ms }
+                                             }
 
             # store all track state estimates at the node
             G.nodes[node]['track_state_estimates'] = track_state_estimates
@@ -363,7 +361,6 @@ def compute_track_state_estimates(GraphList, sigma_ms):
     #     for item in var_ms_new_barrel:
     #         fp.write("%s\n" % item)
 
-
     return GraphList
 
 
@@ -377,7 +374,7 @@ def __get_particle_id(row, df):
 
 
 
-def construct_graph(graph, nodes, edges, truth, sigma0, sigma_ms):
+def construct_graph(graph, nodes, edges, truth, sigma0):
     # TODO: 'truth_particle' attribute needs to be updated - clustering calculation uses 1 particle id, currently needs updating
     # group truth particle ids to node index
     
@@ -409,7 +406,7 @@ def construct_graph(graph, nodes, edges, truth, sigma0, sigma_ms):
         
         hit_dissociation = grouped_hit_id.loc[grouped_hit_id['node_idx'] == node_idx]['hit_dissociation'].item()
         
-        gm = gnn.GNN_Measurement(x, y, z, r, sigma0, sigma_ms, truth_particle=truth_particle, n=node_idx)
+        gm = gnn.GNN_Measurement(x, y, z, r, sigma0, truth_particle=truth_particle, n=node_idx)
         graph.add_node(node_idx, GNN_Measurement=gm, 
                             xy=(x, y),                              # all attributes here for development only - can be abstracted away in GNN_Measurement
                             zr=(z, r),

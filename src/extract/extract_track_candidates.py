@@ -189,33 +189,6 @@ def rotate_track(coords, separation_3d_threshold):
     return rotated_coords
 
 
-# def KF_predict_update(f, obs_y):
-#     # KF predict and update
-#     chi2_dists = []
-#     saver = common.Saver(f)
-#     for measurement in obs_y[1:]:
-#         f.predict()
-#         f.update(measurement)
-#         saver.save()
-
-#         # update
-#         updated_state, updated_cov = f.x_post, f.P_post
-#         residual = measurement - f.H.dot(updated_state) 
-#         S = f.H.dot(updated_cov).dot(f.H.T) + f.R
-#         inv_S = np.linalg.inv(S)
-
-#         # chi2 distance
-#         chi2_dist = residual.T.dot(inv_S).dot(residual)
-#         chi2_dists.append(chi2_dist)
-    
-#     # chi2 probability distribution
-#     total_chi2 = sum(chi2_dists)                    # chi squared statistic
-#     dof = len(obs_y) - 2                            # (no. of measurements * 1D) - no. of track params
-#     pval = distributions.chi2.sf(total_chi2, dof)
-#     print("P value for KF track fit: ", pval)
-#     return pval
-
-
 # Calculate the unknowns of the equation y = ax^2 + bx + c
 def calc_parabola_params(x1, y1, x2, y2, x3, y3):
     '''
@@ -351,75 +324,6 @@ def KF_track_fit_xy_moliere(sigma0, coords):
     return pval, pval_zr
 
 
-# def KF_track_fit_xy(sigma0, sigma_ms, coords):
-#     # KF applied from outermost point to innermost point
-#     obs_x = [c[0] for c in coords]
-#     obs_y = [c[1] for c in coords]
-#     yf = obs_y[0]
-#     dx = coords[1][0] - coords[0][0]    # dx = x1 - x0
-
-#     # variables for F; state transition matrix
-#     alpha = 0.1                                                     # OU parameter
-#     e1 = np.exp(-np.abs(dx) * alpha)
-#     f1 = (1.0 - e1) / alpha
-#     g1 = (np.abs(dx) - f1) / alpha
-    
-#     # variables for Q process noise matrix
-#     sigma_ou = 0.00001                                              # 10^-5
-#     sw2 = sigma_ou**2                                               # OU parameter 
-#     st2 = sigma_ms**2                                               # process noise representing multiple scattering
-#     dx2 = dx**2
-#     dxw2 = dx2 * sw2
-#     Q02 = 0.5*dxw2
-#     Q01 = dx*(st2 + Q02)
-#     Q12 = dx*sw2
-
-#     # 3D KF: initialize at outermost layer
-#     f = KalmanFilter(dim_x=3, dim_z=1)
-#     f.x = np.array([yf, 0., 0.])                                    # X state vector [yf, dy/dx, w] = [coordinate, track inclination, integrated OU]
-
-#     f.F = np.array([[1.,    dx,     g1], 
-#                     [0.,    1.,     f1],
-#                     [0.,    0.,     e1]])                           # F state transition matrix, extrapolation Jacobian - linear & OU
-    
-#     f.H = np.array([[1., 0., 0.]])                                  # H measurement matrix
-#     f.P = np.array([[sigma0**2,  0., 0.],     
-#                     [0.,         1., 0.],
-#                     [0.,         0., 1.]])                          # P covariance
-    
-#     f.R = sigma0**2                                                 # R measuremnt noise
-#     f.Q = np.array([[dx2*(st2 + 0.25*dxw2), Q01,        Q02], 
-#                     [Q01,                   st2 + dxw2, Q12],
-#                     [Q02,                   Q12,        sw2]])      # Q process uncertainty/noise, OU model
-
-#     pval = KF_predict_update(f, obs_y)
-#     return pval
-
-
-# def KF_track_fit_zr(sigma0, sigma_ms, coords):
-#     # KF applied from outermost point to innermost point
-#     obs_x = [c[2] for c in coords]
-#     obs_y = [c[3] for c in coords]
-#     yf = obs_y[0]
-#     dx = coords[1][2] - coords[0][2]    # dz = z1 - z0
-
-#     f = KalmanFilter(dim_x=2, dim_z=1)
-#     f.x = np.array([yf, 0.])                                # X state vector [yf, dy/dx, w] = [coordinate, track inclination, integrated OU]
-
-#     f.F = np.array([[1.,    dx], 
-#                     [0.,    1.]])                           # F state transition matrix, extrapolation Jacobian - linear & OU
-    
-#     f.H = np.array([[1., 0.]])                              # H measurement matrix
-#     f.P = np.array([[sigma0**2,  0.],     
-#                     [0.,         1000.]])                   # P covariance
-    
-#     f.R = sigma0**2                                         # R measuremnt noise
-#     f.Q = sigma_ms**2                                          # Q process uncertainty/noise, OU model
-
-#     pval = KF_predict_update(f, obs_y)
-#     return pval
-
-
 
 def CCA(subCopy):
     edges_to_remove = []
@@ -450,7 +354,6 @@ def main():
     parser.add_argument('-s', '--separation_3d_threshold', help="3d distance cut between close proximity nodes, used in node merging")
     parser.add_argument('-t', '--threshold_distance_node_merging', help="threshold_distance_node_merging")
     parser.add_argument('-e', '--error', help="sigma0 rms of track position measurements")
-    parser.add_argument('-m', '--sigma_ms', help="uncertainty due to multiple scattering, process noise")
     parser.add_argument('-n', '--numhits', help="minimum number of hits for good track candidate")
     parser.add_argument('-a', '--iteration', help="iteration number of algorithm")
     args = parser.parse_args()
@@ -462,7 +365,6 @@ def main():
     fragmentsDir = args.fragments
     track_acceptance = float(args.pval)
     sigma0 = float(args.error)
-    sigma_ms = float(args.sigma_ms)
     subgraph_path = "_subgraph.gpickle"
     fragment = int(args.numhits)
     separation_3d_threshold = float(args.separation_3d_threshold)
@@ -520,24 +422,12 @@ def main():
                     nodes_coords_tuples = list(nx.get_node_attributes(candidate_to_assess, 'xyzr').items())
                     sorted_nodes_coords_tuples = sorted(nodes_coords_tuples, reverse=True, key=lambda item: item[1][3])
                     print("SORTED NODES: \n", sorted_nodes_coords_tuples)
-
-                    # check if the sorted nodes are connected
-                    # all_connected = True
-                    # for j in range(len(sorted_nodes_coords_tuples) - 1):
-                    #     node1 = sorted_nodes_coords_tuples[j][0]
-                    #     node2 = sorted_nodes_coords_tuples[j+1][0]
-                    #     if not candidate_to_assess.has_edge(node1, node2) and not candidate_to_assess.has_edge(node2, node1):
-                    #         all_connected = False
-                    
                     coords = [element[1] for element in sorted_nodes_coords_tuples]
                     # rotate the track such that innermost edge parallel to x-axis - r&z components are left unchanged
                     coords = rotate_track(coords, separation_3d_threshold)
 
                     # KF track fit - Moliere theory multiple scattering
                     pval, pval_zr = KF_track_fit_xy_moliere(sigma0, coords)
-                    # apply KF track fit and get p-value score
-                    # pval = KF_track_fit_xy(sigma0, sigma_ms, coords)
-                    # pval_zr = KF_track_fit_zr(sigma0, sigma_ms, coords)
                     
                     if (pval >= track_acceptance) and (pval_zr >= track_acceptance):
                         print("Good KF fit, p-value:", pval, "\n(x,y,z,r):", coords)

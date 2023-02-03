@@ -17,7 +17,6 @@ def main():
     parser = argparse.ArgumentParser(description='Convert trackml csv to GNN')
     parser.add_argument('-o', '--outputDir', help="Full directory path of where to save graph networks")
     parser.add_argument('-e', '--error', help="rms of track position measurements")
-    parser.add_argument('-m', '--sigma_ms', help="uncertainty due to multiple scattering, process noise")
     parser.add_argument('-n', '--eventNetwork', help="Full directory path to event nodes, edges & nodes-to-hits")
     parser.add_argument('-t', '--eventTruth', help="Full directory path to event truth from TrackML")
     parser.add_argument('-a', '--min_volume', help="Minimum volume integer number in TrackML model to consider")
@@ -26,7 +25,6 @@ def main():
     args = parser.parse_args()
     outputDir = args.outputDir
     sigma0 = float(args.error)                   # r.m.s measurement error
-    sigma_ms = float(args.sigma_ms)                # process error - due to multiple scattering
     min_volume = int(args.min_volume)
     max_volume = int(args.max_volume)
 
@@ -52,7 +50,7 @@ def main():
     # create a graph network
     pixel_graph_network = nx.DiGraph()
     print("here")
-    pixel_graph_network = h.construct_graph(pixel_graph_network, nodes, edges, truth, sigma0, sigma_ms)
+    pixel_graph_network = h.construct_graph(pixel_graph_network, nodes, edges, truth, sigma0)
     print("Graph network info before processing:")
     print("Number of edges:", pixel_graph_network.number_of_edges())
     print("Number of nodes:", pixel_graph_network.number_of_nodes())
@@ -80,7 +78,7 @@ def main():
     start = time.time()
     
     # compute track state estimates, priors and weights
-    subGraphs = h.compute_track_state_estimates(subGraphs, sigma_ms)
+    subGraphs = h.compute_track_state_estimates(subGraphs)
     h.initialize_edge_activation(subGraphs)
     h.compute_prior_probabilities(subGraphs, 'track_state_estimates')
     h.compute_mixture_weights(subGraphs)
