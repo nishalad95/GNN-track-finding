@@ -35,8 +35,8 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     node_r = node_attr['GNN_Measurement'].r
     neighbour_x = neighbour_attr['GNN_Measurement'].x
     neighbour_y = neighbour_attr['GNN_Measurement'].y
-    # print("global nodeA x,y: ", node_x, node_y)
-    # print("global target nodeC x,y: ", neighbour_x, neighbour_y)
+    neighbour_z = neighbour_attr['GNN_Measurement'].z
+    neighbour_r = neighbour_attr['GNN_Measurement'].r
 
     # compute the angle of rotation
     angle_of_rotation_C = atan2(node_y, node_x)
@@ -46,8 +46,8 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     # calculation of x_A and y_A (coordinates x and y of node A in c.s. of node C)
     nodeA_trans_x = node_attr['translation'][0]         # global translation
     nodeA_trans_y = node_attr['translation'][1]
-    nodeA_x = node_attr['GNN_Measurement'].x        # global coordinates
-    nodeA_y = node_attr['GNN_Measurement'].y
+    nodeA_x = node_x                                    # global coordinates
+    nodeA_y = node_y
     nodeC_trans_x = neighbour_attr['translation'][0]    # global translation
     nodeC_trans_y = neighbour_attr['translation'][1]
     x_A = (neighbour_x - node_x)*np.cos(angle_of_rotation_C) + (neighbour_y - node_y)*np.sin(angle_of_rotation_C)
@@ -119,10 +119,10 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     # validate the extrapolated state against the measurement at the neighbour node
     # calc chi2 distance between measurement at neighbour node and extrapolated track state
     H = np.array([[0., 0., 1.]])
-    # residual = neighbour_y - H.dot(extrp_state)     # compute the residual
-    neighbour_y_in_cs_nodeC = .0                      # measurement is always zero in c.s. of neighbour
-    residual = neighbour_y_in_cs_nodeC - H.dot(extrp_state)              # compute the residual
-    S = H.dot(extrp_cov).dot(H.T) + sigma0**2       # covariance of residual (denominator of kalman gain)
+    # residual = neighbour_y - H.dot(extrp_state)               # compute the residual
+    neighbour_y_in_cs_nodeC = .0                                # measurement is always zero in c.s. of neighbour
+    residual = neighbour_y_in_cs_nodeC - H.dot(extrp_state)     # compute the residual
+    S = H.dot(extrp_cov).dot(H.T) + sigma0**2                   # covariance of residual (denominator of kalman gain)
     inv_S = np.linalg.inv(S)
     chi2 = residual.T.dot(inv_S).dot(residual)
     chi2_cut = chi2CutFactor
@@ -139,10 +139,25 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
 
     # validate chi2 distance
     if chi2 <= 0.25 * chi2_cut:
-        # calc beta: measurement likelihood
+        # calculate beta: measurement likelihood
         factor = 2 * math.pi * np.abs(S)
         norm_factor = math.pow(factor, -0.5)
         likelihood = norm_factor * np.exp(-0.5 * chi2)
+
+        # Moliere Theory - Highland formula multiple scattering
+        # calculation of hypotenuse using a pair of hits (track segment)   
+        dr = node_r - neighbour_r
+        dz = node_z - neighbour_z
+        hyp = np.sqrt(dr**2 + dz**2)
+        sin_t = np.abs(dr) / hyp
+        tan_t = np.abs(dr) / np.abs(dz)
+
+        # kappa and radius of curvature
+        kappa = (2*a) / (1 + ((2*a*neighbour_x) + b)**2)**1.5
+        var_ms = sin_t * ((13.6 * 1e-3 * np.sqrt(0.02) * kappa) / 0.3)**2
+        if np.abs(neighbour_z) >= 600.0: 
+            # endcap - orientation of detector layers are vertical
+            var_ms = var_ms * tan_t
 
         # initialize KF
         f = KalmanFilter(dim_x=3, dim_z=1)
@@ -151,9 +166,10 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
         f.H = H                             # H measurement matrix
         f.P = extrp_cov
         f.R = sigma0**2
-        f.Q = np.array([[0.,     0.,            0.], 
-                        [0.,     sigma_ms**2,   0.],
-                        [0.,     0.,            0.]])      # Q process uncertainty/noise
+        f.Q = np.array([[0.,     0.,       0.], 
+                        [0.,     var_ms,   0.],
+                        [0.,     0.,       0.]])      # Q process uncertainty/noise
+                        
         # z = neighbour_y                     # "sensor reading"
         z = neighbour_y_in_cs_nodeC         # "sensor reading"
 

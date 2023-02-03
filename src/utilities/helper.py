@@ -323,13 +323,7 @@ def compute_track_state_estimates(GraphList, sigma_ms):
                 if np.abs(z_k) >= 600.0: 
                     # endcap - orientation of detector layers are vertical
                     var_ms = var_ms * tan_t
-                    var_ms_new_endcap.append(var_ms)
-                else:
-                    # barrel - orientation of detector layers are horizontal
-                    var_ms_new_barrel.append(var_ms)
 
-                # norm_factor = 1/(np.sqrt(1 + b**2))
-                # t_vector = np.array([0, c, norm_factor, b*norm_factor, 0, a])
                 covariance = H_inv.dot(S).dot(H_inv.T)
                 # covariance[1, 1] += sigma_ms**2    # only the track direction is affected by multiple scattering affecting the b parameter
                 covariance[1, 1] += var_ms   # only the track direction is affected by multiple scattering affecting the b parameter
@@ -348,7 +342,6 @@ def compute_track_state_estimates(GraphList, sigma_ms):
                                                 'joint_vector': joint_vector,
                                                 'joint_vector_covariance': joint_vector_covariance,
                                                 'var_ms': var_ms }
-                                                # 't_vector': t_vector }
 
             # store all track state estimates at the node
             G.nodes[node]['track_state_estimates'] = track_state_estimates
@@ -362,13 +355,13 @@ def compute_track_state_estimates(GraphList, sigma_ms):
             G.nodes[node]['angle_of_rotation'] = azimuth_angle
             G.nodes[node]['translation'] = (x_A, y_A)
     
-    # output the new sigma_ms values
-    with open('var_ms_new_endcap.txt', 'w') as fp:
-        for item in var_ms_new_endcap:
-            fp.write("%s\n" % item)
-    with open('var_ms_new_barrel.txt', 'w') as fp:
-        for item in var_ms_new_barrel:
-            fp.write("%s\n" % item)
+    # # output the new sigma_ms values
+    # with open('var_ms_new_endcap.txt', 'w') as fp:
+    #     for item in var_ms_new_endcap:
+    #         fp.write("%s\n" % item)
+    # with open('var_ms_new_barrel.txt', 'w') as fp:
+    #     for item in var_ms_new_barrel:
+    #         fp.write("%s\n" % item)
 
 
     return GraphList

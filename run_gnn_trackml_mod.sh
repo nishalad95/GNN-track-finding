@@ -148,8 +148,9 @@ stages+=("reconstruction_efficiency")
 time=$SECONDS
 execution_times+=($time)
 
-# plot all candidates
+plot all candidates
 python src/extract/plot_all_extracted_candidates.py -i $END
+# python src/extract/plot_all_extracted_candidates.py -i 0
 
 # time it!
 stages+=("plot_all_candidates")

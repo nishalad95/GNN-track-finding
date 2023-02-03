@@ -189,101 +189,235 @@ def rotate_track(coords, separation_3d_threshold):
     return rotated_coords
 
 
-def KF_predict_update(f, obs_y):
-    # KF predict and update
-    chi2_dists = []
+# def KF_predict_update(f, obs_y):
+#     # KF predict and update
+#     chi2_dists = []
+#     saver = common.Saver(f)
+#     for measurement in obs_y[1:]:
+#         f.predict()
+#         f.update(measurement)
+#         saver.save()
+
+#         # update
+#         updated_state, updated_cov = f.x_post, f.P_post
+#         residual = measurement - f.H.dot(updated_state) 
+#         S = f.H.dot(updated_cov).dot(f.H.T) + f.R
+#         inv_S = np.linalg.inv(S)
+
+#         # chi2 distance
+#         chi2_dist = residual.T.dot(inv_S).dot(residual)
+#         chi2_dists.append(chi2_dist)
+    
+#     # chi2 probability distribution
+#     total_chi2 = sum(chi2_dists)                    # chi squared statistic
+#     dof = len(obs_y) - 2                            # (no. of measurements * 1D) - no. of track params
+#     pval = distributions.chi2.sf(total_chi2, dof)
+#     print("P value for KF track fit: ", pval)
+#     return pval
+
+
+# Calculate the unknowns of the equation y = ax^2 + bx + c
+def calc_parabola_params(x1, y1, x2, y2, x3, y3):
+    '''
+    Adapted and modifed to get unknowns for defining a parabola:
+    http://stackoverflow.com/questions/717762/how-to-calculate-the-vertex-of-a-parabola-given-three-points
+    '''
+    denom = (x1-x2) * (x1-x3) * (x2-x3)
+    a     = ((x3 * (y2-y1)) + (x2 * (y1-y3)) + (x1 * (y3-y2))) / denom
+    b     = ((x3**2 * (y1-y2)) + (x2**2 * (y3-y1)) + (x1**2 * (y2-y3))) / denom
+    return a, b
+
+
+def KF_track_fit_xy_moliere(sigma0, coords):
+    # initialize 3D Kalman Filter for xy plane
+    yf = coords[0][1]                               # observed y (coords is a list: [(x, y, z, r), (), ...])
+    f = KalmanFilter(dim_x=3, dim_z=1)
+    f.x = np.array([yf, 0., 0.])                    # X state vector [yf, dy/dx, w] = [coordinate, track inclination, integrated OU]
+    f.H = np.array([[1., 0., 0.]])                  # H measurement matrix
+    f.P = np.array([[sigma0**2,  0., 0.],     
+                    [0.,         1., 0.],
+                    [0.,         0., 1.]])          # P covariance
+    f.R = sigma0**2                                 # R measuremnt noise
     saver = common.Saver(f)
-    for measurement in obs_y[1:]:
+    chi2_dists = []
+
+    # initialize 2D KF for zr plane
+    zf = coords[0][3]                               # observed z (coords is a list: [(x, y, z, r), (), ...])
+    g = KalmanFilter(dim_x=2, dim_z=1)
+    g.x = np.array([zf, 0.])                   
+    g.H = np.array([[1., 0.]])                      # H measurement matrix
+    g.P = np.array([[sigma0**2,  0.],     
+                    [0.,         1000.]])           # P covariance
+    g.R = sigma0**2                                 # R measuremnt noise
+    g_saver = common.Saver(g)
+    g_chi2_dists = []
+
+    # track following & fit: process all coords in track candidate
+    for i in range(len(coords)-1):
+        # calculate parabolic parameters using 3 coords: origin, current node & next node
+        x1, y1 = .0, .0
+        x2, y2 = coords[i][0], coords[i][1]
+        x3, y3 = coords[i+1][0], coords[i+1][1]
+        a, b = calc_parabola_params(x1, y1, x2, y2, x3, y3)
+
+        # calculation of kappa & radius of curvature ( r = sqrt(x^2 + y^2) )
+        z2, r2 = coords[i][2], coords[i][3]
+        z3, r3 = coords[i+1][2], coords[i+1][3]
+        dr = r3 - r2
+        dz = z3 - z2
+        hyp = np.sqrt(dr**2 + dz**2)
+        sin_t = np.abs(dr) / hyp
+        tan_t = np.abs(dr) / np.abs(dz)
+        kappa = (2*a) / (1 + ((2 * a * x3) + b)**2)**1.5
+
+        # Moliere Theory - Highland formula multiple scattering error
+        var_ms = sin_t * ((13.6 * 1e-3 * np.sqrt(0.02) * kappa) / 0.3)**2
+        if np.abs(z3) >= 600.0: 
+            # endcap - orientation of detector layers are vertical
+            var_ms = var_ms * tan_t
+        
+        # variables for F; state transition matrix
+        dx = x3 - x2
+        alpha = 0.1                                     # OU parameter
+        e1 = np.exp(-np.abs(dx) * alpha)
+        f1 = (1.0 - e1) / alpha
+        g1 = (np.abs(dx) - f1) / alpha
+
+        # variables for Q process noise matrix
+        sigma_ou = 0.00001                              # 10^-5
+        sw2 = sigma_ou**2                               # OU parameter 
+        st2 = var_ms                                    # process noise representing Moliere multiple scattering
+        dx2 = dx**2
+        dxw2 = dx2 * sw2
+        Q02 = 0.5*dxw2
+        Q01 = dx*(st2 + Q02)
+        Q12 = dx*sw2
+
+        # F state transition matrix, extrapolation Jacobian - linear & OU
+        f.F = np.array([[1.,    dx,     g1], 
+                        [0.,    1.,     f1],
+                        [0.,    0.,     e1]])
+        
+        # Q process uncertainty/noise, OU model
+        f.Q = np.array([[dx2*(st2 + 0.25*dxw2), Q01,        Q02], 
+                      [Q01,                     st2 + dxw2, Q12],
+                      [Q02,                     Q12,        sw2]])
+
+        # KF predict and update
+        measurement = coords[i+1][1] # observed y
         f.predict()
         f.update(measurement)
         saver.save()
 
-        # update
+        # update & calculate chi2 distance
         updated_state, updated_cov = f.x_post, f.P_post
         residual = measurement - f.H.dot(updated_state) 
         S = f.H.dot(updated_cov).dot(f.H.T) + f.R
         inv_S = np.linalg.inv(S)
-
-        # chi2 distance
         chi2_dist = residual.T.dot(inv_S).dot(residual)
         chi2_dists.append(chi2_dist)
+
+        # KF for zr plane
+        g.F = np.array([[1.,    dz], 
+                        [0.,    1.]])                      # F state transition matrix, extrapolation Jacobian - linear & OU
     
+        g.Q = var_ms                                       # Q process uncertainty/noise, OU model
+
+        # KF predict and update
+        measurement = coords[i+1][3] # observed r
+        g.predict()
+        g.update(measurement)
+        g_saver.save()
+
+        # update & calculate chi2 distance
+        updated_state, updated_cov = g.x_post, g.P_post
+        residual = measurement - g.H.dot(updated_state) 
+        S = g.H.dot(updated_cov).dot(g.H.T) + g.R
+        inv_S = np.linalg.inv(S)
+        chi2_dist = residual.T.dot(inv_S).dot(residual)
+        g_chi2_dists.append(chi2_dist)
+
     # chi2 probability distribution
-    total_chi2 = sum(chi2_dists)                    # chi squared statistic
-    dof = len(obs_y) - 2                            # (no. of measurements * 1D) - no. of track params
+    total_chi2 = sum(chi2_dists)                        # chi squared statistic
+    dof = len(coords) - 2                               # (no. of measurements * 1D) - no. of track params
     pval = distributions.chi2.sf(total_chi2, dof)
-    print("P value for KF track fit: ", pval)
-    return pval
+    print("P value for KF track fit in xy plane: ", pval)
 
-
-def KF_track_fit_xy(sigma0, sigma_ms, coords):
-    # KF applied from outermost point to innermost point
-    obs_x = [c[0] for c in coords]
-    obs_y = [c[1] for c in coords]
-    yf = obs_y[0]
-    dx = coords[1][0] - coords[0][0]    # dx = x1 - x0
-
-    # variables for F; state transition matrix
-    alpha = 0.1 #1.0                                                   # OU parameter
-    e1 = np.exp(-np.abs(dx) * alpha)
-    f1 = (1.0 - e1) / alpha
-    g1 = (np.abs(dx) - f1) / alpha
+    # chi2 probability distribution
+    total_chi2 = sum(g_chi2_dists)                      # chi squared statistic
+    pval_zr = distributions.chi2.sf(total_chi2, dof)
+    print("P value for KF track fit in zr plane: ", pval_zr)
     
-    # variables for Q process noise matrix
-    sigma_ou = 0.00001                                              # 10^-5
-    sw2 = sigma_ou**2                                               # OU parameter 
-    st2 = sigma_ms**2                                               # process noise representing multiple scattering
-    dx2 = dx**2
-    dxw2 = dx2 * sw2
-    Q02 = 0.5*dxw2
-    Q01 = dx*(st2 + Q02)
-    Q12 = dx*sw2
+    return pval, pval_zr
 
-    # 3D KF: initialize at outermost layer
-    f = KalmanFilter(dim_x=3, dim_z=1)
-    f.x = np.array([yf, 0., 0.])                                    # X state vector [yf, dy/dx, w] = [coordinate, track inclination, integrated OU]
 
-    f.F = np.array([[1.,    dx,     g1], 
-                    [0.,    1.,     f1],
-                    [0.,    0.,     e1]])                           # F state transition matrix, extrapolation Jacobian - linear & OU
+# def KF_track_fit_xy(sigma0, sigma_ms, coords):
+#     # KF applied from outermost point to innermost point
+#     obs_x = [c[0] for c in coords]
+#     obs_y = [c[1] for c in coords]
+#     yf = obs_y[0]
+#     dx = coords[1][0] - coords[0][0]    # dx = x1 - x0
+
+#     # variables for F; state transition matrix
+#     alpha = 0.1                                                     # OU parameter
+#     e1 = np.exp(-np.abs(dx) * alpha)
+#     f1 = (1.0 - e1) / alpha
+#     g1 = (np.abs(dx) - f1) / alpha
     
-    f.H = np.array([[1., 0., 0.]])                                  # H measurement matrix
-    f.P = np.array([[sigma0**2,  0., 0.],     
-                    [0.,         1., 0.],
-                    [0.,         0., 1.]])                          # P covariance
+#     # variables for Q process noise matrix
+#     sigma_ou = 0.00001                                              # 10^-5
+#     sw2 = sigma_ou**2                                               # OU parameter 
+#     st2 = sigma_ms**2                                               # process noise representing multiple scattering
+#     dx2 = dx**2
+#     dxw2 = dx2 * sw2
+#     Q02 = 0.5*dxw2
+#     Q01 = dx*(st2 + Q02)
+#     Q12 = dx*sw2
+
+#     # 3D KF: initialize at outermost layer
+#     f = KalmanFilter(dim_x=3, dim_z=1)
+#     f.x = np.array([yf, 0., 0.])                                    # X state vector [yf, dy/dx, w] = [coordinate, track inclination, integrated OU]
+
+#     f.F = np.array([[1.,    dx,     g1], 
+#                     [0.,    1.,     f1],
+#                     [0.,    0.,     e1]])                           # F state transition matrix, extrapolation Jacobian - linear & OU
     
-    f.R = sigma0**2                                                 # R measuremnt noise
-    f.Q = np.array([[dx2*(st2 + 0.25*dxw2), Q01,        Q02], 
-                    [Q01,                   st2 + dxw2, Q12],
-                    [Q02,                   Q12,        sw2]])      # Q process uncertainty/noise, OU model
-
-    pval = KF_predict_update(f, obs_y)
-    return pval
-
-
-
-def KF_track_fit_zr(sigma0, sigma_ms, coords):
-    # KF applied from outermost point to innermost point
-    obs_x = [c[2] for c in coords]
-    obs_y = [c[3] for c in coords]
-    yf = obs_y[0]
-    dx = coords[1][2] - coords[0][2]    # dz = z1 - z0
-
-    f = KalmanFilter(dim_x=2, dim_z=1)
-    f.x = np.array([yf, 0.])                                # X state vector [yf, dy/dx, w] = [coordinate, track inclination, integrated OU]
-
-    f.F = np.array([[1.,    dx], 
-                    [0.,    1.]])                           # F state transition matrix, extrapolation Jacobian - linear & OU
+#     f.H = np.array([[1., 0., 0.]])                                  # H measurement matrix
+#     f.P = np.array([[sigma0**2,  0., 0.],     
+#                     [0.,         1., 0.],
+#                     [0.,         0., 1.]])                          # P covariance
     
-    f.H = np.array([[1., 0.]])                              # H measurement matrix
-    f.P = np.array([[sigma0**2,  0.],     
-                    [0.,         1000.]])                   # P covariance
-    
-    f.R = sigma0**2                                         # R measuremnt noise
-    f.Q = sigma_ms**2                                          # Q process uncertainty/noise, OU model
+#     f.R = sigma0**2                                                 # R measuremnt noise
+#     f.Q = np.array([[dx2*(st2 + 0.25*dxw2), Q01,        Q02], 
+#                     [Q01,                   st2 + dxw2, Q12],
+#                     [Q02,                   Q12,        sw2]])      # Q process uncertainty/noise, OU model
 
-    pval = KF_predict_update(f, obs_y)
-    return pval
+#     pval = KF_predict_update(f, obs_y)
+#     return pval
+
+
+# def KF_track_fit_zr(sigma0, sigma_ms, coords):
+#     # KF applied from outermost point to innermost point
+#     obs_x = [c[2] for c in coords]
+#     obs_y = [c[3] for c in coords]
+#     yf = obs_y[0]
+#     dx = coords[1][2] - coords[0][2]    # dz = z1 - z0
+
+#     f = KalmanFilter(dim_x=2, dim_z=1)
+#     f.x = np.array([yf, 0.])                                # X state vector [yf, dy/dx, w] = [coordinate, track inclination, integrated OU]
+
+#     f.F = np.array([[1.,    dx], 
+#                     [0.,    1.]])                           # F state transition matrix, extrapolation Jacobian - linear & OU
+    
+#     f.H = np.array([[1., 0.]])                              # H measurement matrix
+#     f.P = np.array([[sigma0**2,  0.],     
+#                     [0.,         1000.]])                   # P covariance
+    
+#     f.R = sigma0**2                                         # R measuremnt noise
+#     f.Q = sigma_ms**2                                          # Q process uncertainty/noise, OU model
+
+#     pval = KF_predict_update(f, obs_y)
+#     return pval
 
 
 
@@ -387,10 +521,6 @@ def main():
                     sorted_nodes_coords_tuples = sorted(nodes_coords_tuples, reverse=True, key=lambda item: item[1][3])
                     print("SORTED NODES: \n", sorted_nodes_coords_tuples)
 
-                    # get the var_ms associated to each node
-                    # var_ms = [subGraph  for element in sorted_nodes_coords_tuples]
-
-                    
                     # check if the sorted nodes are connected
                     # all_connected = True
                     # for j in range(len(sorted_nodes_coords_tuples) - 1):
@@ -402,8 +532,13 @@ def main():
                     coords = [element[1] for element in sorted_nodes_coords_tuples]
                     # rotate the track such that innermost edge parallel to x-axis - r&z components are left unchanged
                     coords = rotate_track(coords, separation_3d_threshold)
-                    pval = KF_track_fit_xy(sigma0, sigma_ms, coords)
-                    pval_zr = KF_track_fit_zr(sigma0, sigma_ms, coords)
+
+                    # KF track fit - Moliere theory multiple scattering
+                    pval, pval_zr = KF_track_fit_xy_moliere(sigma0, coords)
+                    # apply KF track fit and get p-value score
+                    # pval = KF_track_fit_xy(sigma0, sigma_ms, coords)
+                    # pval_zr = KF_track_fit_zr(sigma0, sigma_ms, coords)
+                    
                     if (pval >= track_acceptance) and (pval_zr >= track_acceptance):
                         print("Good KF fit, p-value:", pval, "\n(x,y,z,r):", coords)
                         extracted.append(candidate)
