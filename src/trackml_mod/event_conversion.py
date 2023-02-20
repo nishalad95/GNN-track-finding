@@ -81,7 +81,7 @@ def main():
     subGraphs = h.compute_track_state_estimates(subGraphs)
     h.initialize_edge_activation(subGraphs)
     h.compute_prior_probabilities(subGraphs, 'track_state_estimates')
-    h.compute_mixture_weights(subGraphs)
+    h.compute_mixture_weights(subGraphs, 'track_state_estimates')
 
     # add node degree as attribute
     for s in subGraphs:

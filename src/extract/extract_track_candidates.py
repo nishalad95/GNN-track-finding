@@ -201,7 +201,8 @@ def calc_parabola_params(x1, y1, x2, y2, x3, y3):
     return a, b
 
 
-def KF_track_fit_xy_moliere(sigma0, coords):
+# KF track fit in xy plane and zr plane
+def KF_track_fit_moliere(sigma0, coords):
     # initialize 3D Kalman Filter for xy plane
     yf = coords[0][1]                               # observed y (coords is a list: [(x, y, z, r), (), ...])
     f = KalmanFilter(dim_x=3, dim_z=1)
@@ -314,12 +315,11 @@ def KF_track_fit_xy_moliere(sigma0, coords):
     total_chi2 = sum(chi2_dists)                        # chi squared statistic
     dof = len(coords) - 2                               # (no. of measurements * 1D) - no. of track params
     pval = distributions.chi2.sf(total_chi2, dof)
-    print("P value for KF track fit in xy plane: ", pval)
 
     # chi2 probability distribution
     total_chi2 = sum(g_chi2_dists)                      # chi squared statistic
     pval_zr = distributions.chi2.sf(total_chi2, dof)
-    print("P value for KF track fit in zr plane: ", pval_zr)
+    print("P values for KF track fit in xy and zr planes: ", pval, pval_zr)
     
     return pval, pval_zr
 
@@ -416,26 +416,23 @@ def main():
 
                 if (len(vivl_id_values) == len(set(vivl_id_values))) and (len(set(vivl_id_values)) >= fragment): 
                     # good candidate
-                    print("no duplicates volume_ids & in_volume_layer_ids for this candidate")
+                    # print("no duplicates volume_ids & in_volume_layer_ids for this candidate")
 
-                    # sort the candidates by radius r largest to smallest (4th element in this tuple of tuples: (node_num, (x,y,z,r)) )
+                    # sort the candidates by radius largest to smallest, tuples: node_num, (x,y,z,r)
                     nodes_coords_tuples = list(nx.get_node_attributes(candidate_to_assess, 'xyzr').items())
                     sorted_nodes_coords_tuples = sorted(nodes_coords_tuples, reverse=True, key=lambda item: item[1][3])
-                    print("SORTED NODES: \n", sorted_nodes_coords_tuples)
                     coords = [element[1] for element in sorted_nodes_coords_tuples]
                     # rotate the track such that innermost edge parallel to x-axis - r&z components are left unchanged
                     coords = rotate_track(coords, separation_3d_threshold)
 
                     # KF track fit - Moliere theory multiple scattering
-                    pval, pval_zr = KF_track_fit_xy_moliere(sigma0, coords)
-                    
+                    pval, pval_zr = KF_track_fit_moliere(sigma0, coords)
                     if (pval >= track_acceptance) and (pval_zr >= track_acceptance):
                         print("Good KF fit, p-value:", pval, "\n(x,y,z,r):", coords)
                         extracted.append(candidate)
                         extracted_pvals.append(pval)
                         extracted_pvals_zr.append(pval_zr)
-                        candidate_to_remove_from_subGraph.append(candidate)
-                        
+                        candidate_to_remove_from_subGraph.append(candidate) 
                     else:
                         print("p-value too small, leave for further processing, pval_xy: " + str(pval) + " pval_zr: " + str(pval_zr))
 
@@ -451,9 +448,10 @@ def main():
         for good_candidate in candidate_to_remove_from_subGraph:
             nodes = good_candidate.nodes()
             subGraph.remove_nodes_from(nodes)
-        if (len(subGraph.nodes()) < fragment) and (len(subGraph.nodes()) > 0): 
+        num_nodes_in_subgraph = len(subGraph.nodes())
+        if (num_nodes_in_subgraph < fragment) and (num_nodes_in_subgraph > 0): 
             fragments.append(subGraph)
-        elif len(subGraph.nodes()) >= fragment:
+        elif num_nodes_in_subgraph >= fragment:
             remaining.append(subGraph)
 
     
@@ -472,7 +470,6 @@ def main():
         extracted.append(sub)
         i += 1
         path = candidatesDir + str(i) + subgraph_path
-
     print("Total number of extracted candidates:", len(extracted))
 
     # save p-value information

@@ -4,8 +4,8 @@
 # VARIABLES
 # ---------------------------------------------------------------------------------------------
 # iterations
-START=1
-END=2
+START=3
+END=3
 
 # event conversion and track simulation
 min_volume=7            # minimum volume number to analyse (inclusive) - used also in effciency calc
@@ -15,11 +15,10 @@ SIGMA0=0.1              # IMPORTANT: sigma0 is used in the extraction KF only, r
 ROOTDIR=src/output      # output directory to store GNN algorithm output
 
 # clustering
-# LUT=learn_KL_linear_model/output/empvar/empvar_relaxed.lut   # LUT file for KL distance calibration
-LUT=learn_KL_linear_model/output/empvar/empvar.lut
+LUT=learn_KL_linear_model/output/empvar/empvar.lut  # LUT file for KL distance calibration
 
 # extrapolation
-c=1                     #  initial chi2 distance acceptance threshold for extrapolated states
+c=0.25                     #  initial chi2 distance acceptance threshold for extrapolated states
 
 # extracting track candidates
 p=0.01                  # p-value acceptance level for good track candidate extraction - currently applied in xy plane
@@ -27,6 +26,8 @@ n=4                     # minimum number of hits for good track candidate accept
 s=10                    # 3d distance threshold for close proximity nodes, used in KF rotatation if nodes too close together
 # used in node-merging in extraction for close proximity nodes, but this will change due to PDA
 t=8.0                   # threshold distance node merging in extraction
+
+EVENT_TRUTH=src/trackml_mod/event_truth
 # ----------------------------------------------------------------------------------------------
 
 
@@ -37,44 +38,49 @@ stages=("start_time")
 time=$SECONDS
 execution_times=($time)
 
-# Comment out for debugging when event-to-network conversion is not needed!!
-# -----------------------------------------------------
-# Event conversion into graph network
-# -----------------------------------------------------
-mkdir -p $ROOTDIR
-echo "----------------------------------------------------"
-echo "Running conversion of generated events to GNN..."
-echo "----------------------------------------------------"
-INPUT=$ROOTDIR/track_sim/network/
-mkdir -p $INPUT
-EVENT_NETWORK=src/trackml_mod/event_network/minCurv_0.3_800
-EVENT_TRUTH=src/trackml_mod/event_truth
-python src/trackml_mod/event_conversion.py -o $INPUT -e $SIGMA0 -n $EVENT_NETWORK -t $EVENT_TRUTH -a $min_volume -z $max_volume
-stages+=("event_conversion")
-time=$SECONDS
-execution_times+=($time)
 
-echo "------------------------------------------------------"
-echo "Extracting track candidates post CCA: iteration0"
-echo "------------------------------------------------------"
-INPUT=$ROOTDIR/track_sim/network/
-CANDIDATES=$ROOTDIR/iteration_0/candidates/
-REMAINING=$ROOTDIR/iteration_0/remaining/
-FRAGMENTS=$ROOTDIR/iteration_0/fragments/
-mkdir -p $CANDIDATES
-mkdir -p $REMAINING
-mkdir -p $FRAGMENTS
-python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -e $SIGMA0 -n $n -s $s -t $t -a 0
+# # Comment out for debugging when event-to-network conversion is not needed!!
+# # -----------------------------------------------------
+# # Event conversion into graph network
+# # -----------------------------------------------------
+# mkdir -p $ROOTDIR
+# echo "----------------------------------------------------"
+# echo "Running conversion of generated events to GNN..."
+# echo "----------------------------------------------------"
+# INPUT=$ROOTDIR/track_sim/network/
+# mkdir -p $INPUT
+# EVENT_NETWORK=src/trackml_mod/event_network/minCurv_0.3_800
+# python src/trackml_mod/event_conversion.py -o $INPUT -e $SIGMA0 -n $EVENT_NETWORK -t $EVENT_TRUTH -a $min_volume -z $max_volume
+# # stages+=("event_conversion")
+# # time=$SECONDS
+# # execution_times+=($time)
+
+
+# echo "------------------------------------------------------"
+# echo "Extracting track candidates post CCA: iteration0"
+# echo "------------------------------------------------------"
+# INPUT=$ROOTDIR/track_sim/network/
+# CANDIDATES=$ROOTDIR/iteration_0/candidates/
+# REMAINING=$ROOTDIR/iteration_0/remaining/
+# FRAGMENTS=$ROOTDIR/iteration_0/fragments/
+# mkdir -p $CANDIDATES
+# mkdir -p $REMAINING
+# mkdir -p $FRAGMENTS
+# python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -e $SIGMA0 -n $n -s $s -t $t -a 0
+# 
+
 
 
 # # -----------------------------------------------------
 # # Begin the iterations....
 # # -----------------------------------------------------
-INPUT=$REMAINING
-for (( i=$START; i<=$END; i++ ))
+# for (( i=$START; i<=$END; i++ ))
 
-# INPUT=$ROOTDIR/iteration_1/remaining/
-# for (( i=2; i<=2; i++ ))
+
+# testing iteration 3: clusterisation on updated states
+INPUT=$ROOTDIR/iteration_2/remaining/
+for (( i=3; i<=3; i++ ))
+
 
     do
         OUTPUT=$ROOTDIR/iteration_$i/network/
@@ -86,11 +92,12 @@ for (( i=$START; i<=$END; i++ ))
             echo "Iteration ${i}: GMR via clusterisation"
             echo "----------------------------------------------------"
             prev_duration=$SECONDS
-            python src/clustering/clustering.py -i $INPUT -o $OUTPUT -d track_state_estimates -l $LUT
+            # chi2 and kl thresholds - trained (loose cut)
+            python src/clustering/clustering.py -i $INPUT -o $OUTPUT -d track_state_estimates -c 1.0 -k 2.0 -l $LUT -t $i
             # time it!
-            stages+=("clustering")
-            time=$SECONDS
-            execution_times+=($time)
+            # stages+=("clustering")
+            # time=$SECONDS
+            # execution_times+=($time)
         elif (( $i % 2 == 0 ))
         then
             echo "---------------------------------------------------"
@@ -102,9 +109,17 @@ for (( i=$START; i<=$END; i++ ))
             # let c=$c*0.5   # tighter cut each time
 
             # time it!
-            stages+=("extrapolation")
-            time=$SECONDS
-            execution_times+=($time)
+            # stages+=("extrapolation")
+            # time=$SECONDS
+            # execution_times+=($time)
+        elif (( $i % 2 == 1))
+        then
+            echo "----------------------------------------------------"
+            echo "Iteration ${i}: GMR via clusterisation"
+            echo "----------------------------------------------------"
+            prev_duration=$SECONDS
+            python src/clustering/clustering.py -i $INPUT -o $OUTPUT -d updated_track_states -c 1000 -k 100 -l $LUT -t $i
+
         fi
 
         echo "------------------------------------------------------"
@@ -117,18 +132,18 @@ for (( i=$START; i<=$END; i++ ))
         mkdir -p $CANDIDATES
         mkdir -p $REMAINING
         mkdir -p $FRAGMENTS
-        # if (( $i > 1 ))
-        # then
-        let num=$i-1
-        cp -r $ROOTDIR/iteration_$num/candidates/ $CANDIDATES
-        # fi
+        if (( $i > 1 ))
+        then
+            let num=$i-1
+            cp -r $ROOTDIR/iteration_$num/candidates/ $CANDIDATES
+        fi
         python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -e $SIGMA0 -n $n -s $s -t $t -a $i
         INPUT=$REMAINING
 
         # time it!
-        stages+=("extract")
-        time=$SECONDS
-        execution_times+=($time)
+        # stages+=("extract")
+        # time=$SECONDS
+        # execution_times+=($time)
 
 done
 
@@ -144,18 +159,18 @@ echo "----------------------------------------------------"
 
 
 # time it!
-stages+=("reconstruction_efficiency")
-time=$SECONDS
-execution_times+=($time)
+# stages+=("reconstruction_efficiency")
+# time=$SECONDS
+# execution_times+=($time)
 
-plot all candidates
+# plot all candidates
 python src/extract/plot_all_extracted_candidates.py -i $END
 # python src/extract/plot_all_extracted_candidates.py -i 0
 
 # time it!
-stages+=("plot_all_candidates")
-time=$SECONDS
-execution_times+=($time)
+# stages+=("plot_all_candidates")
+# time=$SECONDS
+# execution_times+=($time)
 
 
 echo "----------------------------------------------------"

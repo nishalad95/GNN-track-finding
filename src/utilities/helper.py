@@ -27,7 +27,7 @@ def initialize_edge_activation(GraphList):
 
 # used for initialization & update of priors
 # assign prior probabilities/weights for neighbourhood of each node
-def compute_prior_probabilities(GraphList, track_state_key):
+def compute_prior_probabilities(GraphList, track_state_key):    
     for subGraph in GraphList:
         nodes = subGraph.nodes(data=True)
         if len(nodes) == 1: continue
@@ -67,26 +67,25 @@ def query_node_degree_in_edges(subGraph, node_num):
     return node_degree
 
 
-def compute_mixture_weights(GraphList):
+def compute_mixture_weights(GraphList, TRACK_STATE_KEY):
     for subGraph in GraphList:
         nodes = subGraph.nodes(data=True)
         if len(nodes) == 1: continue
-        for node in nodes:
-            
+        
+        for node in nodes:    
             node_num = node[0]
             node_degree = query_node_degree_in_edges(subGraph, node_num)
             mixture_weight = 1/node_degree
 
-            track_state_estimates = node[1]['track_state_estimates']
+            track_state_estimates = node[1][TRACK_STATE_KEY]
             for neighbour_num, v in track_state_estimates.items():
                 v['mixture_weight'] = mixture_weight
-
                 # add as an edge attribute - useful in community detection
                 subGraph[neighbour_num][node_num]['mixture_weight'] = mixture_weight
 
 # used in extrapolate_merged_states
 def calculate_side_norm_factor(subGraph, node, updated_track_states):
-    
+    print("CALCULATE SIDE NORM FACTOR")
     # split track state estimates into LHS & RHS
     node_num = node[0]
     node_attr = node[1]
@@ -94,8 +93,12 @@ def calculate_side_norm_factor(subGraph, node, updated_track_states):
     left_nodes, right_nodes = [], []
     left_coords, right_coords = [], []
 
-    for neighbour_num, _ in updated_track_states.items():
-        neighbour_x_layer = subGraph.nodes[neighbour_num]['GNN_Measurement'].x
+    print("updated track states dictionary:")
+    pprint.pprint(updated_track_states)
+    for neighbour_num, updated_track_states_dict in updated_track_states.items():
+        print("neighbour num: ", neighbour_num)
+        neighbour_x_layer = updated_track_states_dict['xyzr'][0]
+        # neighbour_x_layer = subGraph.nodes[neighbour_num]['GNN_Measurement'].x
 
         # only calculate for activated edges
         if subGraph[neighbour_num][node_num]['activated'] == 1:
@@ -124,7 +127,10 @@ def calculate_side_norm_factor(subGraph, node, updated_track_states):
 
 # used in extrapolate_merged_states
 def reweight(subGraphs, track_state_estimates_key):
-    # print("Reweighting Gaussian mixture...")
+    print("Reweighting Gaussian mixture...")
+    perc_correct_outliers_detected = 0
+    total_outliers = 0
+    
     reweight_threshold = 0.1
 
     for subGraph in subGraphs:
@@ -151,20 +157,34 @@ def reweight(subGraphs, track_state_estimates_key):
                     if subGraph[neighbour_num][node_num]['activated'] == 1:
                         reweight = (updated_state_dict['mixture_weight'] * updated_state_dict['likelihood'] * updated_state_dict['prior']) / reweight_denom
                         reweight /= updated_state_dict['lr_layer_norm']
-                        # print("REWEIGHT:", reweight)
-                        # print("side:", updated_state_dict['side'])  
                         updated_state_dict['mixture_weight'] = reweight
 
                         # add as edge attribute
                         subGraph[neighbour_num][node_num]['mixture_weight'] = reweight
 
-                        # reactivate/deactivate
+                        # reactivate/deactivate edges based on the reweight threhsold
                         if reweight < reweight_threshold:
                             subGraph[neighbour_num][node_num]['activated'] = 0
                             print("deactivating edge: (", neighbour_num, ",", node_num, ")")
+
+                            # precision in outlier masking
+                            node_truth_particle = subGraph.nodes[node_num]['truth_particle']
+                            neighbour_truth_particle = subGraph.nodes[neighbour_num]['truth_particle']
+                            if node_truth_particle != neighbour_truth_particle:
+                                perc_correct_outliers_detected += 1
+                            total_outliers += 1
+
                         else:
                             subGraph[neighbour_num][node_num]['activated'] = 1
                             print("reactivating edge: (", neighbour_num, ",", node_num, ")")
+
+
+    print("Precision of outlier masking in reweight section:")
+    print("numerator:", perc_correct_outliers_detected, "denominator:", total_outliers)
+    if total_outliers != 0:
+        perc_correct_outliers_detected = (perc_correct_outliers_detected / total_outliers) * 100
+        print("Percentage of correct outliers detected:", perc_correct_outliers_detected)
+
 
 
 # TODO: some of these functions are in the rotation of a track during the extraction
@@ -335,7 +355,8 @@ def compute_track_state_estimates(GraphList):
                 joint_vector_covariance[2, 2] = variance_tau + var_ms
                 
                 # create track state estimates dictionary for each neighbour (node-->neighbour)
-                track_state_estimates[key] = {  'edge_state_vector': track_state_vector, 
+                track_state_estimates[key] = {  'xyzr':(x_k, y_k, z_k, r_k),            # neighbour coords
+                                                'edge_state_vector': track_state_vector, 
                                                 'edge_covariance': covariance,
                                                 'joint_vector': joint_vector,
                                                 'joint_vector_covariance': joint_vector_covariance,
@@ -346,9 +367,9 @@ def compute_track_state_estimates(GraphList):
             # (mean, variance) of edge orientation - needed for KL distance in clustering
             G.nodes[node]['xy_edge_gradient_mean_var'] = (np.mean(gradients_xy), np.var(gradients_xy))
             G.nodes[node]['zr_edge_gradient_mean_var'] = (np.mean(gradients_zr), np.var(gradients_zr))
-            # (mean, variance) of edge theta - needed for KL distance in clustering
-            G.nodes[node]['xy_edge_theta_mean_var'] = (np.mean(theta_xy), np.var(theta_xy))
-            G.nodes[node]['zr_edge_theta_mean_var'] = (np.mean(theta_zr), np.var(theta_zr))
+            # # (mean, variance) of edge theta - needed for KL distance in clustering
+            # G.nodes[node]['xy_edge_theta_mean_var'] = (np.mean(theta_xy), np.var(theta_xy))
+            # G.nodes[node]['zr_edge_theta_mean_var'] = (np.mean(theta_zr), np.var(theta_zr))
             # store the transformation information - used in extrapolation
             G.nodes[node]['angle_of_rotation'] = azimuth_angle
             G.nodes[node]['translation'] = (x_A, y_A)
@@ -548,7 +569,7 @@ def __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, key,
     for subGraph in GraphList:
         
         iteration = int(subGraph.graph["iteration"])
-        color = colors[iteration]
+        color = colors[iteration - 1]
         pos=nx.get_node_attributes(subGraph, key)
         edge_colors = []
         for u, v in subGraph.edges():
