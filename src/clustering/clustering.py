@@ -8,7 +8,7 @@ import math
 import time
 import csv
 
-def mahalanobis_distance(mean1, cov1, mean2, cov2, node_coords, neighbour1_coords, neighbour2_coords):
+def mahalanobis_distance(mean1, cov1, mean2, cov2, node_coords, neighbour1_coords, neighbour2_coords, sigma0rz, sigma0rz2):
     edge1 = mean1[:2]
     edge2 = mean2[:2]
     residual = edge1 - edge2
@@ -43,18 +43,18 @@ def mahalanobis_distance(mean1, cov1, mean2, cov2, node_coords, neighbour1_coord
     J = np.array([j1, j2, j3, j4, j5, j6])
 
     # error in barrel
-    sigma_za, sigma_zb, sigma_zc = 0.5, 0.5, 0.5
-    sigma_ra, sigma_rb, sigma_rc = 0.1, 0.1, 0.1
+    sigma_za, sigma_zb, sigma_zc = sigma0rz2, sigma0rz2, sigma0rz2
+    sigma_ra, sigma_rb, sigma_rc = sigma0rz, sigma0rz, sigma0rz
     # if node in endcap, then reduce z error
     if np.abs(x_a) >= 600.0: 
-        sigma_za = 0.1
-        sigma_ra = 0.5
+        sigma_za = sigma0rz
+        sigma_ra = sigma0rz2
     if np.abs(x_b) >= 600.0: 
-        sigma_zb = 0.1
-        sigma_rb = 0.5
+        sigma_zb = sigma0rz
+        sigma_rb = sigma0rz2
     if np.abs(x_c) >= 600.0: 
-        sigma_zc = 0.1
-        sigma_rc = 0.5
+        sigma_zc = sigma0rz
+        sigma_rc = sigma0rz2
 
     # covariance
     S = np.array([  [sigma_za**2, 0, 0, 0, 0, 0],
@@ -77,11 +77,11 @@ def mahalanobis_distance(mean1, cov1, mean2, cov2, node_coords, neighbour1_coord
     chi2 = distance1 + distance2
     return chi2
 
-def calc_pairwise_distances_chi2(num_edges, edge_svs, edge_covs, node_coords, neighbour_coords):
+def calc_pairwise_distances_chi2(num_edges, edge_svs, edge_covs, node_coords, neighbour_coords, sigma0rz, sigma0rz2):
     pairwise_distances_chi2 = np.zeros(shape=(num_edges, num_edges))
     for i in range(num_edges):
         for j in range(i):
-            distance_chi2 = mahalanobis_distance(edge_svs[i], edge_covs[i], edge_svs[j], edge_covs[j], node_coords, neighbour_coords[i], neighbour_coords[j])
+            distance_chi2 = mahalanobis_distance(edge_svs[i], edge_covs[i], edge_svs[j], edge_covs[j], node_coords, neighbour_coords[i], neighbour_coords[j], sigma0rz, sigma0rz2)
             pairwise_distances_chi2[i][j] = distance_chi2
     return pairwise_distances_chi2
 
@@ -146,7 +146,7 @@ def reset_reactivate(subGraphs):
     return subGraphs
 
 
-def cluster(inputDir, outputDir, track_state_key, chi2_threshold, KL_threshold, KL_lut, iteration_num, reactivate):
+def cluster(inputDir, outputDir, track_state_key, chi2_threshold, KL_threshold, KL_lut, iteration_num, reactivate, sigma0rz, sigma0rz2):
     # variable names
     subgraph_path = "_subgraph.gpickle"
     TRACK_STATE_KEY = track_state_key
@@ -166,20 +166,30 @@ def cluster(inputDir, outputDir, track_state_key, chi2_threshold, KL_threshold, 
     if reactivate:
         subGraphs = reset_reactivate(subGraphs)
 
-    perc_correct_outliers_detected = 0
+    # variables used in confusion matrix
+    correct_outliers_detected = 0
     total_outliers = 0
-    nodes_with_merged_state = 0
+    correct_active_edges_detected = 0
+    total_active_edges = 0
 
     print("Total number of subgraphs to process in this iteration: ", len(subGraphs))
     total_number_of_nodes = 0
     total_number_of_edges = 0
     total_number_of_nodes_with_updated_state = 0
+    nodes_with_merged_state = 0
 
     for subGraph in subGraphs:
         total_number_of_nodes += len(subGraph.nodes())
         total_number_of_edges += len(subGraph.edges())
 
+        # if 6099 in list(subGraph.nodes()):
+        #     print("\n---------------------------------------")
+        #     print("DEBUGGING SUBGRAPH: ")
+        #     print("subgraph nodes: ", subGraph.nodes())
+        #     print("subgraph edges: ", subGraph.edges())
+
         edges_to_deactivate = []
+        edges_to_remain_active = []
         for node in subGraph.nodes(data=True):
             node_num = node[0]
             node_attr = node[1]
@@ -210,24 +220,8 @@ def cluster(inputDir, outputDir, track_state_key, chi2_threshold, KL_threshold, 
                 joint_edge_covs = np.array([component["joint_vector_covariance"] for component in track_state_estimates.values()])
                 joint_edge_covs = np.reshape(joint_edge_covs[:, :, np.newaxis], (num_edges, 3, 3))
                 # compute mahalanobis distances
-                pairwise_distances_chi2 = calc_pairwise_distances_chi2(num_edges, joint_edge_svs, joint_edge_covs, node_coords, all_neighbours_coords)
+                pairwise_distances_chi2 = calc_pairwise_distances_chi2(num_edges, joint_edge_svs, joint_edge_covs, node_coords, all_neighbours_coords, sigma0rz, sigma0rz2)
                 smallest_dist, idx = get_smallest_dist_idx(pairwise_distances_chi2) #[row_idx, column_idx]
-
-
-
-                # # hyperparameter tuning:
-                # # find out which pair of nodes had the smallest distance and find its ground truth info
-                # n1, n2 = neighbors_to_deactivate[idx[0]], neighbors_to_deactivate[idx[1]]
-                # n1_truth = subGraph.nodes[n1]['truth_particle']
-                # n2_truth = subGraph.nodes[n2]['truth_particle']
-                # if n1_truth != n2_truth:
-                #     ground_truth = 0
-                # else:
-                #     ground_truth = 1
-                # with open('chi2_dist_cluster_updates_states.csv', 'a') as c:
-                #     writer = csv.writer(c)
-                #     writer.writerow([smallest_dist, num_edges, ground_truth])
-                
 
 
                 # perform clustering
@@ -245,6 +239,11 @@ def cluster(inputDir, outputDir, track_state_key, chi2_threshold, KL_threshold, 
                     joint_edge_svs = np.delete(joint_edge_svs, idx, axis=0)
                     joint_edge_covs = np.delete(joint_edge_covs, idx, axis=0)
                     priors = np.delete(priors, idx)
+                    # keep a track of active neighbours - used in confusion matrix
+                    active_connections = neighbors_to_deactivate[idx]       # active_connections will always be a list of 2 neighbours here (to merge together)
+                    for ac in active_connections:
+                        edges_to_remain_active.append((ac, node_num))
+                    # keep a track of deactive neighbours - used in confusion matrix
                     neighbors_to_deactivate = np.delete(neighbors_to_deactivate, idx, axis=0)
                     num_edges = parabolic_edge_svs.shape[0]
 
@@ -252,9 +251,9 @@ def cluster(inputDir, outputDir, track_state_key, chi2_threshold, KL_threshold, 
                     dist_to_merged_state = calc_dist_to_merged_state(num_edges, joint_edge_svs, joint_edge_covs, joint_merged_mean, joint_merged_cov)
                     smallest_dist, idx = get_smallest_dist_idx(dist_to_merged_state)
         
-                    # hyperparameter tuning:
-                    with open('kl_dist_cluster_updates_states.txt', 'a') as c:
-                        c.write("%s\n" % smallest_dist)
+                    # # HYPERPARAMETER TUNING
+                    # with open('kl_dist_cluster_updates_states.txt', 'a') as c:
+                    #     c.write("%s\n" % smallest_dist)
 
                     # carry on merging one by one state, check for smallest distance
                     # if smallest distance is less than KL threshold, then merge
@@ -272,6 +271,10 @@ def cluster(inputDir, outputDir, track_state_key, chi2_threshold, KL_threshold, 
                         joint_edge_svs = np.delete(joint_edge_svs, idx, axis=0)
                         joint_edge_covs = np.delete(joint_edge_covs, idx, axis=0)
                         priors = np.delete(priors, idx)
+                        # keep a track of active neighbours - used in confusion matrix
+                        active_connection = neighbors_to_deactivate[idx]
+                        edges_to_remain_active.append((active_connection, node_num))
+                        # keep a track of deactive neighbours - used in confusion matrix
                         neighbors_to_deactivate = np.delete(neighbors_to_deactivate, idx, axis=0)
                         # print("check neighbours to deactivate:", neighbors_to_deactivate)
                         num_edges = parabolic_edge_svs.shape[0]
@@ -311,11 +314,10 @@ def cluster(inputDir, outputDir, track_state_key, chi2_threshold, KL_threshold, 
                 node_num = edge[1]
                 attrs = {(neighbour_num, node_num): {"activated": 0}}
                 nx.set_edge_attributes(subGraph, attrs)
-
                 node_truth_particle = subGraph.nodes[node_num]['truth_particle']
                 neighbour_truth_particle = subGraph.nodes[neighbour_num]['truth_particle']
                 if node_truth_particle != neighbour_truth_particle:
-                    perc_correct_outliers_detected += 1
+                    correct_outliers_detected += 1
             total_outliers += len(edges_to_deactivate)
         
         # update the node degree as an attribute
@@ -323,6 +325,19 @@ def cluster(inputDir, outputDir, track_state_key, chi2_threshold, KL_threshold, 
             node_num = node[0]
             degree = h.query_node_degree_in_edges(subGraph, node_num)
             subGraph.nodes[node_num]['degree'] = degree
+        
+        # calculate number of correct active edges remained active - used in confusion matrix
+        if len(edges_to_remain_active) > 0:
+            print("edges_to_remain_active (neighbour_num, node_num): ", edges_to_remain_active)
+            for edge in edges_to_remain_active:
+                neighbour_num = edge[0]
+                node_num = edge[1]
+                node_truth_particle = subGraph.nodes[node_num]['truth_particle']
+                neighbour_truth_particle = subGraph.nodes[neighbour_num]['truth_particle']
+                if node_truth_particle == neighbour_truth_particle:
+                    correct_active_edges_detected += 1
+            total_active_edges += len(edges_to_remain_active)
+
 
     print("Statistics for this iteration:")
     print("Total number of nodes: ", total_number_of_nodes)
@@ -330,20 +345,32 @@ def cluster(inputDir, outputDir, track_state_key, chi2_threshold, KL_threshold, 
     print("Total number of nodes with updated states: ", total_number_of_nodes_with_updated_state)
     print("Total number of nodes with a new merged state: ", nodes_with_merged_state)
 
-    print("numerator:", perc_correct_outliers_detected, "denominator:", total_outliers)
+    print("numerator:", correct_outliers_detected, "denominator:", total_outliers)
     if total_outliers != 0:
-        perc_correct_outliers_detected = (perc_correct_outliers_detected / total_outliers) * 100
+        perc_correct_outliers_detected = (correct_outliers_detected / total_outliers) * 100
         print("Percentage of correct outliers detected:", perc_correct_outliers_detected)
+        
+        print("\nPRINTING ALGORITHM METRICS:")
+        tp = correct_outliers_detected
+        fp = total_outliers - correct_outliers_detected
+        tn = correct_active_edges_detected
+        fn = total_active_edges - correct_active_edges_detected
+        print("true positive number: ", tp, " false positive number: ", fp)
+        print("true negative number: ", tn, " false negative number: ", fn)
+        precision = tp / (tp + fp)
+        recall = tp / (tp + fn)
+        print("Precision:", precision, " Recall: ", recall)
+        print("Normalised confusion matrix")
+        tpr = recall
+        fnr = fn / (tp + fn)
+        fpr = fp / (tn + fp)
+        tnr = tn / (tn + fp)
+        print("TPR: ", tpr, " FNR: ", fnr, "\nFPR: ", fpr, " TNR: ", tnr)
+        print()
 
-    # reweight the mixture & calculate priors based on inward active edges
-    if iteration_num == 1:
-        h.compute_mixture_weights(subGraphs, TRACK_STATE_KEY)
-    # else:
-    #     h.reweight(subGraphs, 'updated_track_states')
+    # compute mixture weights and priors based on active edge connections
+    h.compute_mixture_weights(subGraphs, TRACK_STATE_KEY)
     h.compute_prior_probabilities(subGraphs, TRACK_STATE_KEY)
-
-    # title = "Filtered Graph outlier edge removal using clustering with KL distance measure"
-    # h.plot_subgraphs(subGraphs, outputDir, node_labels=True, save_plot=True, title=title)
     # save networks
     for i, sub in enumerate(subGraphs):
         h.save_network(outputDir, i, sub)
@@ -361,6 +388,8 @@ def main():
     parser.add_argument('-k', '--kl', help='kl distance threshold')
     parser.add_argument('-t', '--iteration', help="iteration number")
     parser.add_argument('-r', '--reactivateall', default=False, type=bool)
+    parser.add_argument('-z', '--sigma0rz', help="rms measurement error in rz plane")
+    parser.add_argument('-m', '--sigma0rz2', help="rms measurement error in rz plane - Moliere MS orientation of layer is important")
     args = parser.parse_args()
 
     inputDir = args.input
@@ -371,10 +400,12 @@ def main():
     KL_threshold = float(args.kl)
     iteration_num = int(args.iteration)
     reactivate = args.reactivateall
+    sigma0rz = float(args.sigma0rz)
+    sigma0rz2 = float(args.sigma0rz2)
 
     start = time.time()
 
-    cluster(inputDir, outputDir, track_states_key, chi2_threshold, KL_threshold, KL_lut, iteration_num, reactivate)
+    cluster(inputDir, outputDir, track_states_key, chi2_threshold, KL_threshold, KL_lut, iteration_num, reactivate, sigma0rz, sigma0rz2)
 
     end = time.time()
     total_time = end - start

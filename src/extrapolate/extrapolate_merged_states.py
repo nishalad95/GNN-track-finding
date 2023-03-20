@@ -24,7 +24,8 @@ def merge_states(mean1, cov1, mean2, cov2):
 
 
 def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour_attr, 
-                        chi2CutFactor, state_to_extrapolate, state_cov, is_merged_state=False):
+                        chi2CutFactor, state_to_extrapolate, state_cov, 
+                        sigma0xy, sigma0rz, sigma0rz2, is_merged_state=False):
 
     # global coordinates of node and neighbour
     node_x = node_attr['GNN_Measurement'].x
@@ -109,7 +110,6 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
                   [dc_da,    dc_db,     dc_dc]])      # F state transition matrix, extrapolation Jacobian
 
     merged_cov = state_cov
-    sigma0 = node_attr['GNN_Measurement'].sigma0
     extrp_state = F.dot(merged_state)
     extrp_cov = F.dot(merged_cov).dot(F.T)
 
@@ -119,23 +119,25 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     # residual = neighbour_y - H.dot(extrp_state)               # compute the residual
     neighbour_y_in_cs_nodeC = .0                                # measurement is always zero in c.s. of neighbour
     residual = neighbour_y_in_cs_nodeC - H.dot(extrp_state)     # compute the residual
-    S = H.dot(extrp_cov).dot(H.T) + sigma0**2                   # covariance of residual (denominator of kalman gain)
+    S = H.dot(extrp_cov).dot(H.T) + sigma0xy**2                   # covariance of residual (denominator of kalman gain)
     inv_S = np.linalg.inv(S)
     chi2 = residual.T.dot(inv_S).dot(residual)
     chi2_cut = chi2CutFactor
 
-    # save chi2 distance data - USED FOR TUNING THE CHI2 CUT FACTOR
-    # truth, chi2 distance, chi2_cut
+    # # HYPERPARAMETER TUNING THE CHI2 CUT FACTOR
+    # # truth, chi2 distance, chi2_cut
     # node_truth = subGraph.nodes[node_num]["truth_particle"]
     # neighbour_truth = subGraph.nodes[neighbour_num]["truth_particle"]
     # truth = 0
     # if node_truth == neighbour_truth: truth = 1
-    # line = str(truth) + " " + str(chi2) + " " + str(chi2_cut) + "\n"
+    # line = str(truth) + " " + str(chi2) + "\n"
     # with open('chi2_data_in_extrapolation.csv', 'a') as f:
     #     f.write(line)
 
     # validate chi2 distance
     if chi2 <= chi2_cut:
+        # this edge will remain active
+
         # calculate beta: measurement likelihood
         factor = 2 * math.pi * np.abs(S)
         norm_factor = math.pow(factor, -0.5)
@@ -161,7 +163,7 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
         f.F = F                             # F state transition matrix
         f.H = H                             # H measurement matrix
         f.P = extrp_cov
-        f.R = sigma0**2
+        f.R = sigma0xy**2
         f.Q = np.array([[0.,     0.,       0.], 
                         [0.,     var_ms,   0.],
                         [0.,     0.,       0.]])      # Q process uncertainty/noise
@@ -177,12 +179,12 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
         # form tau and variance in tau
         tau = dz / dr
         # default error for barrel located node
-        sigma_r = 0.1
-        sigma_z = 0.5
+        sigma_r = sigma0rz
+        sigma_z = sigma0rz2
         # if node in endcap, then reduce z error: used in calc of error in tau = dz/dr
         if np.abs(node_z) >= 600.0: 
-            sigma_z = 0.1
-            sigma_r = 0.5
+            sigma_z = sigma0rz
+            sigma_r = sigma0rz2
         del_dz = sigma_z
         del_dr = sigma_r
         # error in tau
@@ -198,43 +200,55 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
         joint_vector_covariance[2, :] = 0.0
         joint_vector_covariance[2, 2] = variance_tau + var_ms
 
+        # calculate confusion matrix elements
+        correct_active_edges_detected = 0
+        node_truth_particle = subGraph.nodes[node_num]['truth_particle']
+        neighbour_truth_particle = subGraph.nodes[neighbour_num]['truth_particle']
+        if node_truth_particle == neighbour_truth_particle: 
+            correct_active_edges_detected = 1
+        total_active_edges = 1
+
         return { 'xy': (node_x, node_y),
                  'zr': (node_z, node_r),
                  'xyzr': (node_x, node_y, node_z, node_r),
                  'edge_state_vector': updated_state, 
                  'edge_covariance': updated_cov,
-                #  'joint_vector': joint_vector,
-                #  'joint_vector_covariance': joint_vector_covariance,
-                 'joint_vector': updated_state,
-                 'joint_vector_covariance': updated_cov,
+                 'joint_vector': joint_vector,
+                 'joint_vector_covariance': joint_vector_covariance,
+                #  'joint_vector': updated_state,
+                #  'joint_vector_covariance': updated_cov,
                  'likelihood': likelihood,
-                 # previous weight - gets updated at the end of extrapolation
+                 # this value is the previous weight - will get updated at the end of extrapolation
                  'mixture_weight': subGraph.nodes[node_num]['track_state_estimates'][neighbour_num]['mixture_weight']
-                }, chi2, 0, 0
+                }, chi2, 0, 0, correct_active_edges_detected, total_active_edges
 
     else:
-        perc_correct_outliers_detected = 0
+        # this edge will either become deactivated
+        correct_outliers_detected = 0
         total_outliers = 0
-        if is_merged_state:
-            print("chi2 distance too large")
-            print("DEACTIVATING edge connection ( ", node_num, ", ", neighbour_num, " )")
-            subGraph[node_num][neighbour_num]["activated"] = 0
+        print("chi2 distance too large")
+        print("DEACTIVATING edge connection ( ", node_num, ", ", neighbour_num, " )")
+        subGraph[node_num][neighbour_num]["activated"] = 0
 
-            # precision in outlier masking
-            node_truth_particle = subGraph.nodes[node_num]['truth_particle']
-            neighbour_truth_particle = subGraph.nodes[neighbour_num]['truth_particle']
-            if node_truth_particle != neighbour_truth_particle:
-                perc_correct_outliers_detected += 1
-            total_outliers += 1
+        # used in precision in outlier masking
+        node_truth_particle = subGraph.nodes[node_num]['truth_particle']
+        neighbour_truth_particle = subGraph.nodes[neighbour_num]['truth_particle']
+        if node_truth_particle != neighbour_truth_particle:
+            correct_outliers_detected += 1
+        total_outliers += 1
 
-        return None, chi2, perc_correct_outliers_detected, total_outliers
-
+        return None, chi2, correct_outliers_detected, total_outliers, 0, 0
 
 
-def message_passing(subGraphs, chi2CutFactor):
+
+def message_passing(subGraphs, chi2CutFactor, sigma0xy, sigma0rz, sigma0rz2):
     number_of_nodes_with_merged_state = 0
-    perc_correct_outliers_detected = 0
+    
+    # variables used in confusion matrix
+    correct_outliers_detected = 0
     total_outliers = 0
+    correct_active_edges_detected = 0
+    total_active_edges = 0
 
     for subGraph in subGraphs:
         if len(subGraph.nodes()) == 1: continue
@@ -254,11 +268,13 @@ def message_passing(subGraphs, chi2CutFactor):
                 for neighbour_num in subGraph.neighbors(node_num):
                     if subGraph[node_num][neighbour_num]["activated"] == 1:
                         neighbour_attr = subGraph.nodes[neighbour_num]
-                        updated_state_dict, chi2, numerator, denominator = extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour_attr, 
-                                                                chi2CutFactor, state_to_extrapolate, state_cov, is_merged_state=True)
+                        updated_state_dict, chi2, outlier_numerator, outlier_denominator, active_numerator, active_denominator = extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour_attr, 
+                                                                                                                                chi2CutFactor, state_to_extrapolate, state_cov, sigma0xy, sigma0rz, sigma0rz2, is_merged_state=True)
                         
-                        perc_correct_outliers_detected += numerator
-                        total_outliers += denominator
+                        correct_outliers_detected += outlier_numerator
+                        total_outliers += outlier_denominator
+                        correct_active_edges_detected += active_numerator
+                        total_active_edges += active_denominator
 
                         if updated_state_dict != None:
                             # store the updated track states at the neighbour node
@@ -316,10 +332,28 @@ def message_passing(subGraphs, chi2CutFactor):
             #                         subGraph.nodes[neighbour_num]['updated_track_states'][node_num] = updated_state_dict
 
     print("Total number of nodes with merged state: ", number_of_nodes_with_merged_state)
-    print("numerator:", perc_correct_outliers_detected, "denominator:", total_outliers)
+    print("numerator:", correct_outliers_detected, "denominator:", total_outliers)
     if total_outliers != 0:
-        perc_correct_outliers_detected = (perc_correct_outliers_detected / total_outliers) * 100
-        print("Percentage of correct outliers detected:", perc_correct_outliers_detected)          
+        perc_correct_outliers_detected = (correct_outliers_detected / total_outliers) * 100
+        print("Percentage of correct outliers detected:", correct_outliers_detected)    
+
+        print("\nPRINTING ALGORITHM METRICS:")
+        tp = correct_outliers_detected
+        fp = total_outliers - correct_outliers_detected
+        tn = correct_active_edges_detected
+        fn = total_active_edges - correct_active_edges_detected
+        print("true positive number: ", tp, " false positive number: ", fp)
+        print("true negative number: ", tn, " false negative number: ", fn)
+        precision = tp / (tp + fp)
+        recall = tp / (tp + fn)
+        print("Precision:", precision, " Recall: ", recall)
+        print("Normalised confusion matrix")
+        tpr = recall
+        fnr = fn / (tp + fn)
+        fpr = fp / (tn + fp)
+        tnr = tn / (tn + fp)
+        print("TPR: ", tpr, " FNR: ", fnr, "\nFPR: ", fpr, " TNR: ", tnr)
+        print()      
 
 
 def main():
@@ -330,10 +364,17 @@ def main():
     parser.add_argument('-i', '--inputDir', help='input directory of outlier removal')
     parser.add_argument('-o', '--outputDir', help='output directory for updated states')
     parser.add_argument('-c', '--chi2CutFactor', help='chi2 cut factor for threshold')
+    parser.add_argument('-e', '--sigma0xy', help="rms measurement error in xy")
+    parser.add_argument('-z', '--sigma0rz', help="rms measurement error in rz")
+    parser.add_argument('-m', '--sigma0rz2', help="rms measurement error in rz - MS Moliere orientation of layer important")
+    
     args = parser.parse_args()
     inputDir = args.inputDir
     outputDir = args.outputDir
     chi2CutFactor = float(args.chi2CutFactor)
+    sigma0xy = float(args.sigma0xy)
+    sigma0rz = float(args.sigma0rz)
+    sigma0rz2 = float(args.sigma0rz2)
 
     # read in subgraph data
     subGraphs = []
@@ -342,26 +383,13 @@ def main():
         sub = nx.read_gpickle(file)
         subGraphs.append(sub)
 
-    print("Statistics before extrapolation:")
-    print("Total number of subgraphs to be processed: ", len(subGraphs))
-    total_num_nodes = 0
-    total_num_edges = 0
-    for subGraph in subGraphs:
-        if len(subGraph.nodes()) == 1: continue
-
-        total_num_nodes += len(subGraph.nodes())
-        total_num_edges += len(subGraph.edges())
-    print("total number of nodes to be processed: ", total_num_nodes)
-    print("total number of edges to be processed: ", total_num_edges)
-
     print("Beginning message passing...")
     # distribute merged state to neighbours, extrapolate, validation & create new updated state(s)
-    message_passing(subGraphs, chi2CutFactor)
+    message_passing(subGraphs, chi2CutFactor, sigma0xy, sigma0rz, sigma0rz2)
 
     h.compute_prior_probabilities(subGraphs, 'updated_track_states')
     h.reweight(subGraphs, 'updated_track_states')
 
-    # TODO: Check with and without this during the next iteration
     # RECALCULATE priors and mixture weights again using same reweight threshold as edges are deactivated!
     h.compute_prior_probabilities(subGraphs, 'updated_track_states')
     h.reweight(subGraphs, 'updated_track_states')
@@ -373,14 +401,6 @@ def main():
             degree = h.query_node_degree_in_edges(subGraph, node_num)
             subGraph.nodes[node_num]['degree'] = degree
             node_attr = node[1]
-
-    # for i, s in enumerate(subGraphs):
-    #     print("-------------------")
-    #     print("SUBGRAPH " + str(i))
-    #     for node in s.nodes(data=True):
-    #         pprint.pprint(node)
-    #     print("--------------------")
-        # print("EDGE DATA:", s.edges.data(), "\n")
 
     # save networks
     for i, sub in enumerate(subGraphs):

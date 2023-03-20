@@ -38,17 +38,23 @@ def compute_prior_probabilities(GraphList, track_state_key):
             if track_state_key not in node_attr.keys(): continue
 
             track_state_estimates = node_attr[track_state_key]
+            subgraph_edges = subGraph.edges()
             
             # compute number of ACTIVE neighbour nodes in each layer for given neighbourhood
+            # NOTE: some connections may not exist now due to graph splitting
             layer_neighbour_num_dict = {}
             for neighbour_num, _ in track_state_estimates.items():
                 # inward edge coming into the node from the neighbour
-                if subGraph[neighbour_num][node_num]['activated'] == 1:
-                    layer = subGraph.nodes[neighbour_num]['in_volume_layer_id']
-                    if layer in layer_neighbour_num_dict.keys():
-                        layer_neighbour_num_dict[layer].append(neighbour_num)
-                    else:
-                        layer_neighbour_num_dict[layer] = [neighbour_num]
+                # if the conenction exists, then proceed
+                check_edge = (neighbour_num, node_num)
+                if check_edge in subgraph_edges:
+                    # if the connection is active, then proceed
+                    if subGraph[neighbour_num][node_num]['activated'] == 1:
+                        layer = subGraph.nodes[neighbour_num]['in_volume_layer_id']
+                        if layer in layer_neighbour_num_dict.keys():
+                            layer_neighbour_num_dict[layer].append(neighbour_num)
+                        else:
+                            layer_neighbour_num_dict[layer] = [neighbour_num]
         
             # assign prior probabilities to nodes in neighbourhood
             for _, neighbour_nums_list in layer_neighbour_num_dict.items():
@@ -74,14 +80,20 @@ def compute_mixture_weights(GraphList, TRACK_STATE_KEY):
         
         for node in nodes:    
             node_num = node[0]
-            node_degree = query_node_degree_in_edges(subGraph, node_num)
-            mixture_weight = 1/node_degree
+            node_attr = node[1]
 
-            track_state_estimates = node[1][TRACK_STATE_KEY]
-            for neighbour_num, v in track_state_estimates.items():
-                v['mixture_weight'] = mixture_weight
-                # add as an edge attribute - useful in community detection
-                subGraph[neighbour_num][node_num]['mixture_weight'] = mixture_weight
+            if TRACK_STATE_KEY in node_attr.keys():
+                track_state_estimates = node_attr[TRACK_STATE_KEY]
+                # TODO: need to check active edge connections here to determine the mixture weight
+                node_degree = len(track_state_estimates)
+                # node_degree = query_node_degree_in_edges(subGraph, node_num)
+                mixture_weight = 1/node_degree
+
+                track_state_estimates = node_attr[TRACK_STATE_KEY]
+                for neighbour_num, v in track_state_estimates.items():
+                    v['mixture_weight'] = mixture_weight
+                    # add as an edge attribute - useful in community detection
+                    # subGraph[neighbour_num][node_num]['mixture_weight'] = mixture_weight
 
 # used in extrapolate_merged_states
 def calculate_side_norm_factor(subGraph, node, updated_track_states):
@@ -93,6 +105,7 @@ def calculate_side_norm_factor(subGraph, node, updated_track_states):
     left_nodes, right_nodes = [], []
     left_coords, right_coords = [], []
 
+    print("Node num: ", node_num)
     print("updated track states dictionary:")
     pprint.pprint(updated_track_states)
     for neighbour_num, updated_track_states_dict in updated_track_states.items():
@@ -101,13 +114,14 @@ def calculate_side_norm_factor(subGraph, node, updated_track_states):
         # neighbour_x_layer = subGraph.nodes[neighbour_num]['GNN_Measurement'].x
 
         # only calculate for activated edges
-        if subGraph[neighbour_num][node_num]['activated'] == 1:
-            if neighbour_x_layer < node_x_layer: 
-                left_nodes.append(neighbour_num)
-                left_coords.append(neighbour_x_layer)
-            else: 
-                right_nodes.append(neighbour_num)
-                right_coords.append(neighbour_x_layer)
+        if (neighbour_num, node_num) in subGraph.edges():
+            if subGraph[neighbour_num][node_num]['activated'] == 1:
+                if neighbour_x_layer < node_x_layer: 
+                    left_nodes.append(neighbour_num)
+                    left_coords.append(neighbour_x_layer)
+                else: 
+                    right_nodes.append(neighbour_num)
+                    right_coords.append(neighbour_x_layer)
     
     # store norm factor as node attribute
     left_norm = len(list(set(left_coords)))
@@ -128,10 +142,13 @@ def calculate_side_norm_factor(subGraph, node, updated_track_states):
 # used in extrapolate_merged_states
 def reweight(subGraphs, track_state_estimates_key):
     print("Reweighting Gaussian mixture...")
-    perc_correct_outliers_detected = 0
-    total_outliers = 0
-    
     reweight_threshold = 0.1
+
+    # variables used in confusion matrix
+    correct_outliers_detected = 0
+    total_outliers = 0
+    correct_active_edges_detected = 0
+    total_active_edges = 0
 
     for subGraph in subGraphs:
         if len(subGraph.nodes()) == 1: continue
@@ -141,49 +158,71 @@ def reweight(subGraphs, track_state_estimates_key):
             node_attr = node[1]
 
             if track_state_estimates_key in node_attr.keys():
-                # print("\nReweighting node:", node_num)
                 updated_track_states = node_attr[track_state_estimates_key]
-                
                 calculate_side_norm_factor(subGraph, node, updated_track_states)
                 
                 # compute reweight denominator
                 reweight_denom = 0
                 for neighbour_num, updated_state_dict in updated_track_states.items():
-                    if subGraph[neighbour_num][node_num]['activated'] == 1:
-                        reweight_denom += (updated_state_dict['mixture_weight'] * updated_state_dict['likelihood'])
+                    if (neighbour_num, node_num) in subGraph.edges():
+                        if subGraph[neighbour_num][node_num]['activated'] == 1:
+                            reweight_denom += (updated_state_dict['mixture_weight'] * updated_state_dict['likelihood'])
                 
                 # compute reweight
                 for neighbour_num, updated_state_dict in updated_track_states.items():
-                    if subGraph[neighbour_num][node_num]['activated'] == 1:
-                        reweight = (updated_state_dict['mixture_weight'] * updated_state_dict['likelihood'] * updated_state_dict['prior']) / reweight_denom
-                        reweight /= updated_state_dict['lr_layer_norm']
-                        updated_state_dict['mixture_weight'] = reweight
+                    if (neighbour_num, node_num) in subGraph.edges():
+                        if subGraph[neighbour_num][node_num]['activated'] == 1:
+                            reweight = (updated_state_dict['mixture_weight'] * updated_state_dict['likelihood'] * updated_state_dict['prior']) / reweight_denom
+                            reweight /= updated_state_dict['lr_layer_norm']
+                            updated_state_dict['mixture_weight'] = reweight
 
-                        # add as edge attribute
-                        subGraph[neighbour_num][node_num]['mixture_weight'] = reweight
+                            # add as edge attribute
+                            subGraph[neighbour_num][node_num]['mixture_weight'] = reweight
 
-                        # reactivate/deactivate edges based on the reweight threhsold
-                        if reweight < reweight_threshold:
-                            subGraph[neighbour_num][node_num]['activated'] = 0
-                            print("deactivating edge: (", neighbour_num, ",", node_num, ")")
-
-                            # precision in outlier masking
                             node_truth_particle = subGraph.nodes[node_num]['truth_particle']
                             neighbour_truth_particle = subGraph.nodes[neighbour_num]['truth_particle']
-                            if node_truth_particle != neighbour_truth_particle:
-                                perc_correct_outliers_detected += 1
-                            total_outliers += 1
 
-                        else:
-                            subGraph[neighbour_num][node_num]['activated'] = 1
-                            print("reactivating edge: (", neighbour_num, ",", node_num, ")")
+                            # reactivate/deactivate edges based on the reweight threhsold
+                            if reweight < reweight_threshold:
+                                subGraph[neighbour_num][node_num]['activated'] = 0
+                                print("deactivating edge: (", neighbour_num, ",", node_num, ")")
+                                # precision in outlier masking & for confusion matrix
+                                if node_truth_particle != neighbour_truth_particle:
+                                    correct_outliers_detected += 1
+                                total_outliers += 1
+
+                            else:
+                                subGraph[neighbour_num][node_num]['activated'] = 1
+                                print("reactivating edge: (", neighbour_num, ",", node_num, ")")
+                                # confusion matrix
+                                if node_truth_particle == neighbour_truth_particle: 
+                                    correct_active_edges_detected = 1
+                                total_active_edges = 1
 
 
     print("Precision of outlier masking in reweight section:")
-    print("numerator:", perc_correct_outliers_detected, "denominator:", total_outliers)
+    print("numerator:", correct_outliers_detected, "denominator:", total_outliers)
     if total_outliers != 0:
-        perc_correct_outliers_detected = (perc_correct_outliers_detected / total_outliers) * 100
+        perc_correct_outliers_detected = (correct_outliers_detected / total_outliers) * 100
         print("Percentage of correct outliers detected:", perc_correct_outliers_detected)
+
+        print("\nPRINTING ALGORITHM METRICS:")
+        tp = correct_outliers_detected
+        fp = total_outliers - correct_outliers_detected
+        tn = correct_active_edges_detected
+        fn = total_active_edges - correct_active_edges_detected
+        print("true positive number: ", tp, " false positive number: ", fp)
+        print("true negative number: ", tn, " false negative number: ", fn)
+        precision = tp / (tp + fp)
+        recall = tp / (tp + fn)
+        print("Precision:", precision, " Recall: ", recall)
+        print("Normalised confusion matrix")
+        tpr = recall
+        fnr = fn / (tp + fn)
+        fpr = fp / (tn + fp)
+        tnr = tn / (tn + fp)
+        print("TPR: ", tpr, " FNR: ", fnr, "\nFPR: ", fpr, " TNR: ", tnr)
+        print()
 
 
 
@@ -196,23 +235,23 @@ def compute_3d_distance(coord1, coord2):
 
 
 
-def compute_track_state_estimates(GraphList):
-    # NOTE: sigmaO - error at the origin, different to sigma0 rms error in xy plane
-    sigmaO = 4.0        # 4.0mm larger error in m_O due to beamspot error and error at the origin
-    sigmaA = 0.1        # 0.1mm
-    sigmaB = 0.1        # 0.1mm
-    sigma_y = 0.1
+def compute_track_state_estimates(GraphList, sigma0xy, sigma0rz, sigma0rz2):
+    # NOTE: these sigmas are errors in the parabolic parameter model approximation
+    # sigmaO - error at the origin, different to sigma0xy rms error in xy plane
+    # sigmaA - error in parabolic parameter b (same as sigma0xy error in xy plane)
+    # sigmaB - error in parabolic parameter c (same as sigma0xy error in xy plane)
+    sigmaO = 4.0             # dev value 4.0mm larger error in m_O due to beamspot error and error at the origin
+    sigmaA = sigma0xy        # dev value 0.1mm
+    sigmaB = sigma0xy        # dev value 0.1mm
     
     # default error for barrel located node
-    sigma_r = 0.1
-    sigma_z = 0.5
+    sigma_r = sigma0rz            # dev value 0.1mm
+    sigma_z = sigma0rz2           # dev value 0.5mm
     
+    # edge covariance matrix for xy plane
     S = np.array([  [sigmaO**2,         0,                  0], 
                     [0,                 sigmaA**2,          0], 
-                    [0,                 0,                  sigmaB**2]])        # edge covariance matrix
-    
-    # var_ms_new_barrel = []
-    # var_ms_new_endcap = []
+                    [0,                 0,                  sigmaB**2]])
 
     m_O = 0.0   # measurements for parabolic model
     m_A = 0.0
@@ -220,8 +259,6 @@ def compute_track_state_estimates(GraphList):
         for node in G.nodes():
             gradients_xy = []
             gradients_zr = []
-            theta_xy = []
-            theta_zr = []
             del_tau = []
             track_state_estimates = {}
             
@@ -232,12 +269,10 @@ def compute_track_state_estimates(GraphList):
             coords = [(0.0, 0.0), m_node_xy]
             keys = [-1, node]
 
-            # if node in endcap, then reduce z error: used in calc of error in tau = dz/dr
+            # if node in endcap:
             if np.abs(m_node_zr[0]) >= 600.0: 
-                sigma_z = 0.1
-                sigma_r = 0.5
-            del_dz = sigma_z
-            del_dr = sigma_r
+                sigma_z = sigma0rz
+                sigma_r = sigma0rz2
 
             # all neighbour coords get appended
             for neighbor in set(nx.all_neighbors(G, node)):
@@ -246,7 +281,7 @@ def compute_track_state_estimates(GraphList):
                 m_neighbour_zr = (neighbour_gnn.z, neighbour_gnn.r)
                 coords.append(m_neighbour_xy)
                 keys.append(neighbor)
-                
+
                 # calculate gradient - used in clustering
                 y1 = m_node_xy[1]
                 y2 = m_neighbour_xy[1]
@@ -262,19 +297,36 @@ def compute_track_state_estimates(GraphList):
                 z1 = m_node_zr[0]
                 z2 = m_neighbour_zr[0]
                 dz = z2 - z1
-                grad_zr = dz / dr
+                grad_zr = dz / dr                   # tau = dz / dr
                 gradients_zr.append(grad_zr)        # dz_dr gradient (inverse gradient dz / dr)
                 # calculate theta
                 angle_xy = atan2(dy, dx)
                 angle_zr = atan2(dz, dr)
-                theta_xy.append(angle_xy)
-                theta_zr.append(angle_zr)
-
+                
+                # default error for barrel located neighbour
+                sigma_r_neighbour = sigma0rz            # dev value 0.1mm
+                sigma_z_neighbour = sigma0rz2           # dev value 0.5mm
+                # if neighbour in endcap:
+                if np.abs(m_node_zr[0]) >= 600.0: 
+                    sigma_z_neighbour = sigma0rz
+                    sigma_r_neighbour = sigma0rz2
+                
+                # jacobian for covariance of delta tau
+                j1 = 1/(r1 - r2)
+                j2 = -1/(r1 - r2)
+                j3 = -(z1 - z2)/(r1 - r2)**2
+                j4 = (z1 - z2)/(r1 - r2)**2
+                J = np.array([j1, j2, j3, j4])
+                
+                # edge covariance matrix for rz plane
+                S2 = np.array([ [sigma_z**2, 0, 0, 0],
+                                [0, sigma_z_neighbour**2, 0, 0],
+                                [0, 0, sigma_r**2, 0],
+                                [0, 0, 0, sigma_r_neighbour**2]])
+                
                 # error in tau
-                dt = grad_zr * np.sqrt((del_dz / dz)**2 + (del_dr / dr)**2)
-                if dz == 0:
-                    dt = grad_zr * np.sqrt((del_dr / dr)**2)
-                del_tau.append(dt)
+                cov_tau = J.dot(S2).dot(J.T)
+                del_tau.append(cov_tau)
             
             # [neighbour1, neighbour2, ..., node, (0.0, 0.0)]
             coords.reverse()
@@ -367,20 +419,9 @@ def compute_track_state_estimates(GraphList):
             # (mean, variance) of edge orientation - needed for KL distance in clustering
             G.nodes[node]['xy_edge_gradient_mean_var'] = (np.mean(gradients_xy), np.var(gradients_xy))
             G.nodes[node]['zr_edge_gradient_mean_var'] = (np.mean(gradients_zr), np.var(gradients_zr))
-            # # (mean, variance) of edge theta - needed for KL distance in clustering
-            # G.nodes[node]['xy_edge_theta_mean_var'] = (np.mean(theta_xy), np.var(theta_xy))
-            # G.nodes[node]['zr_edge_theta_mean_var'] = (np.mean(theta_zr), np.var(theta_zr))
             # store the transformation information - used in extrapolation
             G.nodes[node]['angle_of_rotation'] = azimuth_angle
             G.nodes[node]['translation'] = (x_A, y_A)
-    
-    # # output the new sigma_ms values
-    # with open('var_ms_new_endcap.txt', 'w') as fp:
-    #     for item in var_ms_new_endcap:
-    #         fp.write("%s\n" % item)
-    # with open('var_ms_new_barrel.txt', 'w') as fp:
-    #     for item in var_ms_new_barrel:
-    #         fp.write("%s\n" % item)
 
     return GraphList
 
@@ -395,7 +436,7 @@ def __get_particle_id(row, df):
 
 
 
-def construct_graph(graph, nodes, edges, truth, sigma0):
+def construct_graph(graph, nodes, edges, truth):
     # TODO: 'truth_particle' attribute needs to be updated - clustering calculation uses 1 particle id, currently needs updating
     # group truth particle ids to node index
     
@@ -427,7 +468,7 @@ def construct_graph(graph, nodes, edges, truth, sigma0):
         
         hit_dissociation = grouped_hit_id.loc[grouped_hit_id['node_idx'] == node_idx]['hit_dissociation'].item()
         
-        gm = gnn.GNN_Measurement(x, y, z, r, sigma0, truth_particle=truth_particle, n=node_idx)
+        gm = gnn.GNN_Measurement(x, y, z, r, truth_particle=truth_particle, n=node_idx)
         graph.add_node(node_idx, GNN_Measurement=gm, 
                             xy=(x, y),                              # all attributes here for development only - can be abstracted away in GNN_Measurement
                             zr=(z, r),

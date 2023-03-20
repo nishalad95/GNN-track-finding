@@ -4,21 +4,26 @@
 # VARIABLES
 # ---------------------------------------------------------------------------------------------
 # iterations
-START=3
+START=1
 END=3
+
+# rms measurement errors
+SIGMA0XY=0.3            # xy plane
+SIGMA0RZ=0.4            # rz plane
+SIGMA0RZ2=0.5           # rz plane orientation of detector layer
 
 # event conversion and track simulation
 min_volume=7            # minimum volume number to analyse (inclusive) - used also in effciency calc
 max_volume=9            # maximum volume number to analyse (inclusive) - used also in efficiency calc
-SIGMA0=0.1              # IMPORTANT: sigma0 is used in the extraction KF only, r.m.s measurement error in xy plane
-# SIGMA_MS=0.01         # 10^-4 multiple scattering error
+# SIGMA_MS=0.01         # multiple scattering error dynamic - implemented with Moliere theory, dev value 10^-4
 ROOTDIR=src/output      # output directory to store GNN algorithm output
 
 # clustering
 LUT=learn_KL_linear_model/output/empvar/empvar.lut  # LUT file for KL distance calibration
 
 # extrapolation
-c=0.25                     #  initial chi2 distance acceptance threshold for extrapolated states
+# c=0.25                   #  initial chi2 distance acceptance threshold for extrapolated states
+c=2.0
 
 # extracting track candidates
 p=0.01                  # p-value acceptance level for good track candidate extraction - currently applied in xy plane
@@ -39,21 +44,21 @@ time=$SECONDS
 execution_times=($time)
 
 
-# # Comment out for debugging when event-to-network conversion is not needed!!
-# # -----------------------------------------------------
-# # Event conversion into graph network
-# # -----------------------------------------------------
-# mkdir -p $ROOTDIR
-# echo "----------------------------------------------------"
-# echo "Running conversion of generated events to GNN..."
-# echo "----------------------------------------------------"
-# INPUT=$ROOTDIR/track_sim/network/
-# mkdir -p $INPUT
-# EVENT_NETWORK=src/trackml_mod/event_network/minCurv_0.3_800
-# python src/trackml_mod/event_conversion.py -o $INPUT -e $SIGMA0 -n $EVENT_NETWORK -t $EVENT_TRUTH -a $min_volume -z $max_volume
-# # stages+=("event_conversion")
-# # time=$SECONDS
-# # execution_times+=($time)
+# Comment out for debugging when event-to-network conversion is not needed!!
+# -----------------------------------------------------
+# Event conversion into graph network
+# -----------------------------------------------------
+mkdir -p $ROOTDIR
+echo "----------------------------------------------------"
+echo "Running conversion of generated events to GNN..."
+echo "----------------------------------------------------"
+INPUT=$ROOTDIR/track_sim/network/
+mkdir -p $INPUT
+EVENT_NETWORK=src/trackml_mod/event_network/minCurv_0.3_800
+python src/trackml_mod/event_conversion.py -o $INPUT -n $EVENT_NETWORK -t $EVENT_TRUTH -a $min_volume -z $max_volume -e $SIGMA0XY -r $SIGMA0RZ -m $SIGMA0RZ2
+# stages+=("event_conversion")
+# time=$SECONDS
+# execution_times+=($time)
 
 
 # echo "------------------------------------------------------"
@@ -66,7 +71,7 @@ execution_times=($time)
 # mkdir -p $CANDIDATES
 # mkdir -p $REMAINING
 # mkdir -p $FRAGMENTS
-# python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -e $SIGMA0 -n $n -s $s -t $t -a 0
+# python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -e $SIGMA0XY -z $SIGMA0RZ -n $n -s $s -t $t -a 0
 # 
 
 
@@ -74,12 +79,12 @@ execution_times=($time)
 # # -----------------------------------------------------
 # # Begin the iterations....
 # # -----------------------------------------------------
-# for (( i=$START; i<=$END; i++ ))
+for (( i=$START; i<=$END; i++ ))
 
 
-# testing iteration 3: clusterisation on updated states
-INPUT=$ROOTDIR/iteration_2/remaining/
-for (( i=3; i<=3; i++ ))
+# # # testing iteration by iteration
+# INPUT=$ROOTDIR/iteration_1/remaining/
+# for (( i=2; i<=3; i++ ))
 
 
     do
@@ -93,7 +98,7 @@ for (( i=3; i<=3; i++ ))
             echo "----------------------------------------------------"
             prev_duration=$SECONDS
             # chi2 and kl thresholds - trained (loose cut)
-            python src/clustering/clustering.py -i $INPUT -o $OUTPUT -d track_state_estimates -c 1.0 -k 2.0 -l $LUT -t $i
+            python src/clustering/clustering.py -i $INPUT -o $OUTPUT -d track_state_estimates -c 1.0 -k 2.0 -l $LUT -t $i -z $SIGMA0RZ -m $SIGMA0RZ2
             # time it!
             # stages+=("clustering")
             # time=$SECONDS
@@ -105,9 +110,7 @@ for (( i=3; i<=3; i++ ))
             echo "---------------------------------------------------"
             echo "Using chisq distance cut of: ${c}"
             prev_duration=$SECONDS
-            python src/extrapolate/extrapolate_merged_states.py -i $INPUT -o $OUTPUT -c $c
-            # let c=$c*0.5   # tighter cut each time
-
+            python src/extrapolate/extrapolate_merged_states.py -i $INPUT -o $OUTPUT -c $c -e $SIGMA0XY -z $SIGMA0RZ -m $SIGMA0RZ2
             # time it!
             # stages+=("extrapolation")
             # time=$SECONDS
@@ -118,7 +121,7 @@ for (( i=3; i<=3; i++ ))
             echo "Iteration ${i}: GMR via clusterisation"
             echo "----------------------------------------------------"
             prev_duration=$SECONDS
-            python src/clustering/clustering.py -i $INPUT -o $OUTPUT -d updated_track_states -c 1000 -k 100 -l $LUT -t $i
+            python src/clustering/clustering.py -i $INPUT -o $OUTPUT -d updated_track_states -c 1000 -k 100 -l $LUT -t $i -z $SIGMA0RZ -m $SIGMA0RZ2
 
         fi
 
@@ -137,7 +140,16 @@ for (( i=3; i<=3; i++ ))
             let num=$i-1
             cp -r $ROOTDIR/iteration_$num/candidates/ $CANDIDATES
         fi
-        python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -e $SIGMA0 -n $n -s $s -t $t -a $i
+        python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -n $n -s $s -t $t -a $i -e $SIGMA0XY -z $SIGMA0RZ
+        
+        echo "------------------------------------------------------"
+        echo "Metadata Update"
+        echo "------------------------------------------------------"
+        if (( $i % 2 == 0 ))
+        then
+            python src/update/remove_state_metadata.py -r $REMAINING
+        fi
+        
         INPUT=$REMAINING
 
         # time it!
@@ -165,7 +177,6 @@ echo "----------------------------------------------------"
 
 # plot all candidates
 python src/extract/plot_all_extracted_candidates.py -i $END
-# python src/extract/plot_all_extracted_candidates.py -i 0
 
 # time it!
 # stages+=("plot_all_candidates")

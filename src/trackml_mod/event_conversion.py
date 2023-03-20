@@ -16,17 +16,21 @@ def main():
 
     parser = argparse.ArgumentParser(description='Convert trackml csv to GNN')
     parser.add_argument('-o', '--outputDir', help="Full directory path of where to save graph networks")
-    parser.add_argument('-e', '--error', help="rms of track position measurements")
     parser.add_argument('-n', '--eventNetwork', help="Full directory path to event nodes, edges & nodes-to-hits")
     parser.add_argument('-t', '--eventTruth', help="Full directory path to event truth from TrackML")
     parser.add_argument('-a', '--min_volume', help="Minimum volume integer number in TrackML model to consider")
     parser.add_argument('-z', '--max_volume', help="Maximum volume integer number in TrackML model to consider")
+    parser.add_argument('-e', '--sigma0xy', help="sigma0 rms of track position measurements in xy plane")
+    parser.add_argument('-r', '--sigma0rz', help="sigma0 rms of track position measurements in rz plane")
+    parser.add_argument('-m', '--sigma0rz2', help="sigma0 rms of track position measurements in rz plane - orientation of barrel and endcap layer")
 
     args = parser.parse_args()
     outputDir = args.outputDir
-    sigma0 = float(args.error)                   # r.m.s measurement error
     min_volume = int(args.min_volume)
     max_volume = int(args.max_volume)
+    sigma0xy = float(args.sigma0xy)
+    sigma0rz = float(args.sigma0rz)
+    sigma0rz2 = float(args.sigma0rz2)
 
     # TODO: the following will get moved to .sh file
     # event_1 network corresponds to event000001000 truth
@@ -50,7 +54,7 @@ def main():
     # create a graph network
     pixel_graph_network = nx.DiGraph()
     print("here")
-    pixel_graph_network = h.construct_graph(pixel_graph_network, nodes, edges, truth, sigma0)
+    pixel_graph_network = h.construct_graph(pixel_graph_network, nodes, edges, truth)
     print("Graph network info before processing:")
     print("Number of edges:", pixel_graph_network.number_of_edges())
     print("Number of nodes:", pixel_graph_network.number_of_nodes())
@@ -60,9 +64,7 @@ def main():
     print("Time taken in event_conversion construct graph: "+ str(total_time))
     start = time.time()
 
-    # pixel_graph_network = nx.Graph(pixel_graph_network[0])
     pixel_graph_network = nx.DiGraph(pixel_graph_network)
-    # pixel_graph_network = nx.to_directed(pixel_graph_network)
 
     end = time.time()
     total_time = end - start
@@ -78,7 +80,7 @@ def main():
     start = time.time()
     
     # compute track state estimates, priors and weights
-    subGraphs = h.compute_track_state_estimates(subGraphs)
+    subGraphs = h.compute_track_state_estimates(subGraphs, sigma0xy, sigma0rz, sigma0rz2)
     h.initialize_edge_activation(subGraphs)
     h.compute_prior_probabilities(subGraphs, 'track_state_estimates')
     h.compute_mixture_weights(subGraphs, 'track_state_estimates')

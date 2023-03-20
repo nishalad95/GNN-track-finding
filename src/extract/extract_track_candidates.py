@@ -202,16 +202,16 @@ def calc_parabola_params(x1, y1, x2, y2, x3, y3):
 
 
 # KF track fit in xy plane and zr plane
-def KF_track_fit_moliere(sigma0, coords):
+def KF_track_fit_moliere(sigma0xy, sigma0rz, coords):
     # initialize 3D Kalman Filter for xy plane
     yf = coords[0][1]                               # observed y (coords is a list: [(x, y, z, r), (), ...])
     f = KalmanFilter(dim_x=3, dim_z=1)
     f.x = np.array([yf, 0., 0.])                    # X state vector [yf, dy/dx, w] = [coordinate, track inclination, integrated OU]
     f.H = np.array([[1., 0., 0.]])                  # H measurement matrix
-    f.P = np.array([[sigma0**2,  0., 0.],     
+    f.P = np.array([[sigma0xy**2,  0., 0.],     
                     [0.,         1., 0.],
                     [0.,         0., 1.]])          # P covariance
-    f.R = sigma0**2                                 # R measuremnt noise
+    f.R = sigma0xy**2                                 # R measuremnt noise
     saver = common.Saver(f)
     chi2_dists = []
 
@@ -220,9 +220,9 @@ def KF_track_fit_moliere(sigma0, coords):
     g = KalmanFilter(dim_x=2, dim_z=1)
     g.x = np.array([zf, 0.])                   
     g.H = np.array([[1., 0.]])                      # H measurement matrix
-    g.P = np.array([[sigma0**2,  0.],     
+    g.P = np.array([[sigma0rz**2,  0.],     
                     [0.,         1000.]])           # P covariance
-    g.R = sigma0**2                                 # R measuremnt noise
+    g.R = sigma0rz**2                                 # R measuremnt noise
     g_saver = common.Saver(g)
     g_chi2_dists = []
 
@@ -353,7 +353,8 @@ def main():
     parser.add_argument('-p', '--pval', help='chi-squared track candidate acceptance level')
     parser.add_argument('-s', '--separation_3d_threshold', help="3d distance cut between close proximity nodes, used in node merging")
     parser.add_argument('-t', '--threshold_distance_node_merging', help="threshold_distance_node_merging")
-    parser.add_argument('-e', '--error', help="sigma0 rms of track position measurements")
+    parser.add_argument('-e', '--sigma0xy', help="sigma0 rms of track position measurements in xy plane")
+    parser.add_argument('-z', '--sigma0rz', help="sigma0 rms of track position measurements in rz plane")
     parser.add_argument('-n', '--numhits', help="minimum number of hits for good track candidate")
     parser.add_argument('-a', '--iteration', help="iteration number of algorithm")
     args = parser.parse_args()
@@ -364,7 +365,8 @@ def main():
     remainingDir = args.remain
     fragmentsDir = args.fragments
     track_acceptance = float(args.pval)
-    sigma0 = float(args.error)
+    sigma0xy = float(args.sigma0xy)
+    sigma0rz = float(args.sigma0rz)
     subgraph_path = "_subgraph.gpickle"
     fragment = int(args.numhits)
     separation_3d_threshold = float(args.separation_3d_threshold)
@@ -426,7 +428,7 @@ def main():
                     coords = rotate_track(coords, separation_3d_threshold)
 
                     # KF track fit - Moliere theory multiple scattering
-                    pval, pval_zr = KF_track_fit_moliere(sigma0, coords)
+                    pval, pval_zr = KF_track_fit_moliere(sigma0xy, sigma0rz, coords)
                     if (pval >= track_acceptance) and (pval_zr >= track_acceptance):
                         print("Good KF fit, p-value:", pval, "\n(x,y,z,r):", coords)
                         extracted.append(candidate)
@@ -485,7 +487,7 @@ def main():
 
     # # plot and save the remaining subgraphs to be further processed
     # h.plot_subgraphs(remaining, remainingDir, node_labels=True, save_plot=True, title="Remaining candidates")
-    
+
     # save remaining and track fragments
     for i, sub in enumerate(remaining):
         h.save_network(remainingDir, i, sub)
