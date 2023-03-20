@@ -9,87 +9,103 @@ from utilities import helper as h
 import pprint
 import os
 import glob
-
-
-def print_graph_stats(inputDir):
-    # read in subgraph data
-    subgraph_path = "_subgraph.gpickle"
-    subGraphs = []
-    os.chdir(".")
-    for file in glob.glob(inputDir + "*" + subgraph_path):
-        sub = nx.read_gpickle(file)
-        subGraphs.append(sub)
-
-    num_nodes = 0
-    num_edges = 0
-    for subGraph in subGraphs:
-        num_nodes += len(subGraph.nodes())
-        num_edges += len(subGraph.edges())
-    print("num_nodes: ", num_nodes)
-    print("node_edges: ", num_edges)
+import time
 
 
 def main():
 
-    # TODO: command line args, change these into command line arguments with full path directory
     parser = argparse.ArgumentParser(description='Convert trackml csv to GNN')
     parser.add_argument('-o', '--outputDir', help="Full directory path of where to save graph networks")
-    # parser.add_argument('-e', '--error', help="rms of track position measurements")
-    parser.add_argument('-m', '--sigma_ms', help="uncertainty due to multiple scattering, process noise")
     parser.add_argument('-n', '--eventNetwork', help="Full directory path to event nodes, edges & nodes-to-hits")
     parser.add_argument('-t', '--eventTruth', help="Full directory path to event truth from TrackML")
-    
-    # TODO: temporary, only considering endcap volume 7
-    max_volume_region = 8000 # first consider endcap volume 7 only
+    parser.add_argument('-a', '--min_volume', help="Minimum volume integer number in TrackML model to consider")
+    parser.add_argument('-z', '--max_volume', help="Maximum volume integer number in TrackML model to consider")
+    parser.add_argument('-e', '--sigma0xy', help="sigma0 rms of track position measurements in xy plane")
+    parser.add_argument('-r', '--sigma0rz', help="sigma0 rms of track position measurements in rz plane")
+    parser.add_argument('-m', '--sigma0rz2', help="sigma0 rms of track position measurements in rz plane - orientation of barrel and endcap layer")
 
     args = parser.parse_args()
     outputDir = args.outputDir
-    # sigma0 = float(args.error)         # r.m.s measurement error
-    sigma_ms = float(args.sigma_ms)                # process error - due to multiple scattering
-    
+    min_volume = int(args.min_volume)
+    max_volume = int(args.max_volume)
+    sigma0xy = float(args.sigma0xy)
+    sigma0rz = float(args.sigma0rz)
+    sigma0rz2 = float(args.sigma0rz2)
+
     # TODO: the following will get moved to .sh file
     # event_1 network corresponds to event000001000 truth
     event_network = args.eventNetwork + "/event_1_filtered_graph_"
     event_truth = args.eventTruth + "/event000001000-"
     event_truth_file = event_truth + "full-mapping-minCurv-0.3-800.csv"
 
+    start = time.time()
+
     # load truth information & metadata on events
-    nodes, edges = h.load_nodes_edges(event_network, max_volume_region)
-    # h.load_save_truth(event_network, event_truth, event_truth_file) #  only need to execute once
+    nodes, edges = h.load_nodes_edges(event_network, min_volume, max_volume)
+    # NOTE: only need to execute the following once - aggregating all truth information into 1 file
+    # h.load_save_truth(event_network, event_truth, event_truth_file)
     truth = pd.read_csv(event_truth_file)
 
+    end = time.time()
+    total_time = end - start
+    print("Time taken in event_conversion initial load: "+ str(total_time))
+    start = time.time()
+
     # create a graph network
-    endcap_graph = nx.DiGraph()
-    endcap_graph = h.construct_graph(endcap_graph, nodes, edges, truth, sigma_ms)
+    pixel_graph_network = nx.DiGraph()
+    print("here")
+    pixel_graph_network = h.construct_graph(pixel_graph_network, nodes, edges, truth)
+    print("Graph network info before processing:")
+    print("Number of edges:", pixel_graph_network.number_of_edges())
+    print("Number of nodes:", pixel_graph_network.number_of_nodes())
 
-    print("Endcap volume 7 graph network:")
-    print("Number of edges:", endcap_graph.number_of_edges())
-    print("Number of nodes:", endcap_graph.number_of_nodes())
+    end = time.time()
+    total_time = end - start
+    print("Time taken in event_conversion construct graph: "+ str(total_time))
+    start = time.time()
 
-    # compute track state estimates, extract subgraphs: out-of-the-box CCA
-    endcap_graph = h.compute_track_state_estimates([endcap_graph])
-    endcap_graph = nx.Graph(endcap_graph[0])
-    endcap_graph = nx.to_directed(endcap_graph)
+    pixel_graph_network = nx.DiGraph(pixel_graph_network)
 
-    # temporary: can remove later
-    print("Number of edges again:", endcap_graph.number_of_edges())
-    print("Number of nodes again:", endcap_graph.number_of_nodes())
+    end = time.time()
+    total_time = end - start
+    print("Time taken in event_conversion to_directed: "+ str(total_time))
+    start = time.time()
 
-    subGraphs = [endcap_graph.subgraph(c).copy() for c in nx.weakly_connected_components(endcap_graph)]
+    # extract subgraphs: out-of-the-box CCA
+    subGraphs = [pixel_graph_network.subgraph(c).copy() for c in nx.weakly_connected_components(pixel_graph_network)]
+
+    end = time.time()
+    total_time = end - start
+    print("Time taken in event_conversion CCA: "+ str(total_time))
+    start = time.time()
     
-    subGraphs = h.compute_track_state_estimates(subGraphs)
+    # compute track state estimates, priors and weights
+    subGraphs = h.compute_track_state_estimates(subGraphs, sigma0xy, sigma0rz, sigma0rz2)
     h.initialize_edge_activation(subGraphs)
     h.compute_prior_probabilities(subGraphs, 'track_state_estimates')
-    h.compute_mixture_weights(subGraphs)
+    h.compute_mixture_weights(subGraphs, 'track_state_estimates')
+
+    # add node degree as attribute
+    for s in subGraphs:
+        for node_num, _ in s.nodes(data=True):
+            degree = h.query_node_degree_in_edges(s, node_num)
+            s.nodes[node_num]['degree'] = degree
+
+    end = time.time()
+    total_time = end - start
+    print("Time taken in event_conversion compute track state estimates: "+ str(total_time))
+    start = time.time()
 
     print("Number of subgraphs..", len(subGraphs))
-    h.plot_subgraphs(subGraphs, outputDir, title="Nodes & Edges subgraphs from TrackML generated data")
     
     # save the subgraphs
     for i, sub in enumerate(subGraphs):
         h.save_network(outputDir, i, sub)
 
-    print_graph_stats(outputDir)
+    end = time.time()
+    total_time = end - start
+    print("Time taken in event_conversion write to file: "+ str(total_time))
+    start = time.time()
 
 
 

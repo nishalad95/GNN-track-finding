@@ -3,106 +3,131 @@
 # ---------------------------------------------------------------------------------------------
 # VARIABLES
 # ---------------------------------------------------------------------------------------------
+# iterations
+START=1
+END=3
 
-# track sim
-# SIGMA0=0.1            # IMPORTANT: sigma0 is used in the extraction KF only, r.m.s measurement error in xy plane
-SIGMA_MS=0.0001         # 10^-4 multiple scattering error
+# rms measurement errors
+SIGMA0XY=0.3            # xy plane
+SIGMA0RZ=0.4            # rz plane
+SIGMA0RZ2=0.5           # rz plane orientation of detector layer
+
+# event conversion and track simulation
+min_volume=7            # minimum volume number to analyse (inclusive) - used also in effciency calc
+max_volume=9            # maximum volume number to analyse (inclusive) - used also in efficiency calc
+# SIGMA_MS=0.01         # multiple scattering error dynamic - implemented with Moliere theory, dev value 10^-4
 ROOTDIR=src/output      # output directory to store GNN algorithm output
 
 # clustering
-LUT=learn_KL_linear_model/output/empvar/empvar_relaxed.lut   # LUT file for KL distance calibration
+LUT=learn_KL_linear_model/output/empvar/empvar.lut  # LUT file for KL distance calibration
 
 # extrapolation
-c=20                     #  initial chi2 distance acceptance threshold for extrapolated states
+# c=0.25                   #  initial chi2 distance acceptance threshold for extrapolated states
+c=2.0
 
 # extracting track candidates
 p=0.01                  # p-value acceptance level for good track candidate extraction - currently applied in xy plane
 n=4                     # minimum number of hits for good track candidate acceptance (>=n)
 s=10                    # 3d distance threshold for close proximity nodes, used in KF rotatation if nodes too close together
-t=4.0                   # threshold distance node merging in extraction
+# used in node-merging in extraction for close proximity nodes, but this will change due to PDA
+t=8.0                   # threshold distance node merging in extraction
 
+EVENT_TRUTH=src/trackml_mod/event_truth
 # ----------------------------------------------------------------------------------------------
 
 
-# ----------------------------------------------------------------------------------------------
-# this section is commented out during debugging - no need to regenerate the event conversion into graph network
-# ----------------------------------------------------------------------------------------------
-# -----------------------------
-# Track conversion
-# -----------------------------
+# -----------------------------------------------------
+# Profiling setup
+# -----------------------------------------------------
+stages=("start_time")
+time=$SECONDS
+execution_times=($time)
+
+
+# Comment out for debugging when event-to-network conversion is not needed!!
+# -----------------------------------------------------
+# Event conversion into graph network
+# -----------------------------------------------------
 mkdir -p $ROOTDIR
-echo "-------------------------------------------------"
+echo "----------------------------------------------------"
 echo "Running conversion of generated events to GNN..."
-echo "-------------------------------------------------"
-start_conversion=$SECONDS
+echo "----------------------------------------------------"
 INPUT=$ROOTDIR/track_sim/network/
 mkdir -p $INPUT
 EVENT_NETWORK=src/trackml_mod/event_network/minCurv_0.3_800
-EVENT_TRUTH=src/trackml_mod/event_truth
-python src/trackml_mod/event_conversion.py -o $INPUT -m $SIGMA_MS -n $EVENT_NETWORK -t $EVENT_TRUTH
-# python particleid_nhits_endcap.py
-# python particleid_ndistinct_layers_endcap.py
-conversion_duration=$(( SECONDS - start_conversion ))
-echo "Execution time event_conversion.py: $conversion_duration seconds"
+python src/trackml_mod/event_conversion.py -o $INPUT -n $EVENT_NETWORK -t $EVENT_TRUTH -a $min_volume -z $max_volume -e $SIGMA0XY -r $SIGMA0RZ -m $SIGMA0RZ2
+# stages+=("event_conversion")
+# time=$SECONDS
+# execution_times+=($time)
 
 
-# # copy the first 100 files over - DEVELOPMENT ONLY
-# mkdir $ROOTDIR/track_sim/network_100/
-# ls $ROOTDIR/track_sim/network/* | head -2000 | xargs -I{} cp {} $ROOTDIR/track_sim/network_100/
-# ----------------------------------------------------------------------------------------------
+# echo "------------------------------------------------------"
+# echo "Extracting track candidates post CCA: iteration0"
+# echo "------------------------------------------------------"
+# INPUT=$ROOTDIR/track_sim/network/
+# CANDIDATES=$ROOTDIR/iteration_0/candidates/
+# REMAINING=$ROOTDIR/iteration_0/remaining/
+# FRAGMENTS=$ROOTDIR/iteration_0/fragments/
+# mkdir -p $CANDIDATES
+# mkdir -p $REMAINING
+# mkdir -p $FRAGMENTS
+# python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -e $SIGMA0XY -z $SIGMA0RZ -n $n -s $s -t $t -a 0
+# 
 
 
-INPUT=$ROOTDIR/track_sim/network/
-# time it!
-start=$SECONDS
-execution_times=($start)
-stages=("start")
+
+# # -----------------------------------------------------
+# # Begin the iterations....
+# # -----------------------------------------------------
+for (( i=$START; i<=$END; i++ ))
 
 
-for i in {1..2};
+# # # testing iteration by iteration
+# INPUT=$ROOTDIR/iteration_1/remaining/
+# for (( i=2; i<=3; i++ ))
+
+
     do
         OUTPUT=$ROOTDIR/iteration_$i/network/
         mkdir -p $OUTPUT
 
         if (( $i == 1 ))
         then
-            echo "-------------------------------------------------"
-            echo "Iteration ${i}: Clusterization/Outlier Removal"
-            echo "-------------------------------------------------"
+            echo "----------------------------------------------------"
+            echo "Iteration ${i}: GMR via clusterisation"
+            echo "----------------------------------------------------"
             prev_duration=$SECONDS
-            python src/clustering/clustering.py -i $INPUT -o $OUTPUT -d track_state_estimates -l $LUT
+            # chi2 and kl thresholds - trained (loose cut)
+            python src/clustering/clustering.py -i $INPUT -o $OUTPUT -d track_state_estimates -c 1.0 -k 2.0 -l $LUT -t $i -z $SIGMA0RZ -m $SIGMA0RZ2
             # time it!
-            prev_duration=$(( SECONDS - prev_duration ))
-            echo "-------------------------------------------------"
-            echo "Execution time, clustering.py: $prev_duration seconds"
-            echo "-------------------------------------------------"
-            execution_times+=($prev_duration)
-            stages+=("clustering.py")
-
+            # stages+=("clustering")
+            # time=$SECONDS
+            # execution_times+=($time)
         elif (( $i % 2 == 0 ))
         then
-            echo "------------------------------------------------"
-            echo "Iteration ${i}: Message passing & Extrapolation"
-            echo "------------------------------------------------"
+            echo "---------------------------------------------------"
+            echo "Iteration ${i}: Neighbourhood Aggregation"
+            echo "---------------------------------------------------"
             echo "Using chisq distance cut of: ${c}"
             prev_duration=$SECONDS
-            python src/extrapolate/extrapolate_merged_states.py -i $INPUT -o $OUTPUT -c $c -m $SIGMA_MS
-            let c=$c/2   # tighter cut each time
-
+            python src/extrapolate/extrapolate_merged_states.py -i $INPUT -o $OUTPUT -c $c -e $SIGMA0XY -z $SIGMA0RZ -m $SIGMA0RZ2
             # time it!
-            prev_duration=$(( SECONDS - prev_duration ))
-            echo "-------------------------------------------------"
-            echo "Execution time, extrapolate_merged_states.py: $prev_duration seconds"
-            echo "-------------------------------------------------"
-            execution_times+=($prev_duration)
-            stages+=("extrapolate_merged_states.py")
+            # stages+=("extrapolation")
+            # time=$SECONDS
+            # execution_times+=($time)
+        elif (( $i % 2 == 1))
+        then
+            echo "----------------------------------------------------"
+            echo "Iteration ${i}: GMR via clusterisation"
+            echo "----------------------------------------------------"
+            prev_duration=$SECONDS
+            python src/clustering/clustering.py -i $INPUT -o $OUTPUT -d updated_track_states -c 1000 -k 100 -l $LUT -t $i -z $SIGMA0RZ -m $SIGMA0RZ2
+
         fi
-        
 
-
-        echo "---------------------------------"
-        echo "Extracting good track candidates"
-        echo "---------------------------------"
+        echo "------------------------------------------------------"
+        echo "Extracting track candidates"
+        echo "------------------------------------------------------"
         INPUT=$OUTPUT
         CANDIDATES=$ROOTDIR/iteration_$i/candidates/
         REMAINING=$ROOTDIR/iteration_$i/remaining/
@@ -112,59 +137,67 @@ for i in {1..2};
         mkdir -p $FRAGMENTS
         if (( $i > 1 ))
         then
-            t=5.1  # threshold distance for node merging has been increased
             let num=$i-1
             cp -r $ROOTDIR/iteration_$num/candidates/ $CANDIDATES
         fi
-        prev_duration=$SECONDS
-        python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -m $SIGMA_MS -n $n -s $s -t $t
+        python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -n $n -s $s -t $t -a $i -e $SIGMA0XY -z $SIGMA0RZ
+        
+        echo "------------------------------------------------------"
+        echo "Metadata Update"
+        echo "------------------------------------------------------"
+        if (( $i % 2 == 0 ))
+        then
+            python src/update/remove_state_metadata.py -r $REMAINING
+        fi
+        
         INPUT=$REMAINING
 
         # time it!
-        prev_duration=$(( SECONDS - prev_duration ))
-        echo "---------------------------------------------------------------------"
-        echo "Execution time, extract_track_candidates.py: $prev_duration seconds"
-        echo "---------------------------------------------------------------------"
-        execution_times+=($prev_duration)
-        stages+=("extract_track_candidates.py")
-
+        # stages+=("extract")
+        # time=$SECONDS
+        # execution_times+=($time)
 
 done
 
-end_duration=$(( SECONDS - start ))
-echo "-------------------------------------------------"
-echo "Execution time, entire GNN algorithm: $end_duration seconds"
-echo "-------------------------------------------------"
-execution_times+=($end_duration)
-stages+=("end_duration")
 
-# save execution times to file
-printf "%s\n" "${execution_times[@]}" > r\&d/execution_times/execution_times.txt
-for value in "${execution_times[@]}"
-do
-     echo $value
-done
+echo "----------------------------------------------------"
+# echo "Running track reconstruction efficiency:"
+python src/extract/reconstruction_efficiency.py -t $EVENT_TRUTH -o $ROOTDIR -a $min_volume -z $max_volume -i $END
+echo "Plotting Purity distribution..."
+python src/extract/purity_distribution.py -i $ROOTDIR
+echo "Plotting p-value distribution..."
+python src/extract/p_value_distribution.py -i $ROOTDIR
+echo "----------------------------------------------------"
 
-printf "%s\n" "${stages[@]}" > execution_times/stages.txt
+
+# time it!
+# stages+=("reconstruction_efficiency")
+# time=$SECONDS
+# execution_times+=($time)
+
+# plot all candidates
+python src/extract/plot_all_extracted_candidates.py -i $END
+
+# time it!
+# stages+=("plot_all_candidates")
+# time=$SECONDS
+# execution_times+=($time)
+
+
+echo "----------------------------------------------------"
+echo "Execution stages and times:"
+printf "%s\n" "${stages[@]}" > $ROOTDIR/execution_stages.txt
 for value in "${stages[@]}"
 do
-     echo $value
+     echo "$value"
 done
 
-
-
-echo "-------------------------------------------------"
-echo "Running track reconstruction efficiency:"
-echo "-------------------------------------------------"
-python src/extract/reconstruction_efficiency.py -t $EVENT_TRUTH -o $ROOTDIR
-echo "-------------------------------------------------"
-echo "Plotting Purity distribution..."
-echo "-------------------------------------------------"
-python src/extract/purity_distribution.py -i $ROOTDIR
-echo "-------------------------------------------------"
-echo "Plotting p-value distribution..."
-echo "-------------------------------------------------"
-python src/extract/p_value_distribution.py -i $ROOTDIR
+printf "%s\n" "${execution_times[@]}" > $ROOTDIR/execution_times.txt
+for value in "${execution_times[@]}"
+do
+     echo "$value"
+done
+echo "----------------------------------------------------"
 
 
 echo "DONE"

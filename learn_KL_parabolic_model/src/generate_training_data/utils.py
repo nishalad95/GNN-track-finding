@@ -294,7 +294,7 @@ def compute_track_state_estimates(GraphList):
             # store all track state estimates at the node
             G.nodes[node]['track_state_estimates'] = track_state_estimates
             # (mean, variance) of edge orientation - needed for KL distance in clustering
-            G.nodes[node]['edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
+            G.nodes[node]['xy_edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
 
     return GraphList
 

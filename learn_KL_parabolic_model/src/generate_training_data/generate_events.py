@@ -125,7 +125,7 @@ def simulate_event(threshold, sigma0, outputDir):
 
     # remove all nodes with mean edge orientation above threshold
     G = nx.Graph(G) # make a copy to unfreeze graph
-    filteredNodes = [node for node, attr in G.nodes(data=True) if attr['edge_gradient_mean_var'][1] > threshold]
+    filteredNodes = [node for node, attr in G.nodes(data=True) if attr['xy_edge_gradient_mean_var'][1] > threshold]
     for node in filteredNodes: G.remove_node(node)
     
     # CCA: extract subgraphs

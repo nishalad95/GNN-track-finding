@@ -255,13 +255,13 @@ def cluster(inputDir, outputDir, track_state_key, KL_lut):
     plot_save_subgraphs(subGraphs, outputDir, title)
     plot_subgraphs_merged_state(subGraphs, outputDir, title)
 
-    for i, s in enumerate(subGraphs):
-        print("-------------------")
-        print("SUBGRAPH " + str(i))
-        for node in s.nodes(data=True):
-            pprint.pprint(node)
-        print("--------------------")
-        print("EDGE DATA:", s.edges.data(), "\n")
+    # for i, s in enumerate(subGraphs):
+    #     print("-------------------")
+    #     print("SUBGRAPH " + str(i))
+    #     for node in s.nodes(data=True):
+    #         pprint.pprint(node)
+    #     print("--------------------")
+    #     print("EDGE DATA:", s.edges.data(), "\n")
 
     
 

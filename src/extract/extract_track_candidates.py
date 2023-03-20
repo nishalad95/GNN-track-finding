@@ -21,22 +21,22 @@ from more_itertools import locate
 
 COMMUNITY_DETECTION = False
 
-def run_community_detection(candidate, fragment):
-    # when == 1 potential, need to remember to append the graph to the 'remaining' list
-    # > 1 potential track
-    #TODO: coordinates & community detection method needs to be updated
-    valid_communities, vc_coords = community_detection(candidate, fragment)
-    if len(valid_communities) > 0:
-        print("found communities via community detection")
-        for vc, vcc in zip(valid_communities, vc_coords):
-            pval = KF_track_fit_xy(sigma0, sigma_ms, vcc)
-            if pval >= track_acceptance:
-                print("Good KF fit, P value:", pval, "(x,y,z,r):", vcc)
-                extracted.append(vc)
-                extracted_pvals.append(pval)
-                candidate_to_remove_from_subGraph.append(vc)
-            else:
-                print("pval too small,", pval, "leave for further processing")
+# def run_community_detection(candidate, fragment):
+#     # when == 1 potential, need to remember to append the graph to the 'remaining' list
+#     # > 1 potential track
+#     #TODO: coordinates & community detection method needs to be updated
+#     valid_communities, vc_coords = community_detection(candidate, fragment)
+#     if len(valid_communities) > 0:
+#         print("found communities via community detection")
+#         for vc, vcc in zip(valid_communities, vc_coords):
+#             pval = KF_track_fit_xy(sigma0, sigma_ms, vcc)
+#             if pval >= track_acceptance:
+#                 print("Good KF fit, P value:", pval, "(x,y,z,r):", vcc)
+#                 extracted.append(vc)
+#                 extracted_pvals.append(pval)
+#                 candidate_to_remove_from_subGraph.append(vc)
+#             else:
+#                 print("pval too small,", pval, "leave for further processing")
 
 
 def compute_3d_distance(coord1, coord2):
@@ -56,9 +56,6 @@ def get_midpoint_coords(xyzr_coords):
 
 
 def check_close_proximity_nodes(subgraph, threshold_distance):
-    # threshold_distance = 4.0        # distance between nodes used for close proximity node merging
-    print("Threshold distance for node merging: ", threshold_distance)
-
     # get the freq distribution of the vivl_ids
     vivl_id_dict = nx.get_node_attributes(subgraph, "vivl_id")
     module_id_dict = nx.get_node_attributes(subgraph, "module_id")
@@ -152,20 +149,20 @@ def check_close_proximity_nodes(subgraph, threshold_distance):
 
 
 def angle_trunc(a, p2):
-    if p2[1] > 0.0:
+    if p2 > 0.0:
         a = (2*np.pi) - a
     return a
-    # while a < 0.0:
-    #     a += pi * 2
-    # return a
-
+    
 
 # get angle to the positive x axis in radians
 def getAngleBetweenPoints(p1, p2):
     deltaY = p2[1] - p1[1]
     deltaX = p2[0] - p1[0]
-    angle = np.abs(atan2(deltaY, deltaX))
-    return angle_trunc(angle, p2)
+    angle_xy = atan2(deltaY, deltaX)
+    deltaZ = p2[2] - p1[2]
+    deltaR = p2[3] - p1[3]
+    angle_zr = atan2(deltaZ, deltaR)
+    return angle_xy, angle_zr
 
 
 def rotate_track(coords, separation_3d_threshold):
@@ -178,114 +175,153 @@ def rotate_track(coords, separation_3d_threshold):
     if distance < separation_3d_threshold:
         p2 = coords[-3]
 
-    # rotate counter clockwise, first edge to be parallel with x axis
-    angle = getAngleBetweenPoints(p1, p2)
+    # rotate such that the first edge is parallel with x axis
+    angle_xy, angle_zr = getAngleBetweenPoints(p1, p2)
+
     rotated_coords = []
     for c in coords:
         x, y, z, r = c[0], c[1], c[2], c[3]
-        x_new = x * np.cos(angle) - y * np.sin(angle)    # x_new = xcos(angle) - ysin(angle)
-        y_new = x * np.sin(angle) + y * np.cos(angle)    # y_new = xsin(angle) + ycos(angle) 
-        rotated_coords.append((x_new, y_new, z, r)) 
+        x_new = x * np.cos(angle_xy) + y * np.sin(angle_xy)  
+        y_new = -x * np.sin(angle_xy) + y * np.cos(angle_xy) 
+        r_new = r * np.cos(angle_zr) + r * np.sin(angle_zr) 
+        z_new = -z * np.sin(angle_zr) + z * np.cos(angle_zr) 
+        rotated_coords.append((x_new, y_new, z_new, r_new)) 
     return rotated_coords
 
 
-def KF_predict_update(f, obs_y):
-    # KF predict and update
-    chi2_dists = []
+# Calculate the unknowns of the equation y = ax^2 + bx + c
+def calc_parabola_params(x1, y1, x2, y2, x3, y3):
+    '''
+    Adapted and modifed to get unknowns for defining a parabola:
+    http://stackoverflow.com/questions/717762/how-to-calculate-the-vertex-of-a-parabola-given-three-points
+    '''
+    denom = (x1-x2) * (x1-x3) * (x2-x3)
+    a     = ((x3 * (y2-y1)) + (x2 * (y1-y3)) + (x1 * (y3-y2))) / denom
+    b     = ((x3**2 * (y1-y2)) + (x2**2 * (y3-y1)) + (x1**2 * (y2-y3))) / denom
+    return a, b
+
+
+# KF track fit in xy plane and zr plane
+def KF_track_fit_moliere(sigma0xy, sigma0rz, coords):
+    # initialize 3D Kalman Filter for xy plane
+    yf = coords[0][1]                               # observed y (coords is a list: [(x, y, z, r), (), ...])
+    f = KalmanFilter(dim_x=3, dim_z=1)
+    f.x = np.array([yf, 0., 0.])                    # X state vector [yf, dy/dx, w] = [coordinate, track inclination, integrated OU]
+    f.H = np.array([[1., 0., 0.]])                  # H measurement matrix
+    f.P = np.array([[sigma0xy**2,  0., 0.],     
+                    [0.,         1., 0.],
+                    [0.,         0., 1.]])          # P covariance
+    f.R = sigma0xy**2                                 # R measuremnt noise
     saver = common.Saver(f)
-    for measurement in obs_y[1:]:
+    chi2_dists = []
+
+    # initialize 2D KF for zr plane
+    zf = coords[0][3]                               # observed z (coords is a list: [(x, y, z, r), (), ...])
+    g = KalmanFilter(dim_x=2, dim_z=1)
+    g.x = np.array([zf, 0.])                   
+    g.H = np.array([[1., 0.]])                      # H measurement matrix
+    g.P = np.array([[sigma0rz**2,  0.],     
+                    [0.,         1000.]])           # P covariance
+    g.R = sigma0rz**2                                 # R measuremnt noise
+    g_saver = common.Saver(g)
+    g_chi2_dists = []
+
+    # track following & fit: process all coords in track candidate
+    for i in range(len(coords)-1):
+        # calculate parabolic parameters using 3 coords: origin, current node & next node
+        x1, y1 = .0, .0
+        x2, y2 = coords[i][0], coords[i][1]
+        x3, y3 = coords[i+1][0], coords[i+1][1]
+        a, b = calc_parabola_params(x1, y1, x2, y2, x3, y3)
+
+        # calculation of kappa & radius of curvature ( r = sqrt(x^2 + y^2) )
+        z2, r2 = coords[i][2], coords[i][3]
+        z3, r3 = coords[i+1][2], coords[i+1][3]
+        dr = r3 - r2
+        dz = z3 - z2
+        hyp = np.sqrt(dr**2 + dz**2)
+        sin_t = np.abs(dr) / hyp
+        tan_t = np.abs(dr) / np.abs(dz)
+        kappa = (2*a) / (1 + ((2 * a * x3) + b)**2)**1.5
+
+        # Moliere Theory - Highland formula multiple scattering error
+        var_ms = sin_t * ((13.6 * 1e-3 * np.sqrt(0.02) * kappa) / 0.3)**2
+        if np.abs(z3) >= 600.0: 
+            # endcap - orientation of detector layers are vertical
+            var_ms = var_ms * tan_t
+        
+        # variables for F; state transition matrix
+        dx = x3 - x2
+        alpha = 0.1                                     # OU parameter
+        e1 = np.exp(-np.abs(dx) * alpha)
+        f1 = (1.0 - e1) / alpha
+        g1 = (np.abs(dx) - f1) / alpha
+
+        # variables for Q process noise matrix
+        sigma_ou = 0.00001                              # 10^-5
+        sw2 = sigma_ou**2                               # OU parameter 
+        st2 = var_ms                                    # process noise representing Moliere multiple scattering
+        dx2 = dx**2
+        dxw2 = dx2 * sw2
+        Q02 = 0.5*dxw2
+        Q01 = dx*(st2 + Q02)
+        Q12 = dx*sw2
+
+        # F state transition matrix, extrapolation Jacobian - linear & OU
+        f.F = np.array([[1.,    dx,     g1], 
+                        [0.,    1.,     f1],
+                        [0.,    0.,     e1]])
+        
+        # Q process uncertainty/noise, OU model
+        f.Q = np.array([[dx2*(st2 + 0.25*dxw2), Q01,        Q02], 
+                      [Q01,                     st2 + dxw2, Q12],
+                      [Q02,                     Q12,        sw2]])
+
+        # KF predict and update
+        measurement = coords[i+1][1] # observed y
         f.predict()
         f.update(measurement)
         saver.save()
 
-        # update
+        # update & calculate chi2 distance
         updated_state, updated_cov = f.x_post, f.P_post
         residual = measurement - f.H.dot(updated_state) 
         S = f.H.dot(updated_cov).dot(f.H.T) + f.R
         inv_S = np.linalg.inv(S)
-
-        # chi2 distance
         chi2_dist = residual.T.dot(inv_S).dot(residual)
         chi2_dists.append(chi2_dist)
+
+        # KF for zr plane
+        g.F = np.array([[1.,    dz], 
+                        [0.,    1.]])                      # F state transition matrix, extrapolation Jacobian - linear & OU
     
+        g.Q = var_ms                                       # Q process uncertainty/noise, OU model
+
+        # KF predict and update
+        measurement = coords[i+1][3] # observed r
+        g.predict()
+        g.update(measurement)
+        g_saver.save()
+
+        # update & calculate chi2 distance
+        updated_state, updated_cov = g.x_post, g.P_post
+        residual = measurement - g.H.dot(updated_state) 
+        S = g.H.dot(updated_cov).dot(g.H.T) + g.R
+        inv_S = np.linalg.inv(S)
+        chi2_dist = residual.T.dot(inv_S).dot(residual)
+        g_chi2_dists.append(chi2_dist)
+
     # chi2 probability distribution
-    total_chi2 = sum(chi2_dists)                    # chi squared statistic
-    dof = len(obs_y) - 2                            # (no. of measurements * 1D) - no. of track params
+    total_chi2 = sum(chi2_dists)                        # chi squared statistic
+    dof = len(coords) - 2                               # (no. of measurements * 1D) - no. of track params
     pval = distributions.chi2.sf(total_chi2, dof)
-    print("P value for KF track fit: ", pval)
-    return pval
 
-
-def KF_track_fit_xy(sigma_ms, coords):
-    # KF applied from outermost point to innermost point
-    obs_x = [c[0] for c in coords]
-    obs_y = [c[1] for c in coords]
-    yf = obs_y[0]
-    dx = coords[1][0] - coords[0][0]    # dx = x1 - x0
-
-    # variables for F; state transition matrix
-    alpha = 0.1 #1.0                                                   # OU parameter
-    e1 = np.exp(-np.abs(dx) * alpha)
-    f1 = (1.0 - e1) / alpha
-    g1 = (np.abs(dx) - f1) / alpha
+    # chi2 probability distribution
+    total_chi2 = sum(g_chi2_dists)                      # chi squared statistic
+    pval_zr = distributions.chi2.sf(total_chi2, dof)
+    print("P values for KF track fit in xy and zr planes: ", pval, pval_zr)
     
-    # variables for Q process noise matrix
-    sigma0 = 0.1                                                    # IMPORTANT This is different in model setup!
-    sigma_ou = 0.00001                                              # 10^-5
-    sw2 = sigma_ou**2                                               # OU parameter 
-    st2 = sigma_ms**2                                               # process noise representing multiple scattering
-    dx2 = dx**2
-    dxw2 = dx2 * sw2
-    Q02 = 0.5*dxw2
-    Q01 = dx*(st2 + Q02)
-    Q12 = dx*sw2
-
-    # 3D KF: initialize at outermost layer
-    f = KalmanFilter(dim_x=3, dim_z=1)
-    f.x = np.array([yf, 0., 0.])                                    # X state vector [yf, dy/dx, w] = [coordinate, track inclination, integrated OU]
-
-    f.F = np.array([[1.,    dx,     g1], 
-                    [0.,    1.,     f1],
-                    [0.,    0.,     e1]])                           # F state transition matrix, extrapolation Jacobian - linear & OU
-    
-    f.H = np.array([[1., 0., 0.]])                                  # H measurement matrix
-    f.P = np.array([[sigma0**2,  0., 0.],     
-                    [0.,         1., 0.],
-                    [0.,         0., 1.]])                          # P covariance
-    
-    f.R = sigma0**2                                                 # R measuremnt noise
-    f.Q = np.array([[dx2*(st2 + 0.25*dxw2), Q01,        Q02], 
-                    [Q01,                   st2 + dxw2, Q12],
-                    [Q02,                   Q12,        sw2]])      # Q process uncertainty/noise, OU model
-
-    pval = KF_predict_update(f, obs_y)
-    return pval
-
-
-
-def KF_track_fit_zr(sigma_ms, coords):
-    # KF applied from outermost point to innermost point
-    obs_x = [c[2] for c in coords]
-    obs_y = [c[3] for c in coords]
-    yf = obs_y[0]
-    dx = coords[1][2] - coords[0][2]    # dx = z1 - z0
-
-    sigma0 = 0.1                                                    # IMPORTANT This is different in model setup!
-    f = KalmanFilter(dim_x=2, dim_z=1)
-    f.x = np.array([yf, 0.])                                # X state vector [yf, dy/dx, w] = [coordinate, track inclination, integrated OU]
-
-    f.F = np.array([[1.,    dx], 
-                    [0.,    1.]])                           # F state transition matrix, extrapolation Jacobian - linear & OU
-    
-    f.H = np.array([[1., 0.]])                              # H measurement matrix
-    f.P = np.array([[sigma0**2,  0.],     
-                    [0.,         1000.]])                   # P covariance
-    
-    f.R = sigma0**2                                         # R measuremnt noise
-    f.Q = sigma_ms                                          # Q process uncertainty/noise, OU model
-
-    pval = KF_predict_update(f, obs_y)
-    return pval
+    return pval, pval_zr
 
 
 
@@ -317,9 +353,10 @@ def main():
     parser.add_argument('-p', '--pval', help='chi-squared track candidate acceptance level')
     parser.add_argument('-s', '--separation_3d_threshold', help="3d distance cut between close proximity nodes, used in node merging")
     parser.add_argument('-t', '--threshold_distance_node_merging', help="threshold_distance_node_merging")
-    # parser.add_argument('-e', '--error', help="rms of track position measurements")
-    parser.add_argument('-m', '--sigma_ms', help="uncertainty due to multiple scattering, process noise")
+    parser.add_argument('-e', '--sigma0xy', help="sigma0 rms of track position measurements in xy plane")
+    parser.add_argument('-z', '--sigma0rz', help="sigma0 rms of track position measurements in rz plane")
     parser.add_argument('-n', '--numhits', help="minimum number of hits for good track candidate")
+    parser.add_argument('-a', '--iteration', help="iteration number of algorithm")
     args = parser.parse_args()
 
     # set variables
@@ -328,16 +365,14 @@ def main():
     remainingDir = args.remain
     fragmentsDir = args.fragments
     track_acceptance = float(args.pval)
-    # sigma0 = float(args.error)
-    sigma_ms = float(args.sigma_ms)
+    sigma0xy = float(args.sigma0xy)
+    sigma0rz = float(args.sigma0rz)
     subgraph_path = "_subgraph.gpickle"
     fragment = int(args.numhits)
     separation_3d_threshold = float(args.separation_3d_threshold)
     threshold_distance_node_merging = float(args.threshold_distance_node_merging)
     # get iteration num
-    inputDir_list = inputDir.split("/")
-    iterationDir = filter(lambda x: x.startswith('iteration_'), inputDir_list)
-    for i in iterationDir: iteration_num = i.split("_")[-1]
+    iteration_num = str(args.iteration)
 
     # read in subgraph data
     subGraphs = []
@@ -381,39 +416,27 @@ def main():
                 # check for 1 hit per layer - use volume_id & in_volume_layer_id
                 vivl_id_values = nx.get_node_attributes(candidate_to_assess,'vivl_id').values()
 
-                if len(vivl_id_values) == len(set(vivl_id_values)): 
+                if (len(vivl_id_values) == len(set(vivl_id_values))) and (len(set(vivl_id_values)) >= fragment): 
                     # good candidate
-                    print("no duplicates volume_ids & in_volume_layer_ids for this candidate")
+                    # print("no duplicates volume_ids & in_volume_layer_ids for this candidate")
 
-                    # sort the candidates by radius r largest to smallest (4th element in this tuple of tuples: (node_num, (x,y,z,r)) )
+                    # sort the candidates by radius largest to smallest, tuples: node_num, (x,y,z,r)
                     nodes_coords_tuples = list(nx.get_node_attributes(candidate_to_assess, 'xyzr').items())
                     sorted_nodes_coords_tuples = sorted(nodes_coords_tuples, reverse=True, key=lambda item: item[1][3])
-                    # check if the sorted nodes are connected
-                    all_connected = True
-                    for j in range(len(sorted_nodes_coords_tuples) - 1):
-                        node1 = sorted_nodes_coords_tuples[j][0]
-                        node2 = sorted_nodes_coords_tuples[j+1][0]
-                        if not candidate_to_assess.has_edge(node1, node2) and not candidate_to_assess.has_edge(node2, node1):
-                            all_connected = False
-                    
-                    if all_connected:
-                        coords = [element[1] for element in sorted_nodes_coords_tuples]
-                        # rotate the track such that innermost edge parallel to x-axis - r&z components are left unchanged
-                        coords = rotate_track(coords, separation_3d_threshold)
-                        # apply KF track fit - TODO: parallelize these 2 KF track fits
-                        pval = KF_track_fit_xy(sigma_ms, coords)
-                        pval_zr = KF_track_fit_zr(sigma_ms, coords)
-                        if (pval >= track_acceptance) and (pval_zr >= track_acceptance):
-                            print("Good KF fit, p-value:", pval, "\n(x,y,z,r):", coords)
-                            extracted.append(candidate)
-                            extracted_pvals.append(pval)
-                            extracted_pvals_zr.append(pval_zr)
-                            candidate_to_remove_from_subGraph.append(candidate)
-                            
-                        else:
-                            print("p-value too small, leave for further processing, pval_xy: " + str(pval) + " pval_zr: " + str(pval_zr))
+                    coords = [element[1] for element in sorted_nodes_coords_tuples]
+                    # rotate the track such that innermost edge parallel to x-axis - r&z components are left unchanged
+                    coords = rotate_track(coords, separation_3d_threshold)
+
+                    # KF track fit - Moliere theory multiple scattering
+                    pval, pval_zr = KF_track_fit_moliere(sigma0xy, sigma0rz, coords)
+                    if (pval >= track_acceptance) and (pval_zr >= track_acceptance):
+                        print("Good KF fit, p-value:", pval, "\n(x,y,z,r):", coords)
+                        extracted.append(candidate)
+                        extracted_pvals.append(pval)
+                        extracted_pvals_zr.append(pval_zr)
+                        candidate_to_remove_from_subGraph.append(candidate) 
                     else:
-                        print("Candidate not accepted, not connceted in order")
+                        print("p-value too small, leave for further processing, pval_xy: " + str(pval) + " pval_zr: " + str(pval_zr))
 
                 else: 
                     print("Bad candidate, > 1 hit per layer, will pass through community detection")
@@ -427,17 +450,16 @@ def main():
         for good_candidate in candidate_to_remove_from_subGraph:
             nodes = good_candidate.nodes()
             subGraph.remove_nodes_from(nodes)
-        if (len(subGraph.nodes()) <= 3) and (len(subGraph.nodes()) > 0): 
+        num_nodes_in_subgraph = len(subGraph.nodes())
+        if (num_nodes_in_subgraph < fragment) and (num_nodes_in_subgraph > 0): 
             fragments.append(subGraph)
-        elif len(subGraph.nodes()) >= 4:
+        elif num_nodes_in_subgraph >= fragment:
             remaining.append(subGraph)
 
     
-    # attach iteration number & color to good extracted tracks
-    color = ["#"+''.join([random.choice('0123456789ABCDEF') for _ in range(6) ])]
+    # attach iteration number to good extracted tracks
     for subGraph in extracted:
         subGraph.graph["iteration"] = iteration_num
-        subGraph.graph["color"] = color[0]
 
     print("\nNumber of extracted candidates during this iteration:", len(extracted))
     print("Number of remaining subGraphs to be further processed:", len(remaining))
@@ -450,22 +472,27 @@ def main():
         extracted.append(sub)
         i += 1
         path = candidatesDir + str(i) + subgraph_path
-
     print("Total number of extracted candidates:", len(extracted))
 
-    # plot and save all extracted candidates from previous and this iteration
-    h.plot_save_subgraphs_iterations(extracted, extracted_pvals, extracted_pvals_zr, candidatesDir, "Extracted candidates", node_labels=True, save_plot=True)
-    # plot and save the remaining subgraphs to be further processed
-    h.plot_subgraphs(remaining, remainingDir, node_labels=True, save_plot=True, title="Remaining candidates")
+    # save p-value information
+    pvals_df = pd.DataFrame({'pvals_xy' : extracted_pvals, 'pvals_zr' : extracted_pvals_zr}) 
+    pvals_df.to_csv(candidatesDir + 'pvals.csv')
+
+    # save extracted tracks
+    for i, sub in enumerate(extracted):
+        h.save_network(candidatesDir, i, sub) # save network to serialized form
+
+    # # plot and save all extracted candidates from previous and this iteration
+    # h.plot_save_subgraphs_iterations(extracted, candidatesDir, "Extracted candidates", node_labels=True, save_plot=True)
+
+    # # plot and save the remaining subgraphs to be further processed
+    # h.plot_subgraphs(remaining, remainingDir, node_labels=True, save_plot=True, title="Remaining candidates")
+
     # save remaining and track fragments
     for i, sub in enumerate(remaining):
         h.save_network(remainingDir, i, sub)
     for i, sub in enumerate(fragments):
         h.save_network(fragmentsDir, i, sub)
-    
-
-    # TODO: plot the distribution of edge weightings within the extracted candidates
-
 
 
 

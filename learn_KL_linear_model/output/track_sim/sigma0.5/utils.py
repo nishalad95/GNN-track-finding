@@ -204,7 +204,7 @@ def compute_track_state_estimates(GraphList, sigma0):
                                                 'edge_covariance': covariance, 
                                                 'xy': m2,
                                              }
-            G.nodes[node]['edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
+            G.nodes[node]['xy_edge_gradient_mean_var'] = (np.mean(gradients), np.var(gradients))
             G.nodes[node]['track_state_estimates'] = track_state_estimates
 
     return GraphList
