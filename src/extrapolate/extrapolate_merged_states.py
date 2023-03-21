@@ -104,7 +104,7 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     dc_db = (ds_db * bracket) + (s_star * np.cos(phi))
     dc_dc = (ds_dc * bracket) + np.cos(phi)
 
-    # extrapolation Jacobian
+    # extrapolation Jacobian - for xy plane
     F = np.array([[da_da,    da_db,     da_dc], 
                   [db_da,    db_db,     db_dc],
                   [dc_da,    dc_db,     dc_dc]])      # F state transition matrix, extrapolation Jacobian
@@ -153,7 +153,7 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
         # kappa and radius of curvature
         kappa = (2*a) / (1 + ((2*a*neighbour_x) + b)**2)**1.5
         var_ms = sin_t * ((13.6 * 1e-3 * np.sqrt(0.02) * kappa) / 0.3)**2
-        if np.abs(neighbour_z) >= 600.0: 
+        if np.abs(node_z) >= 600.0: 
             # endcap - orientation of detector layers are vertical
             var_ms = var_ms * tan_t
 
@@ -178,20 +178,38 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
 
         # form tau and variance in tau
         tau = dz / dr
+        
         # default error for barrel located node
         sigma_r = sigma0rz
         sigma_z = sigma0rz2
-        # if node in endcap, then reduce z error: used in calc of error in tau = dz/dr
+        # if node in endcap
         if np.abs(node_z) >= 600.0: 
             sigma_z = sigma0rz
             sigma_r = sigma0rz2
-        del_dz = sigma_z
-        del_dr = sigma_r
+        # default error for barrel located neighbour
+        sigma_r_neighbour = sigma0rz
+        sigma_z_neighbour = sigma0rz2
+        # if neighbour in endcap
+        if np.abs(neighbour_z) >= 600.0: 
+            sigma_z_neighbour = sigma0rz
+            sigma_r_neighbour = sigma0rz2
+        
+        # jacobian for covariance of delta tau
+        j1 = 1 / dr
+        j2 = -1 / dr
+        j3 = - dz / dr**2
+        j4 = dz / dr**2
+        J = np.array([j1, j2, j3, j4])
+
+        # edge covariance matrix for rz plane
+        S2 = np.array([ [sigma_z**2, 0, 0, 0],
+                        [0, sigma_z_neighbour**2, 0, 0],
+                        [0, 0, sigma_r**2, 0],
+                        [0, 0, 0, sigma_r_neighbour**2]])
+
         # error in tau
-        del_tau = tau * np.sqrt((del_dz / dz)**2 + (del_dr / dr)**2)
-        if dz == 0:
-            del_tau = tau * np.sqrt((del_dr / dr)**2)
-        variance_tau = del_tau**2
+        cov_tau = J.dot(S2).dot(J.T)
+        variance_tau = cov_tau
 
         # form the joint vector state and joint vector covariance
         joint_vector = [updated_state[0], updated_state[1], tau]
@@ -215,8 +233,6 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
                  'edge_covariance': updated_cov,
                  'joint_vector': joint_vector,
                  'joint_vector_covariance': joint_vector_covariance,
-                #  'joint_vector': updated_state,
-                #  'joint_vector_covariance': updated_cov,
                  'likelihood': likelihood,
                  # this value is the previous weight - will get updated at the end of extrapolation
                  'mixture_weight': subGraph.nodes[node_num]['track_state_estimates'][neighbour_num]['mixture_weight']

@@ -244,10 +244,6 @@ def compute_track_state_estimates(GraphList, sigma0xy, sigma0rz, sigma0rz2):
     sigmaA = sigma0xy        # dev value 0.1mm
     sigmaB = sigma0xy        # dev value 0.1mm
     
-    # default error for barrel located node
-    sigma_r = sigma0rz            # dev value 0.1mm
-    sigma_z = sigma0rz2           # dev value 0.5mm
-    
     # edge covariance matrix for xy plane
     S = np.array([  [sigmaO**2,         0,                  0], 
                     [0,                 sigmaA**2,          0], 
@@ -260,6 +256,9 @@ def compute_track_state_estimates(GraphList, sigma0xy, sigma0rz, sigma0rz2):
             gradients_xy = []
             gradients_zr = []
             del_tau = []
+            all_theta = []
+            all_theta2 = []
+            del_theta = []
             track_state_estimates = {}
             
             # create a list of node & neighbour coords including the origin
@@ -269,6 +268,9 @@ def compute_track_state_estimates(GraphList, sigma0xy, sigma0rz, sigma0rz2):
             coords = [(0.0, 0.0), m_node_xy]
             keys = [-1, node]
 
+            # default error for barrel located node
+            sigma_r = sigma0rz            # dev value 0.1mm
+            sigma_z = sigma0rz2           # dev value 0.5mm
             # if node in endcap:
             if np.abs(m_node_zr[0]) >= 600.0: 
                 sigma_z = sigma0rz
@@ -307,7 +309,7 @@ def compute_track_state_estimates(GraphList, sigma0xy, sigma0rz, sigma0rz2):
                 sigma_r_neighbour = sigma0rz            # dev value 0.1mm
                 sigma_z_neighbour = sigma0rz2           # dev value 0.5mm
                 # if neighbour in endcap:
-                if np.abs(m_node_zr[0]) >= 600.0: 
+                if np.abs(z2) >= 600.0: 
                     sigma_z_neighbour = sigma0rz
                     sigma_r_neighbour = sigma0rz2
                 
@@ -327,6 +329,22 @@ def compute_track_state_estimates(GraphList, sigma0xy, sigma0rz, sigma0rz2):
                 # error in tau
                 cov_tau = J.dot(S2).dot(J.T)
                 del_tau.append(cov_tau)
+
+                # error in theta
+                tau = grad_zr
+                theta = np.arctan(1/tau)
+                theta2 = np.arctan2(dr, dz)
+                all_theta.append(theta)
+                all_theta2.append(theta2)
+                prefix = -1 / (1 + tau**2)
+                j1 = prefix/(r1 - r2)
+                j2 = -prefix/(r1 - r2)
+                j3 = (-prefix*(z1 - z2))/(r1 - r2)**2
+                j4 = (prefix*(z1 - z2))/(r1 - r2)**2
+                J = np.array([j1, j2, j3, j4])
+                cov_theta = J.dot(S2).dot(J.T)
+                del_theta.append(cov_theta)
+                
             
             # [neighbour1, neighbour2, ..., node, (0.0, 0.0)]
             coords.reverse()
@@ -392,7 +410,7 @@ def compute_track_state_estimates(GraphList, sigma0xy, sigma0rz, sigma0rz2):
 
                 # Moliere Theory - Highland formula multiple scattering
                 var_ms = sin_t * ((13.6 * 1e-3 * np.sqrt(0.02) * kappa) / 0.3)**2
-                if np.abs(z_k) >= 600.0: 
+                if np.abs(m_node_zr[0]) >= 600.0: 
                     # endcap - orientation of detector layers are vertical
                     var_ms = var_ms * tan_t
 
@@ -406,12 +424,19 @@ def compute_track_state_estimates(GraphList, sigma0xy, sigma0rz, sigma0rz2):
                 joint_vector_covariance[2, :] = 0.0
                 joint_vector_covariance[2, 2] = variance_tau + var_ms
                 
+                theta = all_theta[i]
+                theta2 = all_theta2[i]
+                variance_theta = del_theta[i]**2
+                
                 # create track state estimates dictionary for each neighbour (node-->neighbour)
                 track_state_estimates[key] = {  'xyzr':(x_k, y_k, z_k, r_k),            # neighbour coords
                                                 'edge_state_vector': track_state_vector, 
                                                 'edge_covariance': covariance,
                                                 'joint_vector': joint_vector,
                                                 'joint_vector_covariance': joint_vector_covariance,
+                                                'theta': theta,
+                                                'theta2': theta2,
+                                                'variance_theta': variance_theta
                                              }
 
             # store all track state estimates at the node
