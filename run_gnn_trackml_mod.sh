@@ -8,15 +8,17 @@ START=1
 END=3
 
 # rms measurement errors
-SIGMA0XY=0.3            # xy plane
-SIGMA0RZ=0.4            # rz plane
-SIGMA0RZ2=0.5           # rz plane orientation of detector layer
+SIGMA0XY=0.3            # xy plane measurement error
+# The following 2 values are swapped for error r and error z for endcap located neighbour (to do with orientation of detector layer)
+SIGMA0RZ=0.4            # rz plane measurement error - default error in r for barrel located neighbour
+SIGMA0RZ2=0.6           # rz plane measurement error - default error in z for barrel located neighbour
 
 # event conversion and track simulation
-min_volume=7            # minimum volume number to analyse (inclusive) - used also in effciency calc
-max_volume=9            # maximum volume number to analyse (inclusive) - used also in efficiency calc
+min_volume=7            # min volume number to analyse (inclusive) - used also in effciency calc
+max_volume=9            # max volume number to analyse (inclusive) - used also in efficiency calc
 # SIGMA_MS=0.01         # multiple scattering error dynamic - implemented with Moliere theory, dev value 10^-4
 ROOTDIR=src/output      # output directory to store GNN algorithm output
+ENDCAP_BOUNDARY=550.0
 
 # clustering
 LUT=learn_KL_linear_model/output/empvar/empvar.lut  # LUT file for KL distance calibration
@@ -55,32 +57,16 @@ echo "----------------------------------------------------"
 INPUT=$ROOTDIR/track_sim/network/
 mkdir -p $INPUT
 EVENT_NETWORK=src/trackml_mod/event_network/minCurv_0.3_800
-python src/trackml_mod/event_conversion.py -o $INPUT -n $EVENT_NETWORK -t $EVENT_TRUTH -a $min_volume -z $max_volume -e $SIGMA0XY -r $SIGMA0RZ -m $SIGMA0RZ2
+python src/trackml_mod/event_conversion.py -o $INPUT -n $EVENT_NETWORK -t $EVENT_TRUTH -a $min_volume -z $max_volume -e $SIGMA0XY -r $SIGMA0RZ -m $SIGMA0RZ2 -b $ENDCAP_BOUNDARY
 # stages+=("event_conversion")
 # time=$SECONDS
 # execution_times+=($time)
-
-
-# echo "------------------------------------------------------"
-# echo "Extracting track candidates post CCA: iteration0"
-# echo "------------------------------------------------------"
-# INPUT=$ROOTDIR/track_sim/network/
-# CANDIDATES=$ROOTDIR/iteration_0/candidates/
-# REMAINING=$ROOTDIR/iteration_0/remaining/
-# FRAGMENTS=$ROOTDIR/iteration_0/fragments/
-# mkdir -p $CANDIDATES
-# mkdir -p $REMAINING
-# mkdir -p $FRAGMENTS
-# python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -e $SIGMA0XY -z $SIGMA0RZ -n $n -s $s -t $t -a 0
-# 
-
 
 
 # # -----------------------------------------------------
 # # Begin the iterations....
 # # -----------------------------------------------------
 for (( i=$START; i<=$END; i++ ))
-
 
 # # # testing iteration by iteration
 # INPUT=$ROOTDIR/iteration_1/remaining/
@@ -98,7 +84,7 @@ for (( i=$START; i<=$END; i++ ))
             echo "----------------------------------------------------"
             prev_duration=$SECONDS
             # chi2 and kl thresholds - trained (loose cut)
-            python src/clustering/clustering.py -i $INPUT -o $OUTPUT -d track_state_estimates -c 1.0 -k 2.0 -l $LUT -t $i -z $SIGMA0RZ -m $SIGMA0RZ2
+            python src/clustering/clustering.py -i $INPUT -o $OUTPUT -d track_state_estimates -c 1.0 -k 2.0 -l $LUT -t $i -z $SIGMA0RZ -m $SIGMA0RZ2 -b $ENDCAP_BOUNDARY
             # time it!
             # stages+=("clustering")
             # time=$SECONDS
@@ -110,7 +96,7 @@ for (( i=$START; i<=$END; i++ ))
             echo "---------------------------------------------------"
             echo "Using chisq distance cut of: ${c}"
             prev_duration=$SECONDS
-            python src/extrapolate/extrapolate_merged_states.py -i $INPUT -o $OUTPUT -c $c -e $SIGMA0XY -z $SIGMA0RZ -m $SIGMA0RZ2
+            python src/extrapolate/extrapolate_merged_states.py -i $INPUT -o $OUTPUT -c $c -e $SIGMA0XY -z $SIGMA0RZ -m $SIGMA0RZ2 -b $ENDCAP_BOUNDARY
             # time it!
             # stages+=("extrapolation")
             # time=$SECONDS
@@ -121,7 +107,7 @@ for (( i=$START; i<=$END; i++ ))
             echo "Iteration ${i}: GMR via clusterisation"
             echo "----------------------------------------------------"
             prev_duration=$SECONDS
-            python src/clustering/clustering.py -i $INPUT -o $OUTPUT -d updated_track_states -c 1000 -k 100 -l $LUT -t $i -z $SIGMA0RZ -m $SIGMA0RZ2
+            python src/clustering/clustering.py -i $INPUT -o $OUTPUT -d updated_track_states -c 1000 -k 100 -l $LUT -t $i -z $SIGMA0RZ -m $SIGMA0RZ2 -b $ENDCAP_BOUNDARY
 
         fi
 
@@ -140,7 +126,7 @@ for (( i=$START; i<=$END; i++ ))
             let num=$i-1
             cp -r $ROOTDIR/iteration_$num/candidates/ $CANDIDATES
         fi
-        python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -n $n -s $s -t $t -a $i -e $SIGMA0XY -z $SIGMA0RZ
+        python src/extract/extract_track_candidates.py -i $INPUT -c $CANDIDATES -r $REMAINING -f $FRAGMENTS -p $p -n $n -s $s -t $t -a $i -e $SIGMA0XY -z $SIGMA0RZ -b $ENDCAP_BOUNDARY
         
         echo "------------------------------------------------------"
         echo "Metadata Update"
@@ -184,20 +170,20 @@ python src/extract/plot_all_extracted_candidates.py -i $END
 # execution_times+=($time)
 
 
-echo "----------------------------------------------------"
-echo "Execution stages and times:"
-printf "%s\n" "${stages[@]}" > $ROOTDIR/execution_stages.txt
-for value in "${stages[@]}"
-do
-     echo "$value"
-done
+# echo "----------------------------------------------------"
+# echo "Execution stages and times:"
+# printf "%s\n" "${stages[@]}" > $ROOTDIR/execution_stages.txt
+# for value in "${stages[@]}"
+# do
+#      echo "$value"
+# done
 
-printf "%s\n" "${execution_times[@]}" > $ROOTDIR/execution_times.txt
-for value in "${execution_times[@]}"
-do
-     echo "$value"
-done
-echo "----------------------------------------------------"
+# printf "%s\n" "${execution_times[@]}" > $ROOTDIR/execution_times.txt
+# for value in "${execution_times[@]}"
+# do
+#      echo "$value"
+# done
+# echo "----------------------------------------------------"
 
 
 echo "DONE"

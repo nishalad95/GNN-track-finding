@@ -8,7 +8,7 @@ import math
 import time
 import csv
 
-def mahalanobis_distance(mean1, cov1, mean2, cov2, node_coords, neighbour1_coords, neighbour2_coords, sigma0rz, sigma0rz2):
+def mahalanobis_distance(mean1, cov1, mean2, cov2, node_coords, neighbour1_coords, neighbour2_coords, sigma0rz, sigma0rz2, endcap_boundary):
     edge1 = mean1[:2]
     edge2 = mean2[:2]
     residual = edge1 - edge2
@@ -46,13 +46,13 @@ def mahalanobis_distance(mean1, cov1, mean2, cov2, node_coords, neighbour1_coord
     sigma_za, sigma_zb, sigma_zc = sigma0rz2, sigma0rz2, sigma0rz2
     sigma_ra, sigma_rb, sigma_rc = sigma0rz, sigma0rz, sigma0rz
     # if node in endcap, then reduce z error
-    if np.abs(x_a) >= 600.0: 
+    if np.abs(x_a) >= endcap_boundary: 
         sigma_za = sigma0rz
         sigma_ra = sigma0rz2
-    if np.abs(x_b) >= 600.0: 
+    if np.abs(x_b) >= endcap_boundary: 
         sigma_zb = sigma0rz
         sigma_rb = sigma0rz2
-    if np.abs(x_c) >= 600.0: 
+    if np.abs(x_c) >= endcap_boundary: 
         sigma_zc = sigma0rz
         sigma_rc = sigma0rz2
 
@@ -77,11 +77,11 @@ def mahalanobis_distance(mean1, cov1, mean2, cov2, node_coords, neighbour1_coord
     chi2 = distance1 + distance2
     return chi2
 
-def calc_pairwise_distances_chi2(num_edges, edge_svs, edge_covs, node_coords, neighbour_coords, sigma0rz, sigma0rz2):
+def calc_pairwise_distances_chi2(num_edges, edge_svs, edge_covs, node_coords, neighbour_coords, sigma0rz, sigma0rz2, endcap_boundary):
     pairwise_distances_chi2 = np.zeros(shape=(num_edges, num_edges))
     for i in range(num_edges):
         for j in range(i):
-            distance_chi2 = mahalanobis_distance(edge_svs[i], edge_covs[i], edge_svs[j], edge_covs[j], node_coords, neighbour_coords[i], neighbour_coords[j], sigma0rz, sigma0rz2)
+            distance_chi2 = mahalanobis_distance(edge_svs[i], edge_covs[i], edge_svs[j], edge_covs[j], node_coords, neighbour_coords[i], neighbour_coords[j], sigma0rz, sigma0rz2, endcap_boundary)
             pairwise_distances_chi2[i][j] = distance_chi2
     return pairwise_distances_chi2
 
@@ -146,7 +146,7 @@ def reset_reactivate(subGraphs):
     return subGraphs
 
 
-def cluster(inputDir, outputDir, track_state_key, chi2_threshold, KL_threshold, KL_lut, iteration_num, reactivate, sigma0rz, sigma0rz2):
+def cluster(inputDir, outputDir, track_state_key, chi2_threshold, KL_threshold, KL_lut, iteration_num, reactivate, sigma0rz, sigma0rz2, endcap_boundary):
     # variable names
     subgraph_path = "_subgraph.gpickle"
     TRACK_STATE_KEY = track_state_key
@@ -220,7 +220,7 @@ def cluster(inputDir, outputDir, track_state_key, chi2_threshold, KL_threshold, 
                 joint_edge_covs = np.array([component["joint_vector_covariance"] for component in track_state_estimates.values()])
                 joint_edge_covs = np.reshape(joint_edge_covs[:, :, np.newaxis], (num_edges, 3, 3))
                 # compute mahalanobis distances
-                pairwise_distances_chi2 = calc_pairwise_distances_chi2(num_edges, joint_edge_svs, joint_edge_covs, node_coords, all_neighbours_coords, sigma0rz, sigma0rz2)
+                pairwise_distances_chi2 = calc_pairwise_distances_chi2(num_edges, joint_edge_svs, joint_edge_covs, node_coords, all_neighbours_coords, sigma0rz, sigma0rz2, endcap_boundary)
                 smallest_dist, idx = get_smallest_dist_idx(pairwise_distances_chi2) #[row_idx, column_idx]
 
 
@@ -390,6 +390,8 @@ def main():
     parser.add_argument('-r', '--reactivateall', default=False, type=bool)
     parser.add_argument('-z', '--sigma0rz', help="rms measurement error in rz plane")
     parser.add_argument('-m', '--sigma0rz2', help="rms measurement error in rz plane - Moliere MS orientation of layer is important")
+    parser.add_argument('-b', '--endcapboundary', help="endcap boundary z coordinate - orientation of barrel and endcap layer")
+
     args = parser.parse_args()
 
     inputDir = args.input
@@ -402,10 +404,11 @@ def main():
     reactivate = args.reactivateall
     sigma0rz = float(args.sigma0rz)
     sigma0rz2 = float(args.sigma0rz2)
+    endcap_boundary = float(args.endcapboundary)
 
     start = time.time()
 
-    cluster(inputDir, outputDir, track_states_key, chi2_threshold, KL_threshold, KL_lut, iteration_num, reactivate, sigma0rz, sigma0rz2)
+    cluster(inputDir, outputDir, track_states_key, chi2_threshold, KL_threshold, KL_lut, iteration_num, reactivate, sigma0rz, sigma0rz2, endcap_boundary)
 
     end = time.time()
     total_time = end - start

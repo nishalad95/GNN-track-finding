@@ -235,7 +235,7 @@ def compute_3d_distance(coord1, coord2):
 
 
 
-def compute_track_state_estimates(GraphList, sigma0xy, sigma0rz, sigma0rz2):
+def compute_track_state_estimates(GraphList, sigma0xy, sigma0rz, sigma0rz2, endcap_boundary):
     # NOTE: these sigmas are errors in the parabolic parameter model approximation
     # sigmaO - error at the origin, different to sigma0xy rms error in xy plane
     # sigmaA - error in parabolic parameter b (same as sigma0xy error in xy plane)
@@ -272,7 +272,7 @@ def compute_track_state_estimates(GraphList, sigma0xy, sigma0rz, sigma0rz2):
             sigma_r = sigma0rz            # dev value 0.1mm
             sigma_z = sigma0rz2           # dev value 0.5mm
             # if node in endcap:
-            if np.abs(m_node_zr[0]) >= 600.0: 
+            if np.abs(m_node_zr[0]) >= endcap_boundary: 
                 sigma_z = sigma0rz
                 sigma_r = sigma0rz2
 
@@ -302,14 +302,14 @@ def compute_track_state_estimates(GraphList, sigma0xy, sigma0rz, sigma0rz2):
                 grad_zr = dz / dr                   # tau = dz / dr
                 gradients_zr.append(grad_zr)        # dz_dr gradient (inverse gradient dz / dr)
                 # calculate theta
-                angle_xy = atan2(dy, dx)
-                angle_zr = atan2(dz, dr)
+                # angle_xy = atan2(dy, dx)
+                # angle_zr = atan2(dz, dr)
                 
                 # default error for barrel located neighbour
                 sigma_r_neighbour = sigma0rz            # dev value 0.1mm
                 sigma_z_neighbour = sigma0rz2           # dev value 0.5mm
                 # if neighbour in endcap:
-                if np.abs(z2) >= 600.0: 
+                if np.abs(z2) >= endcap_boundary: 
                     sigma_z_neighbour = sigma0rz
                     sigma_r_neighbour = sigma0rz2
                 
@@ -403,15 +403,15 @@ def compute_track_state_estimates(GraphList, sigma0xy, sigma0rz, sigma0rz2):
                 dz = node_z - z_k
                 hyp = np.sqrt(dr**2 + dz**2)
                 sin_t = np.abs(dr) / hyp
-                tan_t = np.abs(dr) / np.abs(dz)
 
                 # kappa and radius of curvature
                 kappa = (2*a) / (1 + ((2*a*x_k) + b)**2)**1.5
 
                 # Moliere Theory - Highland formula multiple scattering
                 var_ms = sin_t * ((13.6 * 1e-3 * np.sqrt(0.02) * kappa) / 0.3)**2
-                if np.abs(m_node_zr[0]) >= 600.0: 
+                if np.abs(m_node_zr[0]) >= endcap_boundary: 
                     # endcap - orientation of detector layers are vertical
+                    tan_t = np.abs(dr / dz)
                     var_ms = var_ms * tan_t
 
                 covariance = H_inv.dot(S).dot(H_inv.T)
@@ -426,7 +426,7 @@ def compute_track_state_estimates(GraphList, sigma0xy, sigma0rz, sigma0rz2):
                 
                 theta = all_theta[i]
                 theta2 = all_theta2[i]
-                variance_theta = del_theta[i]**2
+                variance_theta = del_theta[i]**2 + var_ms
                 
                 # create track state estimates dictionary for each neighbour (node-->neighbour)
                 track_state_estimates[key] = {  'xyzr':(x_k, y_k, z_k, r_k),            # neighbour coords
@@ -436,7 +436,8 @@ def compute_track_state_estimates(GraphList, sigma0xy, sigma0rz, sigma0rz2):
                                                 'joint_vector_covariance': joint_vector_covariance,
                                                 'theta': theta,
                                                 'theta2': theta2,
-                                                'variance_theta': variance_theta
+                                                'variance_theta': variance_theta,
+                                                'var_ms_node': var_ms
                                              }
 
             # store all track state estimates at the node
