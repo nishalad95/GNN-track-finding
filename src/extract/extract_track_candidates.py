@@ -64,6 +64,8 @@ def check_close_proximity_nodes(subgraph, threshold_distance):
     vivl_ids_freq = {x:vivl_ids.count(x) for x in vivl_ids}
     freq_count = list(vivl_ids_freq.values())
 
+    merged = False
+
     copied_subgraph = None
     # TODO:
     # # scenario 1)
@@ -129,6 +131,8 @@ def check_close_proximity_nodes(subgraph, threshold_distance):
                             # remove the other node
                             copied_subgraph.remove_node(node2)
 
+                            merged=True
+
                         else:
                             print("merging of nodes nodes not possible, too large distance between them, distance: ", distance)
                             copied_subgraph = None
@@ -144,7 +148,7 @@ def check_close_proximity_nodes(subgraph, threshold_distance):
     else:
         print("Cannot process subgraph, leaving for further iterations")
     
-    return subgraph, copied_subgraph
+    return subgraph, copied_subgraph, merged
 
 
 
@@ -202,7 +206,7 @@ def calc_parabola_params(x1, y1, x2, y2, x3, y3):
 
 
 # KF track fit in xy plane and zr plane
-def KF_track_fit_moliere(sigma0xy, sigma0rz, coords):
+def KF_track_fit_moliere(sigma0xy, sigma0rz, coords, endcap_boundary):
     # initialize 3D Kalman Filter for xy plane
     yf = coords[0][1]                               # observed y (coords is a list: [(x, y, z, r), (), ...])
     f = KalmanFilter(dim_x=3, dim_z=1)
@@ -241,13 +245,13 @@ def KF_track_fit_moliere(sigma0xy, sigma0rz, coords):
         dz = z3 - z2
         hyp = np.sqrt(dr**2 + dz**2)
         sin_t = np.abs(dr) / hyp
-        tan_t = np.abs(dr) / np.abs(dz)
         kappa = (2*a) / (1 + ((2 * a * x3) + b)**2)**1.5
 
         # Moliere Theory - Highland formula multiple scattering error
         var_ms = sin_t * ((13.6 * 1e-3 * np.sqrt(0.02) * kappa) / 0.3)**2
-        if np.abs(z3) >= 600.0: 
+        if np.abs(z3) >= endcap_boundary: 
             # endcap - orientation of detector layers are vertical
+            tan_t = np.abs(dr / dz)
             var_ms = var_ms * tan_t
         
         # variables for F; state transition matrix
@@ -357,6 +361,7 @@ def main():
     parser.add_argument('-z', '--sigma0rz', help="sigma0 rms of track position measurements in rz plane")
     parser.add_argument('-n', '--numhits', help="minimum number of hits for good track candidate")
     parser.add_argument('-a', '--iteration', help="iteration number of algorithm")
+    parser.add_argument('-b', '--endcapboundary', help="endcap boundary z coordinate - orientation of barrel and endcap layer")
     args = parser.parse_args()
 
     # set variables
@@ -371,6 +376,7 @@ def main():
     fragment = int(args.numhits)
     separation_3d_threshold = float(args.separation_3d_threshold)
     threshold_distance_node_merging = float(args.threshold_distance_node_merging)
+    endcap_boundary = float(args.endcapboundary)
     # get iteration num
     iteration_num = str(args.iteration)
 
@@ -385,6 +391,8 @@ def main():
         path = inputDir + str(i) + subgraph_path
 
     print("Intial total no. of subgraphs:", len(subGraphs))
+
+    total_merged_nodes = 0
 
     extracted = []
     extracted_pvals = []
@@ -408,8 +416,10 @@ def main():
                 
                 # check for close proximity nodes based on their distance & common module_id values - merge where appropriate
                 # if merged_candidate is not None, then we need to use merged_candidate's coords in the KF, but extract the original candidate
-                candidate, merged_candidate = check_close_proximity_nodes(candidate, threshold_distance_node_merging)
+                candidate, merged_candidate, merged = check_close_proximity_nodes(candidate, threshold_distance_node_merging)
                 
+                if merged: total_merged_nodes +=1
+
                 candidate_to_assess = candidate
                 if merged_candidate is not None: candidate_to_assess = merged_candidate
 
@@ -428,7 +438,7 @@ def main():
                     coords = rotate_track(coords, separation_3d_threshold)
 
                     # KF track fit - Moliere theory multiple scattering
-                    pval, pval_zr = KF_track_fit_moliere(sigma0xy, sigma0rz, coords)
+                    pval, pval_zr = KF_track_fit_moliere(sigma0xy, sigma0rz, coords, endcap_boundary)
                     if (pval >= track_acceptance) and (pval_zr >= track_acceptance):
                         print("Good KF fit, p-value:", pval, "\n(x,y,z,r):", coords)
                         extracted.append(candidate)
@@ -488,11 +498,24 @@ def main():
     # # plot and save the remaining subgraphs to be further processed
     # h.plot_subgraphs(remaining, remainingDir, node_labels=True, save_plot=True, title="Remaining candidates")
 
+    print("Total number of merged nodes this stage of extraction:", total_merged_nodes)
+
     # save remaining and track fragments
     for i, sub in enumerate(remaining):
         h.save_network(remainingDir, i, sub)
     for i, sub in enumerate(fragments):
         h.save_network(fragmentsDir, i, sub)
+
+
+    print("Graph network after processing:")
+    num_remaining_nodes = 0
+    num_remaining_edges = 0
+    for sub in remaining:
+        num_remaining_nodes += sub.number_of_nodes()
+        num_remaining_edges +=sub.number_of_edges()
+
+    print("Number of edges:", num_remaining_edges)
+    print("Number of nodes:", num_remaining_nodes)
 
 
 

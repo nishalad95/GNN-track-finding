@@ -23,6 +23,8 @@ def main():
     parser.add_argument('-e', '--sigma0xy', help="sigma0 rms of track position measurements in xy plane")
     parser.add_argument('-r', '--sigma0rz', help="sigma0 rms of track position measurements in rz plane")
     parser.add_argument('-m', '--sigma0rz2', help="sigma0 rms of track position measurements in rz plane - orientation of barrel and endcap layer")
+    parser.add_argument('-b', '--endcapboundary', help="endcap boundary z coordinate - orientation of barrel and endcap layer")
+
 
     args = parser.parse_args()
     outputDir = args.outputDir
@@ -31,19 +33,26 @@ def main():
     sigma0xy = float(args.sigma0xy)
     sigma0rz = float(args.sigma0rz)
     sigma0rz2 = float(args.sigma0rz2)
+    endcap_boundary = float(args.endcapboundary)
 
     # TODO: the following will get moved to .sh file
     # event_1 network corresponds to event000001000 truth
     event_network = args.eventNetwork + "/event_1_filtered_graph_"
     event_truth = args.eventTruth + "/event000001000-"
     event_truth_file = event_truth + "full-mapping-minCurv-0.3-800.csv"
+    
+    # # averaging over many events
+    # # event_2 network corresponds to event000001001 truth
+    # event_network = args.eventNetwork + "/event_4_filtered_graph_"
+    # event_truth = args.eventTruth + "/event000001003-"
+    # event_truth_file = event_truth + "full-mapping-minCurv-0.3-800.csv"
 
     start = time.time()
 
     # load truth information & metadata on events
     nodes, edges = h.load_nodes_edges(event_network, min_volume, max_volume)
     # NOTE: only need to execute the following once - aggregating all truth information into 1 file
-    # h.load_save_truth(event_network, event_truth, event_truth_file)
+    h.load_save_truth(event_network, event_truth, event_truth_file)
     truth = pd.read_csv(event_truth_file)
 
     end = time.time()
@@ -80,7 +89,7 @@ def main():
     start = time.time()
     
     # compute track state estimates, priors and weights
-    subGraphs = h.compute_track_state_estimates(subGraphs, sigma0xy, sigma0rz, sigma0rz2)
+    subGraphs = h.compute_track_state_estimates(subGraphs, sigma0xy, sigma0rz, sigma0rz2, endcap_boundary)
     h.initialize_edge_activation(subGraphs)
     h.compute_prior_probabilities(subGraphs, 'track_state_estimates')
     h.compute_mixture_weights(subGraphs, 'track_state_estimates')

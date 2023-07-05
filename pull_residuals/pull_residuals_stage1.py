@@ -17,53 +17,31 @@ from scipy.optimize import curve_fit
 from scipy import asarray as ar,exp
 
 
-
-#Calculating the Gaussian PDF values given Gaussian parameters and random variable X
-def gaus(X,C,X_mean,sigma):
-    return C*exp(-(X-X_mean)**2/(2*sigma**2))
-
-
-def plot_pull_residual(pull_data, labels, truth, axis_lims, bins):
-    for p, l, a, b in zip(pull_data, labels, axis_lims, bins):
+def plot_pull_residual(pull_data, labels, truth, axis_lims, bins, bw):
+    sns.set()
+    for p, l, a, b, w in zip(pull_data, labels, axis_lims, bins, bw):
         df = pd.DataFrame({l: p, 'truth': truth})
         correct = df.loc[df['truth'] == 1]
         incorrect = df.loc[df['truth'] == 0]
 
-        # creating histogram from data
-        correct_numpy=correct.to_numpy(dtype ='float32')
-        x_data=correct_numpy[:,0]
-        hist, bin_edges = np.histogram(x_data)
-        hist=hist/sum(hist)
-        n = len(hist)
-        x_hist=np.zeros((n),dtype=float) 
-        for ii in range(n):
-            x_hist[ii]=(bin_edges[ii+1]+bin_edges[ii])/2
-        
-        # compute the Gaussian least-square fitting process
-        y_hist=hist
-        mean = sum(x_hist*y_hist)/sum(y_hist)                  
-        sigma = sum(y_hist*(x_hist-mean)**2)/sum(y_hist) 
-        param_optimised,param_covariance_matrix = curve_fit(gaus,x_hist,y_hist,p0=[max(y_hist),mean,sigma],maxfev=5000)
-
-        #print fit Gaussian parameters
-        print("Fit parameters: ")
-        print("=====================================================")
-        print("C = ", param_optimised[0], "+-",np.sqrt(param_covariance_matrix[0,0]))
-        print("X_mean =", param_optimised[1], "+-",np.sqrt(param_covariance_matrix[1,1]))
-        print("sigma = ", param_optimised[2], "+-",np.sqrt(param_covariance_matrix[2,2]))
-        print("\n")
-
         # plot histogram
         fig, ax1 = plt.subplots(figsize=(8, 6))
-        plt.hist(x_data, bins=b, color="orange", label="truth 1", histtype='bar')
-        plt.xlabel("Data: " + l)
-        plt.ylabel("Frequency")
-
-        # plot Gaussian fit 
+        sns.distplot(correct[l], hist=True, kde=False, bins=b, ax=ax1, color="orange", norm_hist=False,
+                            hist_kws={"lw":2, "label": "truth 1"})
         ax2 = ax1.twinx()
-        x_hist_2=np.linspace(np.min(x_hist),np.max(x_hist),10000)
-        ax2.plot(x_hist_2,gaus(x_hist_2,*param_optimised),'r:',label='Gaussian fit')
-        ax2.set_ylim(ymin=0)
+        sns.distplot(correct[l], hist=False, kde=True, ax=ax2, color="orange", 
+                            kde_kws={"lw": 2, "label": "KDE bw: " + str(w), "clip": a, "bw_adjust": w})
+        
+        ax1.set_ylabel("Frequency")
+        ax2.set_ylabel("PDF")
+        ax1.grid(False)
+        ax2.grid(False)
+        plt.xlim(a)
+
+        # combine legends
+        h1, l1 = ax1.get_legend_handles_labels()
+        h2, l2 = ax2.get_legend_handles_labels()
+        ax1.legend(h1+h2, l1+l2, loc=2)
 
         # FWHM
         kde_curve = ax2.lines[0]
@@ -77,13 +55,6 @@ def plot_pull_residual(pull_data, labels, truth, axis_lims, bins):
         ax2.hlines(halfmax, x[leftpos], x[rightpos], color='purple', ls=':')
         ax2.text(x[maxpos], halfmax, f'{fullwidthathalfmax:.3f}\n', color='purple', ha='center', va='center')
 
-        # combine legends
-        h1, l1 = ax1.get_legend_handles_labels()
-        h2, l2 = ax2.get_legend_handles_labels()
-        ax1.legend(h1+h2, l1+l2, loc=2)
-        
-        # ax1.set_xlim((a[0], a[1]))
-        plt.ylabel("PDF")
         plt.title('Stage 1: Pull residual for parameter ' + l)
         plt.show()
 
@@ -111,6 +82,7 @@ def main():
     truth = []
     pull_a, pull_b = [], []
     pull_c, pull_tau = [], []
+    pull_theta_1, pull_theta_2 = [], []
     for i, subGraph in enumerate(subGraphs):
         num_nodes = len(subGraph.nodes())
 
@@ -136,6 +108,14 @@ def main():
                         jv2 = np.array(track_state_estimates[n2]["joint_vector"])
                         jcov2 = track_state_estimates[n2]["joint_vector_covariance"]
 
+                        theta_1 = track_state_estimates[n1]["theta"]
+                        theta2_1 = track_state_estimates[n1]["theta2"]
+                        var_theta_1 = track_state_estimates[n1]["variance_theta"]
+
+                        theta_2 = track_state_estimates[n2]["theta"]
+                        theta2_2 = track_state_estimates[n2]["theta2"]
+                        var_theta_2 = track_state_estimates[n2]["variance_theta"]
+
                         # calculate the pull residuals
                         diffs = sv1 - sv2
                         sum_cov = cov1 + cov2
@@ -152,6 +132,14 @@ def main():
                         pull_c.append(pc)
                         pull_tau.append(ptau)
 
+                        diff_theta_1 = theta_1 - theta_2
+                        diff_theta_2 = theta2_1 - theta2_2
+                        sum_cov_theta = var_theta_1 + var_theta_2
+                        ptheta_1 = diff_theta_1 / np.sqrt(sum_cov_theta)
+                        ptheta_2 = diff_theta_2 / np.sqrt(sum_cov_theta)
+                        pull_theta_1.append(ptheta_1)
+                        pull_theta_2.append(ptheta_2)
+
                         # store MC truth
                         t1 = subGraph.nodes[node_num]["truth_particle"]
                         t2 = subGraph.nodes[n1]["truth_particle"]
@@ -160,13 +148,21 @@ def main():
                         else: truth.append(0)
 
 
+    # # pull residuals for [a, b, tau]
+    # pull_data = [np.array(pull_a), np.array(pull_b), np.array(pull_tau)]
+    # labels = ["a", "b", "tau"]
+    # axis_lims = [(-0.25, 0.25), (-0.5, 0.5), (-50, 50)]
+    # bins = [5000, 5000, 10000]
+    # bw = [0.05, 0.05, 0.001]
+    # plot_pull_residual(pull_data, labels, truth, axis_lims, bins, bw)
 
-    pull_data = [np.array(pull_a), np.array(pull_b), np.array(pull_tau)]
-    labels = ["a", "b", "tau"]
-    axis_lims = [(-0.25, 0.25), (-0.5, 0.5), (-50, 50)]
-    bins = [5000, 5000, 500]
-    # fit_params = [[1, mean, sigma], [1, mean, sigma], [1, mean, sigma]]
-    plot_pull_residual(pull_data, labels, truth, axis_lims, bins)
+    # # pull residuals for theta
+    pull_data = [np.array(pull_theta_1), np.array(pull_theta_2)]
+    labels = ["theta1", "theta2"]
+    axis_lims = [(-1000, 1000), (-1000, 1000)]
+    bins = [5000, 10000]
+    bw = [0.01, 0.01]
+    plot_pull_residual(pull_data, labels, truth, axis_lims, bins, bw)
 
 
 if __name__ == "__main__":    

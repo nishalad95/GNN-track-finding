@@ -235,7 +235,7 @@ def compute_3d_distance(coord1, coord2):
 
 
 
-def compute_track_state_estimates(GraphList, sigma0xy, sigma0rz, sigma0rz2):
+def compute_track_state_estimates(GraphList, sigma0xy, sigma0rz, sigma0rz2, endcap_boundary):
     # NOTE: these sigmas are errors in the parabolic parameter model approximation
     # sigmaO - error at the origin, different to sigma0xy rms error in xy plane
     # sigmaA - error in parabolic parameter b (same as sigma0xy error in xy plane)
@@ -243,10 +243,6 @@ def compute_track_state_estimates(GraphList, sigma0xy, sigma0rz, sigma0rz2):
     sigmaO = 4.0             # dev value 4.0mm larger error in m_O due to beamspot error and error at the origin
     sigmaA = sigma0xy        # dev value 0.1mm
     sigmaB = sigma0xy        # dev value 0.1mm
-    
-    # default error for barrel located node
-    sigma_r = sigma0rz            # dev value 0.1mm
-    sigma_z = sigma0rz2           # dev value 0.5mm
     
     # edge covariance matrix for xy plane
     S = np.array([  [sigmaO**2,         0,                  0], 
@@ -260,6 +256,9 @@ def compute_track_state_estimates(GraphList, sigma0xy, sigma0rz, sigma0rz2):
             gradients_xy = []
             gradients_zr = []
             del_tau = []
+            all_theta = []
+            all_theta2 = []
+            del_theta = []
             track_state_estimates = {}
             
             # create a list of node & neighbour coords including the origin
@@ -269,8 +268,11 @@ def compute_track_state_estimates(GraphList, sigma0xy, sigma0rz, sigma0rz2):
             coords = [(0.0, 0.0), m_node_xy]
             keys = [-1, node]
 
+            # default error for barrel located node
+            sigma_r = sigma0rz            # dev value 0.1mm
+            sigma_z = sigma0rz2           # dev value 0.5mm
             # if node in endcap:
-            if np.abs(m_node_zr[0]) >= 600.0: 
+            if np.abs(m_node_zr[0]) >= endcap_boundary: 
                 sigma_z = sigma0rz
                 sigma_r = sigma0rz2
 
@@ -300,14 +302,14 @@ def compute_track_state_estimates(GraphList, sigma0xy, sigma0rz, sigma0rz2):
                 grad_zr = dz / dr                   # tau = dz / dr
                 gradients_zr.append(grad_zr)        # dz_dr gradient (inverse gradient dz / dr)
                 # calculate theta
-                angle_xy = atan2(dy, dx)
-                angle_zr = atan2(dz, dr)
+                # angle_xy = atan2(dy, dx)
+                # angle_zr = atan2(dz, dr)
                 
                 # default error for barrel located neighbour
                 sigma_r_neighbour = sigma0rz            # dev value 0.1mm
                 sigma_z_neighbour = sigma0rz2           # dev value 0.5mm
                 # if neighbour in endcap:
-                if np.abs(m_node_zr[0]) >= 600.0: 
+                if np.abs(z2) >= endcap_boundary: 
                     sigma_z_neighbour = sigma0rz
                     sigma_r_neighbour = sigma0rz2
                 
@@ -327,6 +329,22 @@ def compute_track_state_estimates(GraphList, sigma0xy, sigma0rz, sigma0rz2):
                 # error in tau
                 cov_tau = J.dot(S2).dot(J.T)
                 del_tau.append(cov_tau)
+
+                # error in theta
+                tau = grad_zr
+                theta = np.arctan(1/tau)
+                theta2 = np.arctan2(dr, dz)
+                all_theta.append(theta)
+                all_theta2.append(theta2)
+                prefix = -1 / (1 + tau**2)
+                j1 = prefix/(r1 - r2)
+                j2 = -prefix/(r1 - r2)
+                j3 = (-prefix*(z1 - z2))/(r1 - r2)**2
+                j4 = (prefix*(z1 - z2))/(r1 - r2)**2
+                J = np.array([j1, j2, j3, j4])
+                cov_theta = J.dot(S2).dot(J.T)
+                del_theta.append(cov_theta)
+                
             
             # [neighbour1, neighbour2, ..., node, (0.0, 0.0)]
             coords.reverse()
@@ -385,15 +403,15 @@ def compute_track_state_estimates(GraphList, sigma0xy, sigma0rz, sigma0rz2):
                 dz = node_z - z_k
                 hyp = np.sqrt(dr**2 + dz**2)
                 sin_t = np.abs(dr) / hyp
-                tan_t = np.abs(dr) / np.abs(dz)
 
                 # kappa and radius of curvature
                 kappa = (2*a) / (1 + ((2*a*x_k) + b)**2)**1.5
 
                 # Moliere Theory - Highland formula multiple scattering
                 var_ms = sin_t * ((13.6 * 1e-3 * np.sqrt(0.02) * kappa) / 0.3)**2
-                if np.abs(z_k) >= 600.0: 
+                if np.abs(m_node_zr[0]) >= endcap_boundary: 
                     # endcap - orientation of detector layers are vertical
+                    tan_t = np.abs(dr / dz)
                     var_ms = var_ms * tan_t
 
                 covariance = H_inv.dot(S).dot(H_inv.T)
@@ -406,12 +424,20 @@ def compute_track_state_estimates(GraphList, sigma0xy, sigma0rz, sigma0rz2):
                 joint_vector_covariance[2, :] = 0.0
                 joint_vector_covariance[2, 2] = variance_tau + var_ms
                 
+                theta = all_theta[i]
+                theta2 = all_theta2[i]
+                variance_theta = del_theta[i]**2 + var_ms
+                
                 # create track state estimates dictionary for each neighbour (node-->neighbour)
                 track_state_estimates[key] = {  'xyzr':(x_k, y_k, z_k, r_k),            # neighbour coords
                                                 'edge_state_vector': track_state_vector, 
                                                 'edge_covariance': covariance,
                                                 'joint_vector': joint_vector,
                                                 'joint_vector_covariance': joint_vector_covariance,
+                                                'theta': theta,
+                                                'theta2': theta2,
+                                                'variance_theta': variance_theta,
+                                                'var_ms_node': var_ms
                                              }
 
             # store all track state estimates at the node
@@ -601,9 +627,10 @@ def plot_subgraphs(GraphList, outputDir, node_labels=False, save_plot=False, tit
 def __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, key, axis1, axis2, node_labels, save_plot):
 
     colors = ["#f7c04a", "#2648ad", "#a5e438", "#d16097"]
+    # colors = ["#00DB00"]
     GraphList.sort(key=lambda subGraph: int(subGraph.graph["iteration"]))
 
-    figsize=(14,10)
+    figsize=(14,12)
     if key == 'zr': figsize=(16,10)
     _, ax = plt.subplots(figsize=figsize)
 
@@ -616,20 +643,20 @@ def __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, key,
         for u, v in subGraph.edges():
             if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
             else: edge_colors.append("#f2f2f2")
-        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.65)
-        nx.draw_networkx_nodes(subGraph, pos, node_color=color, alpha=0.75, node_size=50, label=iteration)
+        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors)
+        nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=50, label=iteration)
         if node_labels:
             nx.draw_networkx_labels(subGraph, pos, font_size=4)
 
     ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
-    plt.xlabel(axis1)
-    plt.ylabel(axis2)
-    if key == 'zr' : plt.xlim([-1800, 1800])
+    plt.xlabel(axis1 + " [mm]")
+    plt.ylabel(axis2 + " [mm]")
+    # if key == 'zr' : plt.xlim([-1800, 1800])
     plt.title(title)
     # plot legend & remove duplicate entries
     handles, labels = plt.gca().get_legend_handles_labels()
     by_label = dict(zip(labels, handles))
-    plt.legend(by_label.values(), by_label.keys(), loc='upper left', title="iteration")    
+    plt.legend(by_label.values(), by_label.keys(), loc='upper left', title="Stage")    
     plt.axis('on')
     if save_plot:
         plt.savefig(outputFile + "subgraphs_"+ key +".png", dpi=300)
@@ -639,7 +666,7 @@ def __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, key,
 # used for visualising the good extracted candidates & iteration num
 def plot_save_subgraphs_iterations(GraphList, outputFile, title, node_labels=True, save_plot=True):
     #xy plane
-    # __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, 'xy', "x", "y", False, save_plot)
+    __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, 'xy', "x", "y", True, save_plot)
     #zr plane
-    __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, 'zr', "z", "r", False, save_plot)
+    __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, 'zr', "z", "r", True, save_plot)
 

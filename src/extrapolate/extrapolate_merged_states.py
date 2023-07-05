@@ -25,7 +25,7 @@ def merge_states(mean1, cov1, mean2, cov2):
 
 def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour_attr, 
                         chi2CutFactor, state_to_extrapolate, state_cov, 
-                        sigma0xy, sigma0rz, sigma0rz2, is_merged_state=False):
+                        sigma0xy, sigma0rz, sigma0rz2, endcap_boundary, is_merged_state=False):
 
     # global coordinates of node and neighbour
     node_x = node_attr['GNN_Measurement'].x
@@ -85,31 +85,47 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     ds_db = ((np.sin(phi) * numer) * (1 + ((3 * a * np.sin(phi) * numer) / denom**2))) / denom**2
     ds_dc = - np.sin(phi) * (1 + ((2 * a * np.sin(phi) * numer) / denom**2)) / denom
 
-    # partial a' : da'/da, da'/db, da'dc
+    # partial a' : da'/da, da'/db, da'/dc
     denom = np.cos(phi) + ((2*a + b) * np.sin(phi))
     da_da = (1 / denom**3) * (1 - ((6 * a * np.sin(phi)) * (s_star + a * ds_da) / denom))
     da_db = (-3 * a * np.sin(phi) * ((2 * a * ds_db) + 1)) / denom**4
     da_dc = (-6 * np.sin(phi) * ds_dc * a**2) / denom**4
 
-    # partial b' : db'/da, db'/db, db'dc
+    # partial b' : db'/da, db'/db, db'/dc
     denom = np.cos(phi) + ((2*a*s_star + b) * np.sin(phi))
     bracket = np.cos(phi) - ((np.sin(phi) * (-np.sin(phi) + ((2*a*s_star + b)*np.cos(phi))) ) / denom )
     db_da = (2 * (s_star + a * ds_da) * bracket) / denom
     db_db = ((1 + (2 * a * ds_da)) * bracket) / denom
     db_dc = (2 * a * ds_dc * bracket) / denom
 
-    # partial c' : dc'/da, dc'/db, dc'dc
+    # partial c' : dc'/da, dc'/db, dc'/dc
     bracket = (np.cos(phi) * (2*a + b)) - np.sin(phi)
     dc_da = (ds_da * bracket) + (s_star**2 * np.cos(phi))
     dc_db = (ds_db * bracket) + (s_star * np.cos(phi))
     dc_dc = (ds_dc * bracket) + np.cos(phi)
 
-    # extrapolation Jacobian
+    # extrapolation Jacobian - for xy plane
     F = np.array([[da_da,    da_db,     da_dc], 
                   [db_da,    db_db,     db_dc],
                   [dc_da,    dc_db,     dc_dc]])      # F state transition matrix, extrapolation Jacobian
 
+    # Moliere Theory - Highland formula multiple scattering
+    # calculation of hypotenuse using a pair of hits (track segment)   
+    dr = neighbour_r - node_r
+    dz = neighbour_z - node_z
+    hyp = np.sqrt(dr**2 + dz**2)
+    sin_t = np.abs(dr) / hyp
+    # kappa and radius of curvature
+    kappa = (2*a) / (1 + ((2*a*neighbour_x) + b)**2)**1.5
+    var_ms = sin_t * ((13.6 * 1e-3 * np.sqrt(0.02) * kappa) / 0.3)**2
+    if np.abs(node_z) >= endcap_boundary: 
+        # endcap - orientation of detector layers are vertical
+        tan_t = np.abs(dr) / np.abs(dz)
+        var_ms = var_ms * tan_t
+
+    # extrapolation of the merged parabolic state from previous stage
     merged_cov = state_cov
+    merged_cov[1, 1] += var_ms
     extrp_state = F.dot(merged_state)
     extrp_cov = F.dot(merged_cov).dot(F.T)
 
@@ -117,45 +133,175 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     # calc chi2 distance between measurement at neighbour node and extrapolated track state
     H = np.array([[0., 0., 1.]])
     # residual = neighbour_y - H.dot(extrp_state)               # compute the residual
-    neighbour_y_in_cs_nodeC = .0                                # measurement is always zero in c.s. of neighbour
+    neighbour_y_in_cs_nodeC = .0                                # measurement is always zero in c.s. of neighbour (because we've used a transformation of coordinates, this is 0 by definition)
     residual = neighbour_y_in_cs_nodeC - H.dot(extrp_state)     # compute the residual
-    S = H.dot(extrp_cov).dot(H.T) + sigma0xy**2                   # covariance of residual (denominator of kalman gain)
+    S = H.dot(extrp_cov).dot(H.T) + sigma0xy**2                 # covariance of residual (denominator of kalman gain)
     inv_S = np.linalg.inv(S)
-    chi2 = residual.T.dot(inv_S).dot(residual)
-    chi2_cut = chi2CutFactor
+    chi2 = residual.T.dot(inv_S).dot(residual)                  # chi2 distance for xy plane - parabolic extrapolation
 
-    # # HYPERPARAMETER TUNING THE CHI2 CUT FACTOR
-    # # truth, chi2 distance, chi2_cut
-    # node_truth = subGraph.nodes[node_num]["truth_particle"]
-    # neighbour_truth = subGraph.nodes[neighbour_num]["truth_particle"]
-    # truth = 0
-    # if node_truth == neighbour_truth: truth = 1
-    # line = str(truth) + " " + str(chi2) + "\n"
-    # with open('chi2_data_in_extrapolation.csv', 'a') as f:
-    #     f.write(line)
+
+    # temporary - for debugging truth distributions
+    node_truth = subGraph.nodes[node_num]["truth_particle"]
+    neighbour_truth = subGraph.nodes[neighbour_num]["truth_particle"]
+    truth = 0
+    if node_truth == neighbour_truth: truth = 1
+    
+    # extrapolation in rz plane
+    tau = dz / dr
+    H_rz = np.array([[1., 0.]])
+    # 4 different scenarios for rz-plane
+    if (np.abs(node_z) >= endcap_boundary):
+        
+        rz_state = np.array([node_r, tau])
+        if (np.abs(neighbour_z) >= endcap_boundary):
+            
+            # endcap to endcap extrapolation
+            extrp_r = node_r + ((neighbour_z - node_z) / tau)
+            residual_rz = neighbour_r - extrp_r
+            residual_rz = np.array([[residual_rz, 0.]])
+            cov_rz = np.array([[sigma0rz**2, 0],
+                               [0,           state_cov[2, 2]]])
+            F_rz = np.array([[1.,   -dz/tau**2], 
+                            [0.,    1.]])
+            extrp_rz_cov = F_rz.dot(cov_rz).dot(F_rz.T)
+            S_rz = H_rz.dot(extrp_rz_cov).dot(H_rz.T) + sigma0rz**2
+            inv_S_rz = np.linalg.inv(S_rz)
+            chi2_rz = residual_rz.T.dot(inv_S_rz).dot(residual_rz)
+            line = str(truth) + " " + str(chi2_rz[0][0]) + "\n"
+            with open('endcap_to_endcap_chi2_rz_extrp.csv', 'a') as f:
+                f.write(line)
+
+            # extrp_rz_state = F_rz.dot(rz_state)
+            # residual compares measured r of neighbour & extrapolated r
+            # residual_rz = neighbour_r - H_rz.dot(extrp_rz_state)
+            # line = str(truth) + " " + str(residual_rz[0]) + "\n"
+            # line = str(truth) + " " + str(residual_rz) + "\n"
+            # with open('endcap_to_endcap_residual_rz_extrp.csv', 'a') as f:
+            #     f.write(line)
+            
+        else:
+            
+            # endcap to barrel extrapolation
+            extrp_z = node_z + (tau*(neighbour_r - node_r))
+            residual_rz = neighbour_z - extrp_z
+            residual_rz = np.array([[residual_rz, 0.]])
+            cov_rz = np.array([[sigma0rz**2, 0],
+                               [0,           state_cov[2, 2]]])
+            F_rz = np.array([[-tau,   0.], 
+                            [0.,      1.]])
+            extrp_rz_cov = F_rz.dot(cov_rz).dot(F_rz.T)
+            S_rz = H_rz.dot(extrp_rz_cov).dot(H_rz.T) + sigma0rz**2
+            inv_S_rz = np.linalg.inv(S_rz)
+            chi2_rz = residual_rz.T.dot(inv_S_rz).dot(residual_rz)
+            line = str(truth) + " " + str(chi2_rz[0][0]) + "\n"
+            with open('endcap_to_barrel_chi2_rz_extrp.csv', 'a') as f:
+                f.write(line)
+
+            # extrp_rz_state = F_rz.dot(rz_state)
+            # residual compares measured z of neighbour & extrapolated z
+            # residual_rz = neighbour_z - H_rz.dot(extrp_rz_state)
+            # line = str(truth) + " " + str(residual_rz[0]) + "\n"
+            # line = str(truth) + " " + str(residual_rz) + "\n"
+            # with open('endcap_to_barrel_residual_rz_extrp.csv', 'a') as f:
+            #     f.write(line)
+
+    else:
+        
+        rz_state = np.array([node_z, tau])
+        if (np.abs(neighbour_z) >= endcap_boundary):
+
+            # barrel to endcap extrapolation
+            extrp_r = node_r + ((neighbour_z - node_z) / tau)
+            residual_rz = neighbour_r - extrp_r
+            residual_rz = np.array([[residual_rz, 0.]])
+            cov_rz = np.array([[sigma0rz**2, 0],
+                               [0,           state_cov[2, 2]]])
+            F_rz = np.array([[-1/tau,   -dz/tau**2], 
+                            [0.,        1.]])
+            extrp_rz_cov = F_rz.dot(cov_rz).dot(F_rz.T)
+            S_rz = H_rz.dot(extrp_rz_cov).dot(H_rz.T) + sigma0rz**2
+            inv_S_rz = np.linalg.inv(S_rz)
+            chi2_rz = residual_rz.T.dot(inv_S_rz).dot(residual_rz)
+            line = str(truth) + " " + str(chi2_rz[0][0]) + "\n"
+            with open('barrel_to_endcap_chi2_rz_extrp.csv', 'a') as f:
+                f.write(line)
+
+            # extrp_rz_state = F_rz.dot(rz_state)
+            # residual compares measured r of neighbour & extrapolated r
+            # residual_rz = neighbour_r - H_rz.dot(extrp_rz_state)
+            # line = str(truth) + " " + str(residual_rz[0]) + "\n"
+            # line = str(truth) + " " + str(residual_rz) + "\n"
+            # with open('barrel_to_endcap_residual_rz_extrp.csv', 'a') as f:
+            #     f.write(line)
+
+        else:
+
+            # barrel to barrel extrapolation
+            extrp_z = node_z + (tau*(neighbour_r - node_r))
+            residual_rz = neighbour_z - extrp_z
+            residual_rz = np.array([[residual_rz, 0.]])
+            cov_rz = np.array([[sigma0rz**2, 0],
+                               [0,           state_cov[2, 2]]])
+            F_rz = np.array([[1,   dr], 
+                            [0.,   1.]])
+            extrp_rz_cov = F_rz.dot(cov_rz).dot(F_rz.T)
+            S_rz = H_rz.dot(extrp_rz_cov).dot(H_rz.T) + sigma0rz**2
+            inv_S_rz = np.linalg.inv(S_rz)
+            chi2_rz = residual_rz.T.dot(inv_S_rz).dot(residual_rz)
+            line = str(truth) + " " + str(chi2_rz[0][0]) + "\n"
+            with open('barrel_to_barrel_chi2_rz_extrp.csv', 'a') as f:
+                f.write(line)
+
+            # extrp_rz_state = F_rz.dot(rz_state)
+            # residual compares measured z of neighbour & extrapolated z
+            # residual_rz = neighbour_z - H_rz.dot(extrp_rz_state)
+            # line = str(truth) + " " + str(residual_rz[0]) + "\n"
+            # line = str(truth) + " " + str(residual_rz) + "\n"
+            # with open('barrel_to_barrel_residual_rz_extrp.csv', 'a') as f:
+            #     f.write(line)
+    
+    # print("extrapolation in rz!")
+    # tau = dz / dr
+    # rz_state = np.array([node_z, tau])
+    # F_rz = np.array([[1., dr], 
+    #                  [0.,  1.]])
+    # extrp_rz_state = F_rz.dot(rz_state)
+    # K = np.array([[1.,      0.],
+    #               [1/dr,    -1/dr]])
+    # G = np.array([[sigma0rz**2, 0],
+    #               [0,           sigma0rz**2]])
+    # cov_rz_state = K.dot(G).dot(K.T)
+    # cov_rz_state[1, 1] += var_ms
+    # extrp_rz_cov = F_rz.dot(cov_rz_state).dot(F_rz.T)
+    # H_rz = np.array([[1., 0.]])
+    # residual_rz = neighbour_z - H_rz.dot(extrp_rz_state)
+    # S_rz = H_rz.dot(extrp_rz_cov).dot(H_rz.T) + sigma0rz**2
+    # inv_S_rz = np.linalg.inv(S_rz)
+    # chi2_rz = residual_rz.T.dot(inv_S_rz).dot(residual_rz)
+    # print("chi2_rz: \n ", chi2_rz)
+    
+
+    # HYPERPARAMETER TUNING THE CHI2 CUT FACTOR - chi2 in xy plane extrapolation
+    # truth, chi2 distance
+    node_truth = subGraph.nodes[node_num]["truth_particle"]
+    neighbour_truth = subGraph.nodes[neighbour_num]["truth_particle"]
+    truth = 0
+    if node_truth == neighbour_truth: truth = 1
+    line = str(truth) + " " + str(chi2) + "\n"
+    with open('chi2_data_in_extrapolation_xy.csv', 'a') as f:
+        f.write(line)
+    # line_rz = str(truth) + " " + str(chi2_rz) + "\n"
+    # with open('chi2_data_in_extrapolation_rz.csv', 'a') as g:
+    #     g.write(line_rz)
 
     # validate chi2 distance
-    if chi2 <= chi2_cut:
+    if chi2 <= chi2CutFactor:
         # this edge will remain active
 
         # calculate beta: measurement likelihood
         factor = 2 * math.pi * np.abs(S)
         norm_factor = math.pow(factor, -0.5)
         likelihood = norm_factor * np.exp(-0.5 * chi2)
-
-        # Moliere Theory - Highland formula multiple scattering
-        # calculation of hypotenuse using a pair of hits (track segment)   
-        dr = node_r - neighbour_r
-        dz = node_z - neighbour_z
-        hyp = np.sqrt(dr**2 + dz**2)
-        sin_t = np.abs(dr) / hyp
-        tan_t = np.abs(dr) / np.abs(dz)
-        # kappa and radius of curvature
-        kappa = (2*a) / (1 + ((2*a*neighbour_x) + b)**2)**1.5
-        var_ms = sin_t * ((13.6 * 1e-3 * np.sqrt(0.02) * kappa) / 0.3)**2
-        if np.abs(neighbour_z) >= 600.0: 
-            # endcap - orientation of detector layers are vertical
-            var_ms = var_ms * tan_t
 
         # initialize KF
         f = KalmanFilter(dim_x=3, dim_z=1)
@@ -178,20 +324,38 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
 
         # form tau and variance in tau
         tau = dz / dr
+        
         # default error for barrel located node
         sigma_r = sigma0rz
         sigma_z = sigma0rz2
-        # if node in endcap, then reduce z error: used in calc of error in tau = dz/dr
-        if np.abs(node_z) >= 600.0: 
+        # if node in endcap
+        if np.abs(node_z) >= endcap_boundary: 
             sigma_z = sigma0rz
             sigma_r = sigma0rz2
-        del_dz = sigma_z
-        del_dr = sigma_r
+        # default error for barrel located neighbour
+        sigma_r_neighbour = sigma0rz
+        sigma_z_neighbour = sigma0rz2
+        # if neighbour in endcap
+        if np.abs(neighbour_z) >= endcap_boundary: 
+            sigma_z_neighbour = sigma0rz
+            sigma_r_neighbour = sigma0rz2
+        
+        # jacobian for covariance of delta tau
+        j1 = 1 / dr
+        j2 = -1 / dr
+        j3 = - dz / dr**2
+        j4 = dz / dr**2
+        J = np.array([j1, j2, j3, j4])
+
+        # edge covariance matrix for rz plane
+        S2 = np.array([ [sigma_z**2, 0, 0, 0],
+                        [0, sigma_z_neighbour**2, 0, 0],
+                        [0, 0, sigma_r**2, 0],
+                        [0, 0, 0, sigma_r_neighbour**2]])
+
         # error in tau
-        del_tau = tau * np.sqrt((del_dz / dz)**2 + (del_dr / dr)**2)
-        if dz == 0:
-            del_tau = tau * np.sqrt((del_dr / dr)**2)
-        variance_tau = del_tau**2
+        cov_tau = J.dot(S2).dot(J.T)
+        variance_tau = cov_tau
 
         # form the joint vector state and joint vector covariance
         joint_vector = [updated_state[0], updated_state[1], tau]
@@ -215,8 +379,6 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
                  'edge_covariance': updated_cov,
                  'joint_vector': joint_vector,
                  'joint_vector_covariance': joint_vector_covariance,
-                #  'joint_vector': updated_state,
-                #  'joint_vector_covariance': updated_cov,
                  'likelihood': likelihood,
                  # this value is the previous weight - will get updated at the end of extrapolation
                  'mixture_weight': subGraph.nodes[node_num]['track_state_estimates'][neighbour_num]['mixture_weight']
@@ -241,7 +403,7 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
 
 
 
-def message_passing(subGraphs, chi2CutFactor, sigma0xy, sigma0rz, sigma0rz2):
+def message_passing(subGraphs, chi2CutFactor, sigma0xy, sigma0rz, sigma0rz2, endcap_boundary):
     number_of_nodes_with_merged_state = 0
     
     # variables used in confusion matrix
@@ -269,7 +431,7 @@ def message_passing(subGraphs, chi2CutFactor, sigma0xy, sigma0rz, sigma0rz2):
                     if subGraph[node_num][neighbour_num]["activated"] == 1:
                         neighbour_attr = subGraph.nodes[neighbour_num]
                         updated_state_dict, chi2, outlier_numerator, outlier_denominator, active_numerator, active_denominator = extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour_attr, 
-                                                                                                                                chi2CutFactor, state_to_extrapolate, state_cov, sigma0xy, sigma0rz, sigma0rz2, is_merged_state=True)
+                                                                                                                                chi2CutFactor, state_to_extrapolate, state_cov, sigma0xy, sigma0rz, sigma0rz2, endcap_boundary, is_merged_state=True)
                         
                         correct_outliers_detected += outlier_numerator
                         total_outliers += outlier_denominator
@@ -367,7 +529,8 @@ def main():
     parser.add_argument('-e', '--sigma0xy', help="rms measurement error in xy")
     parser.add_argument('-z', '--sigma0rz', help="rms measurement error in rz")
     parser.add_argument('-m', '--sigma0rz2', help="rms measurement error in rz - MS Moliere orientation of layer important")
-    
+    parser.add_argument('-b', '--endcapboundary', help="endcap boundary z coordinate - orientation of barrel and endcap layer")
+
     args = parser.parse_args()
     inputDir = args.inputDir
     outputDir = args.outputDir
@@ -375,6 +538,7 @@ def main():
     sigma0xy = float(args.sigma0xy)
     sigma0rz = float(args.sigma0rz)
     sigma0rz2 = float(args.sigma0rz2)
+    endcap_boundary = float(args.endcapboundary)
 
     # read in subgraph data
     subGraphs = []
@@ -385,7 +549,7 @@ def main():
 
     print("Beginning message passing...")
     # distribute merged state to neighbours, extrapolate, validation & create new updated state(s)
-    message_passing(subGraphs, chi2CutFactor, sigma0xy, sigma0rz, sigma0rz2)
+    message_passing(subGraphs, chi2CutFactor, sigma0xy, sigma0rz, sigma0rz2, endcap_boundary)
 
     h.compute_prior_probabilities(subGraphs, 'updated_track_states')
     h.reweight(subGraphs, 'updated_track_states')
