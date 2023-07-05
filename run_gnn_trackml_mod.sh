@@ -15,7 +15,7 @@ SIGMA0RZ2=0.6           # rz plane measurement error - default error in z for ba
 
 # event conversion and track simulation
 min_volume=7            # min volume number to analyse (inclusive) - used also in effciency calc
-max_volume=9            # max volume number to analyse (inclusive) - used also in efficiency calc
+max_volume=7            # max volume number to analyse (inclusive) - used also in efficiency calc
 # SIGMA_MS=0.01         # multiple scattering error dynamic - implemented with Moliere theory, dev value 10^-4
 ROOTDIR=src/output      # output directory to store GNN algorithm output
 ENDCAP_BOUNDARY=550.0
@@ -57,10 +57,12 @@ echo "----------------------------------------------------"
 INPUT=$ROOTDIR/track_sim/network/
 mkdir -p $INPUT
 EVENT_NETWORK=src/trackml_mod/event_network/minCurv_0.3_800
+# averaging over multiple events
+# EVENT_NETWORK=src/trackml_mod/event_network/minCurv_0.3_800/minCurv_0.3_800_output_14062023
 python src/trackml_mod/event_conversion.py -o $INPUT -n $EVENT_NETWORK -t $EVENT_TRUTH -a $min_volume -z $max_volume -e $SIGMA0XY -r $SIGMA0RZ -m $SIGMA0RZ2 -b $ENDCAP_BOUNDARY
-# stages+=("event_conversion")
-# time=$SECONDS
-# execution_times+=($time)
+stages+=("event_conversion")
+time=$SECONDS
+execution_times+=($time)
 
 
 # # -----------------------------------------------------
@@ -68,9 +70,9 @@ python src/trackml_mod/event_conversion.py -o $INPUT -n $EVENT_NETWORK -t $EVENT
 # # -----------------------------------------------------
 for (( i=$START; i<=$END; i++ ))
 
-# # # testing iteration by iteration
-# INPUT=$ROOTDIR/iteration_1/remaining/
-# for (( i=2; i<=3; i++ ))
+# # # # testing iteration by iteration
+# INPUT=$ROOTDIR/iteration_2/remaining/
+# for (( i=3; i<=3; i++ ))
 
 
     do
@@ -85,10 +87,10 @@ for (( i=$START; i<=$END; i++ ))
             prev_duration=$SECONDS
             # chi2 and kl thresholds - trained (loose cut)
             python src/clustering/clustering.py -i $INPUT -o $OUTPUT -d track_state_estimates -c 1.0 -k 2.0 -l $LUT -t $i -z $SIGMA0RZ -m $SIGMA0RZ2 -b $ENDCAP_BOUNDARY
-            # time it!
-            # stages+=("clustering")
-            # time=$SECONDS
-            # execution_times+=($time)
+            time it!
+            stages+=("clustering")
+            time=$SECONDS
+            execution_times+=($time)
         elif (( $i % 2 == 0 ))
         then
             echo "---------------------------------------------------"
@@ -97,10 +99,10 @@ for (( i=$START; i<=$END; i++ ))
             echo "Using chisq distance cut of: ${c}"
             prev_duration=$SECONDS
             python src/extrapolate/extrapolate_merged_states.py -i $INPUT -o $OUTPUT -c $c -e $SIGMA0XY -z $SIGMA0RZ -m $SIGMA0RZ2 -b $ENDCAP_BOUNDARY
-            # time it!
-            # stages+=("extrapolation")
-            # time=$SECONDS
-            # execution_times+=($time)
+            time it!
+            stages+=("extrapolation")
+            time=$SECONDS
+            execution_times+=($time)
         elif (( $i % 2 == 1))
         then
             echo "----------------------------------------------------"
@@ -138,10 +140,10 @@ for (( i=$START; i<=$END; i++ ))
         
         INPUT=$REMAINING
 
-        # time it!
-        # stages+=("extract")
-        # time=$SECONDS
-        # execution_times+=($time)
+        time it!
+        stages+=("extract")
+        time=$SECONDS
+        execution_times+=($time)
 
 done
 
@@ -156,34 +158,34 @@ python src/extract/p_value_distribution.py -i $ROOTDIR
 echo "----------------------------------------------------"
 
 
-# time it!
-# stages+=("reconstruction_efficiency")
-# time=$SECONDS
-# execution_times+=($time)
+time it!
+stages+=("reconstruction_efficiency")
+time=$SECONDS
+execution_times+=($time)
 
 # plot all candidates
 python src/extract/plot_all_extracted_candidates.py -i $END
 
-# time it!
-# stages+=("plot_all_candidates")
-# time=$SECONDS
-# execution_times+=($time)
+time it!
+stages+=("plot_all_candidates")
+time=$SECONDS
+execution_times+=($time)
 
 
-# echo "----------------------------------------------------"
-# echo "Execution stages and times:"
-# printf "%s\n" "${stages[@]}" > $ROOTDIR/execution_stages.txt
-# for value in "${stages[@]}"
-# do
-#      echo "$value"
-# done
+echo "----------------------------------------------------"
+echo "Execution stages and times:"
+printf "%s\n" "${stages[@]}" > $ROOTDIR/execution_stages.txt
+for value in "${stages[@]}"
+do
+     echo "$value"
+done
 
-# printf "%s\n" "${execution_times[@]}" > $ROOTDIR/execution_times.txt
-# for value in "${execution_times[@]}"
-# do
-#      echo "$value"
-# done
-# echo "----------------------------------------------------"
+printf "%s\n" "${execution_times[@]}" > $ROOTDIR/execution_times.txt
+for value in "${execution_times[@]}"
+do
+     echo "$value"
+done
+echo "----------------------------------------------------"
 
 
 echo "DONE"

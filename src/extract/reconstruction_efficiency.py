@@ -36,6 +36,7 @@ inputDir = outputDir + "/iteration_" + str(iteration_num) + "/candidates/"
 #########################################
 
 reference_path = event_truth + "/event000001000-"
+# reference_path = event_truth + "/event000001003-"
 
 # identify the particle ids that have pT > 1GeV, units GeV/c
 particles = pd.read_csv(reference_path + "particles.csv", sep=',')

@@ -507,6 +507,17 @@ def main():
         h.save_network(fragmentsDir, i, sub)
 
 
+    print("Graph network after processing:")
+    num_remaining_nodes = 0
+    num_remaining_edges = 0
+    for sub in remaining:
+        num_remaining_nodes += sub.number_of_nodes()
+        num_remaining_edges +=sub.number_of_edges()
+
+    print("Number of edges:", num_remaining_edges)
+    print("Number of nodes:", num_remaining_nodes)
+
+
 
 if __name__ == "__main__":
     main()

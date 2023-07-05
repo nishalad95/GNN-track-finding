@@ -627,9 +627,10 @@ def plot_subgraphs(GraphList, outputDir, node_labels=False, save_plot=False, tit
 def __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, key, axis1, axis2, node_labels, save_plot):
 
     colors = ["#f7c04a", "#2648ad", "#a5e438", "#d16097"]
+    # colors = ["#00DB00"]
     GraphList.sort(key=lambda subGraph: int(subGraph.graph["iteration"]))
 
-    figsize=(14,10)
+    figsize=(14,12)
     if key == 'zr': figsize=(16,10)
     _, ax = plt.subplots(figsize=figsize)
 
@@ -642,20 +643,20 @@ def __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, key,
         for u, v in subGraph.edges():
             if subGraph[u][v]['activated'] == 1: edge_colors.append(color)
             else: edge_colors.append("#f2f2f2")
-        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors, alpha=0.65)
-        nx.draw_networkx_nodes(subGraph, pos, node_color=color, alpha=0.75, node_size=50, label=iteration)
+        nx.draw_networkx_edges(subGraph, pos, edge_color=edge_colors)
+        nx.draw_networkx_nodes(subGraph, pos, node_color=color, node_size=50, label=iteration)
         if node_labels:
             nx.draw_networkx_labels(subGraph, pos, font_size=4)
 
     ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
-    plt.xlabel(axis1)
-    plt.ylabel(axis2)
-    if key == 'zr' : plt.xlim([-1800, 1800])
+    plt.xlabel(axis1 + " [mm]")
+    plt.ylabel(axis2 + " [mm]")
+    # if key == 'zr' : plt.xlim([-1800, 1800])
     plt.title(title)
     # plot legend & remove duplicate entries
     handles, labels = plt.gca().get_legend_handles_labels()
     by_label = dict(zip(labels, handles))
-    plt.legend(by_label.values(), by_label.keys(), loc='upper left', title="iteration")    
+    plt.legend(by_label.values(), by_label.keys(), loc='upper left', title="Stage")    
     plt.axis('on')
     if save_plot:
         plt.savefig(outputFile + "subgraphs_"+ key +".png", dpi=300)
@@ -665,7 +666,7 @@ def __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, key,
 # used for visualising the good extracted candidates & iteration num
 def plot_save_subgraphs_iterations(GraphList, outputFile, title, node_labels=True, save_plot=True):
     #xy plane
-    # __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, 'xy', "x", "y", False, save_plot)
+    __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, 'xy', "x", "y", True, save_plot)
     #zr plane
-    __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, 'zr', "z", "r", False, save_plot)
+    __plot_save_subgraphs_iterations_in_plane(GraphList, outputFile, title, 'zr', "z", "r", True, save_plot)
 

@@ -85,20 +85,20 @@ def extrapolate_validate(subGraph, node_num, node_attr, neighbour_num, neighbour
     ds_db = ((np.sin(phi) * numer) * (1 + ((3 * a * np.sin(phi) * numer) / denom**2))) / denom**2
     ds_dc = - np.sin(phi) * (1 + ((2 * a * np.sin(phi) * numer) / denom**2)) / denom
 
-    # partial a' : da'/da, da'/db, da'dc
+    # partial a' : da'/da, da'/db, da'/dc
     denom = np.cos(phi) + ((2*a + b) * np.sin(phi))
     da_da = (1 / denom**3) * (1 - ((6 * a * np.sin(phi)) * (s_star + a * ds_da) / denom))
     da_db = (-3 * a * np.sin(phi) * ((2 * a * ds_db) + 1)) / denom**4
     da_dc = (-6 * np.sin(phi) * ds_dc * a**2) / denom**4
 
-    # partial b' : db'/da, db'/db, db'dc
+    # partial b' : db'/da, db'/db, db'/dc
     denom = np.cos(phi) + ((2*a*s_star + b) * np.sin(phi))
     bracket = np.cos(phi) - ((np.sin(phi) * (-np.sin(phi) + ((2*a*s_star + b)*np.cos(phi))) ) / denom )
     db_da = (2 * (s_star + a * ds_da) * bracket) / denom
     db_db = ((1 + (2 * a * ds_da)) * bracket) / denom
     db_dc = (2 * a * ds_dc * bracket) / denom
 
-    # partial c' : dc'/da, dc'/db, dc'dc
+    # partial c' : dc'/da, dc'/db, dc'/dc
     bracket = (np.cos(phi) * (2*a + b)) - np.sin(phi)
     dc_da = (ds_da * bracket) + (s_star**2 * np.cos(phi))
     dc_db = (ds_db * bracket) + (s_star * np.cos(phi))

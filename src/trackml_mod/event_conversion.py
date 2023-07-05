@@ -40,13 +40,19 @@ def main():
     event_network = args.eventNetwork + "/event_1_filtered_graph_"
     event_truth = args.eventTruth + "/event000001000-"
     event_truth_file = event_truth + "full-mapping-minCurv-0.3-800.csv"
+    
+    # # averaging over many events
+    # # event_2 network corresponds to event000001001 truth
+    # event_network = args.eventNetwork + "/event_4_filtered_graph_"
+    # event_truth = args.eventTruth + "/event000001003-"
+    # event_truth_file = event_truth + "full-mapping-minCurv-0.3-800.csv"
 
     start = time.time()
 
     # load truth information & metadata on events
     nodes, edges = h.load_nodes_edges(event_network, min_volume, max_volume)
     # NOTE: only need to execute the following once - aggregating all truth information into 1 file
-    # h.load_save_truth(event_network, event_truth, event_truth_file)
+    h.load_save_truth(event_network, event_truth, event_truth_file)
     truth = pd.read_csv(event_truth_file)
 
     end = time.time()
